@@ -1,0 +1,55 @@
+# NeuroField v2 default configuration (production)
+# All values are overridable via CLI or environment.
+
+model:
+  d_model: 256
+  d_k: 64
+  d_v: 64
+  n_skills: 8
+  top_k: 2
+  k_max: 4
+  dendrite_window: 3
+  vocab_size: 32000          # change to 65 for char-level
+  max_seq_len: 2048
+  tie_embeddings: true
+  dropout: 0.0
+
+training:
+  batch_size: 8
+  seq_len: 256
+  lr: 1.0e-3
+  weight_decay: 0.01
+  warmup_steps: 100
+  max_steps: 100000
+  grad_clip: 1.0
+  lambda_err: 0.1
+  lambda_bal: 0.01
+  replay_every: 75
+  replay_eta: 0.02
+  truncate_write_window: 32   # truncated BPTT for fast write
+  device: "cuda"
+  seed: 42
+  log_every: 50
+  eval_every: 500
+  checkpoint_every: 2000
+  output_dir: "runs/neurofield_v2"
+
+data:
+  train_path: null            # path to tokenized .bin or .npy
+  val_path: null
+  tokenizer: "byte"           # "byte" | "hf" | "char"
+  hf_tokenizer_name: null
+
+safety:
+  enable_audit: true
+  max_write_norm: 10.0
+  max_memory_norm: 50.0
+  gate_cap: 1.0
+  anomaly_z_threshold: 4.0
+  freeze_on_anomaly: false
+  per_session_state: true
+
+logging:
+  level: "INFO"
+  wandb: false
+  wandb_project: "neurofield-v2"

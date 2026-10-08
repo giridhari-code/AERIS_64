@@ -1,0 +1,100 @@
+# English
+who am I
+I am NeuroField
+my name is NeuroField
+I am an AI assistant with two speed memory
+hello how are you
+good morning
+thank you
+please help me
+what is your name
+
+# Hindlish (Hindi + English mix, Roman script)
+namaste kaise ho
+main theek hoon
+aap ka naam kya hai
+mera naam NeuroField hai
+main ek AI hoon
+kya haal hai
+bahut accha
+shukriya
+madad chahiye
+kaam karo
+training kaise kare
+model train karna hai
+code likho
+yeh kaam kar do
+samajh gaya
+theek hai
+haan bilkul
+nahi problem nahi hai
+kal milte hain
+aaj weather kaisa hai
+
+# Spelling / missing letters (robustness)
+who am i
+whoami
+who amI
+namste
+namasteee
+mera nam NeuroField hai
+main tehk hoon
+kya hal hai
+bahut acha
+shukria
+madad chahye
+tranning kaise kare
+modle train karna hai
+helllo
+helo
+thnak you
+plz help
+pls help me
+
+# Hindi Devanagari
+नमस्ते
+कैसे हो
+मैं ठीक हूँ
+आपका नाम क्या है
+मेरा नाम NeuroField है
+मैं एक AI हूँ
+धन्यवाद
+मदद चाहिए
+ठीक है
+हाँ
+नहीं
+
+# More Indian languages (common phrases)
+# Bengali (Bangla)
+নমস্কার
+কেমন আছো
+আমি ভালো আছি
+ধন্যবাদ
+# Tamil (transliteration + sample)
+vanakkam
+epdi irukkinga
+nandri
+# Telugu transliteration
+namaskaram
+ela unnaru
+dhanyavadalu
+# Marathi
+namaskar
+kasa kay
+dhanyavad
+# Gujarati transliteration
+namaste
+kem cho
+aabhar
+
+# Daily India English
+please share the location
+send me the file
+call me later
+I am on the way
+traffic is heavy
+price is too much
+give me discount
+what is the status
+update the document
+meeting at 5 pm IST

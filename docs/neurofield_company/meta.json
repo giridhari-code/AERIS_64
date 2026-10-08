@@ -1,0 +1,13 @@
+{
+  "steps": 300,
+  "final_loss": 2.5862438678741455,
+  "tokenizer": "char",
+  "data": [
+    "data/company_corpus.txt",
+    "data/india_multilang.txt",
+    "data/skills_real.txt"
+  ],
+  "product": "neurofield-company",
+  "format": "neurofield-safetensors-v1",
+  "framework": "pytorch"
+}

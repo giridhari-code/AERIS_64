@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AERIS_64 — Chat</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg" />
+  <style>
+    :root {
+      --bg: #0f1117;
+      --panel: #1a1d27;
+      --border: #2a2e3a;
+      --text: #e8eaed;
+      --muted: #9aa0a6;
+      --accent: #6c8cff;
+      --accent2: #3dd68c;
+      --user: #2a3344;
+      --bot: #1e2433;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--panel);
+    }
+    header .logo {
+      width: 36px; height: 36px; border-radius: 10px;
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.25);
+    }
+    header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+    header .tagline { font-size: 0.75rem; color: var(--muted); margin-left: 4px; }
+    header .badge {
+      font-size: 0.7rem;
+      background: #243018;
+      color: var(--accent2);
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #3a5a2a;
+    }
+    header .status {
+      margin-left: auto;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    header .status.ok { color: var(--accent2); }
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg {
+      max-width: 780px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.95rem;
+    }
+    .msg.user { background: var(--user); align-self: flex-end; border: 1px solid #3a4558; }
+    .msg.bot { background: var(--bot); border: 1px solid var(--border); }
+    .msg .label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .msg.meta { font-size: 0.75rem; color: var(--muted); background: transparent; border: none; padding: 4px 0; }
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+      padding: 14px 20px;
+    }
+    .input-row {
+      max-width: 780px;
+      margin: 0 auto;
+      display: flex;
+      gap: 10px;
+    }
+    #prompt {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      resize: none;
+      min-height: 48px;
+      max-height: 140px;
+      outline: none;
+    }
+    #prompt:focus { border-color: var(--accent); }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0 20px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .controls {
+      max-width: 780px;
+      margin: 8px auto 0;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .controls input[type=number] {
+      width: 64px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 4px 6px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img class="logo" src="/static/logo.svg" alt="AERIS_64" width="36" height="36" />
+    <div>
+      <h1>AERIS_64</h1>
+      <div class="tagline">Helpful · truthful · concise · NeuroField architecture</div>
+    </div>
+    <span class="badge">Inference</span>
+    <span id="status" class="status">checking…</span>
+  </header>
+
+  <div id="chat">
+    <div class="msg bot">
+      <div class="label">AERIS_64</div>
+      Hi — I am AERIS_64. Helpful, direct, and honest about limits. Ask in English.
+      Try: who are you · explain fast memory · write a python hello · namaste
+    </div>
+  </div>
+
+  <footer>
+    <div class="input-row">
+      <textarea id="prompt" rows="1" placeholder="Type a prompt…"></textarea>
+      <button id="send">Send</button>
+      <button id="reset" class="secondary">Reset</button>
+    </div>
+    <div class="controls">
+      <label>max tokens cap <input id="maxTok" type="number" value="2048" min="1" max="8192" /></label>
+      <label><input id="autoLen" type="checkbox" checked /> auto (dynamic length+temp)</label>
+      <label>temp <input id="temp" type="number" value="0.2" min="0" max="2" step="0.1" /></label>
+      <span id="latency"></span>
+    </div>
+  </footer>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const promptEl = document.getElementById("prompt");
+    const statusEl = document.getElementById("status");
+    const latencyEl = document.getElementById("latency");
+    let sessionId = null;
+
+    function addMsg(role, text, meta) {
+      const div = document.createElement("div");
+      div.className = "msg " + role;
+      const label = document.createElement("div");
+      label.className = "label";
+      label.textContent = role === "user" ? "You" : "AERIS_64";
+      div.appendChild(label);
+      div.appendChild(document.createTextNode(text));
+      chat.appendChild(div);
+      if (meta) {
+        const m = document.createElement("div");
+        m.className = "msg meta";
+        m.textContent = meta;
+        chat.appendChild(m);
+      }
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function checkHealth() {
+      try {
+        const r = await fetch("/readyz");
+        if (r.ok) {
+          const j = await r.json();
+          statusEl.textContent = "ready · " + (j.device || "cpu");
+          statusEl.classList.add("ok");
+        } else {
+          statusEl.textContent = "model not loaded";
+        }
+      } catch {
+        statusEl.textContent = "server offline";
+      }
+    }
+    checkHealth();
+
+    async function send() {
+      const text = promptEl.value.trim();
+      if (!text) return;
+      promptEl.value = "";
+      addMsg("user", text);
+      document.getElementById("send").disabled = true;
+
+      try {
+        const body = {
+          prompt: text,
+          max_new_tokens: Number(document.getElementById("maxTok").value) || 2048,
+          auto_length: document.getElementById("autoLen") ? document.getElementById("autoLen").checked : true,
+          temperature: Number(document.getElementById("temp").value) || 0.2,
+          session_id: sessionId,
+        };
+        const r = await fetch("/v1/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          addMsg("bot", "Error: " + (err.detail || r.statusText));
+        } else {
+          const j = await r.json();
+          sessionId = j.session_id;
+          addMsg("bot", j.text || "(empty)",
+            j.latency_ms != null ? `latency ${j.latency_ms} ms` : "");
+          latencyEl.textContent = j.latency_ms != null ? `last ${j.latency_ms} ms` : "";
+        }
+      } catch (e) {
+        addMsg("bot", "Network error: " + e.message);
+      }
+      document.getElementById("send").disabled = false;
+      promptEl.focus();
+    }
+
+    document.getElementById("send").onclick = send;
+    promptEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+    document.getElementById("reset").onclick = async () => {
+      if (sessionId) {
+        await fetch("/v1/reset?session_id=" + encodeURIComponent(sessionId), { method: "POST" });
+      }
+      sessionId = null;
+      addMsg("bot", "Session reset.");
+    };
+  </script>
+</body>
+</html>

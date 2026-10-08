@@ -1,0 +1,58 @@
+# Capacity presets — scale like frontier labs: grow width/skills, then data/steps.
+# Exact param counts depend on vocab_size; run scripts/count_params.py when unsure.
+
+tiny:
+  d_model: 48
+  d_k: 24
+  d_v: 24
+  n_skills: 4
+  top_k: 2
+  k_max: 2
+  dendrite_window: 3
+  max_seq_len: 128
+  dropout: 0.0
+
+small:
+  d_model: 128
+  d_k: 64
+  d_v: 64
+  n_skills: 8
+  top_k: 2
+  k_max: 4
+  dendrite_window: 3
+  max_seq_len: 256
+  dropout: 0.05
+
+medium:
+  d_model: 256
+  d_k: 64
+  d_v: 64
+  n_skills: 8
+  top_k: 2
+  k_max: 4
+  dendrite_window: 3
+  max_seq_len: 512
+  dropout: 0.05
+
+large:
+  d_model: 512
+  d_k: 128
+  d_v: 128
+  n_skills: 12
+  top_k: 3
+  k_max: 4
+  dendrite_window: 4
+  max_seq_len: 1024
+  dropout: 0.1
+
+# Matches configs/aeris_1b.yaml width (~1B with vocab 32k)
+xl:
+  d_model: 3584
+  d_k: 128
+  d_v: 128
+  n_skills: 16
+  top_k: 2
+  k_max: 4
+  dendrite_window: 4
+  max_seq_len: 2048
+  dropout: 0.0

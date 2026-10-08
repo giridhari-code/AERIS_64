@@ -1,0 +1,59 @@
+{
+  "steps": 2500,
+  "log": [
+    {
+      "step": 1,
+      "loss": 29.3618
+    },
+    {
+      "step": 250,
+      "loss": 0.3251
+    },
+    {
+      "step": 500,
+      "loss": 0.2358
+    },
+    {
+      "step": 750,
+      "loss": 0.1891
+    },
+    {
+      "step": 1000,
+      "loss": 0.1739
+    },
+    {
+      "step": 1250,
+      "loss": 0.1699
+    },
+    {
+      "step": 1500,
+      "loss": 0.1469
+    },
+    {
+      "step": 1750,
+      "loss": 0.1826
+    },
+    {
+      "step": 2000,
+      "loss": 0.1758
+    },
+    {
+      "step": 2250,
+      "loss": 0.1524
+    },
+    {
+      "step": 2500,
+      "loss": 0.1415
+    }
+  ],
+  "results": {
+    "who am I": "who am I | I am NeuroField | my name is NeuroField | I am an AI | ",
+    "my name is": "my name is NeuroField | I am an AI | def add(a, b): |     return a",
+    "I am": "I am NeuroField | my name is NeuroField | I am an AI | def a",
+    "def add(": "def add(a, b): |     return a + b | def hello(): |     print(\"he",
+    "def hello": "def hello(): |     print(\"hello world\") | def square(x): |     re",
+    "def square(": "def square(x): |     return x * x | def greet(name): |     return \"",
+    "def greet(": "def greet(name): |     return \"hello \" + name | def factorial(n)",
+    "def factorial": "def factorial(n): |     if n <= 1: |         return 1 |     return n "
+  }
+}

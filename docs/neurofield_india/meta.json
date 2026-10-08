@@ -1,0 +1,19 @@
+{
+  "source": [
+    "data/india_multilang.txt",
+    "data/skills_real.txt"
+  ],
+  "steps": 300,
+  "languages": [
+    "en",
+    "hindlish",
+    "hi",
+    "bn",
+    "ta",
+    "te",
+    "mr",
+    "gu"
+  ],
+  "format": "neurofield-safetensors-v1",
+  "framework": "pytorch"
+}

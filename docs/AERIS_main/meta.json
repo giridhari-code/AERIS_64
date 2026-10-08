@@ -1,0 +1,20 @@
+{
+  "steps": 1500,
+  "final_loss": 0.05727638676762581,
+  "tokenizer": "char",
+  "data": [
+    "data/day1.txt"
+  ],
+  "model_id": "AERIS_main",
+  "product": "AERIS_main",
+  "val_fraction": 0.1,
+  "split": {
+    "blocks": 19718,
+    "unique": 14,
+    "train": 13,
+    "val": 1
+  },
+  "format": "neurofield-safetensors-v1",
+  "weights": "model.safetensors",
+  "framework": "pytorch"
+}

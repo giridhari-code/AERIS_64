@@ -1,0 +1,51 @@
+AERIS / NeuroField — Source Available Personal Project License
+Copyright (c) 2026 Giridhari (giriisdev@gmail.com)
+
+================================================================================
+IMPORTANT: This is not formal legal advice. If you need a binding commercial
+agreement, consult a lawyer in your jurisdiction.
+================================================================================
+
+1. OWNERSHIP
+   This software, documentation, configuration files, and included demo
+   materials (the "Project") are the personal project of the copyright holder
+   above. The architecture name "NeuroField" and product name "AERIS" /
+   "AERIS_64" / "AERIS_1B" are used as project identifiers by the author.
+
+2. PERMISSION FOR PERSONAL / NON-COMMERCIAL USE
+   You may view, download, run, and modify the Project for personal learning,
+   research, and non-commercial experiments, provided that:
+   (a) you keep this LICENSE and NOTICE files with any copy;
+   (b) you do not claim you created the original Project;
+   (c) you do not use the author's name or email to imply endorsement.
+
+3. COMMERCIAL USE
+   Commercial use, SaaS hosting, selling weights derived primarily from this
+   repo, or redistributing the Project as a product requires prior written
+   permission from the copyright holder (email below).
+
+4. DATA IN THIS REPOSITORY
+   Sample files under data/ are short, hand-written or synthetic demo texts
+   for training experiments. They are NOT scraped personal data of third
+   parties by design. See DATA_POLICY.md for removal requests.
+
+5. NO WARRANTY
+   THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NON-INFRINGEMENT. THE AUTHOR IS NOT LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY ARISING FROM USE OF THE PROJECT.
+
+6. MODELS AND OUTPUTS
+   Demo checkpoints are tiny and experimental. Model outputs may be wrong or
+   nonsensical. Do not rely on them for medical, legal, financial, or safety-
+   critical decisions.
+
+7. CONTACT
+   Copyright, permission, data removal, or other concerns:
+   Email: giriisdev@gmail.com
+
+8. TERMINATION
+   If you breach these terms, your permission to use the Project ends. On
+   written request related to a specific data file you control rights to,
+   the author will remove that file from the public repository as described
+   in DATA_POLICY.md.

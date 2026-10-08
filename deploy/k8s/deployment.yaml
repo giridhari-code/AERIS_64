@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neurofield-api
+  labels:
+    app: neurofield
+    version: "2.2.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: neurofield
+  template:
+    metadata:
+      labels:
+        app: neurofield
+        version: "2.2.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: neurofield
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: neurofield
+          image: your-registry/neurofield:2.2.0   # <- replace with your registry
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: NEUROFIELD_CHECKPOINT
+              value: /app/checkpoints/model
+            - name: NEUROFIELD_CONFIG
+              value: /app/configs/default.yaml
+            - name: NEUROFIELD_DEVICE
+              value: cuda
+            - name: NEUROFIELD_LOG_JSON
+              value: "1"
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /app/checkpoints
+              readOnly: true
+            - name: configs
+              mountPath: /app/configs
+              readOnly: true
+            - name: logs
+              mountPath: /app/logs
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: neurofield-checkpoints
+        - name: configs
+          configMap:
+            name: neurofield-config
+        - name: logs
+          emptyDir: {}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neurofield-api
+  labels:
+    app: neurofield
+spec:
+  type: ClusterIP
+  # sessions live in process memory: keep a client on the same pod
+  sessionAffinity: ClientIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: neurofield
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: neurofield
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: neurofield-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: neurofield
