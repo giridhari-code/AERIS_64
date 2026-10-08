@@ -1,7 +1,7 @@
 # AESC v2.3: Two-Speed Memory Architecture (Revised Technical Report)
 
 **Oct 9, 2026** · Giridhari Karmakar · giriisdev@gmail.com  
-**Code:** https://github.com/giridhari-code/AERIS_64 (commit c5e589e)
+**Code:** https://github.com/giridhari-code/AERIS_64
 
 ## Abstract
 
@@ -17,20 +17,20 @@ After fixes, production NeuroField (`d_model=64`) reaches **0.973** eval accurac
 |----------------------|----------|
 | full | **0.973** |
 | no_fast_mem | 0.344 |
-| Δ | **+0.629** |
+| Delta | **+0.629** |
 
-| Ablation (400 steps) | Eval | Δ vs full |
-|----------------------|------|-----------|
+| Ablation (400 steps) | Eval | Delta vs full |
+|----------------------|------|---------------|
 | full | 0.555 | — |
-| no_fast_mem | 0.426 | −0.129 |
-| no_slow_mem | 0.543 | −0.012 |
-| no_neuromod | 0.438 | −0.117 |
-| no_metacog | 0.367 | −0.188 |
-| skills_only | 0.395 | −0.160 |
+| no_fast_mem | 0.426 | -0.129 |
+| no_slow_mem | 0.543 | -0.012 |
+| no_neuromod | 0.438 | -0.117 |
+| no_metacog | 0.367 | -0.188 |
+| skills_only | 0.395 | -0.160 |
 
 ## Failure modes 12–18 (new)
 
-12. Decay too fast → λ ≈ 0.97–0.998  
+12. Decay too fast → lambda ≈ 0.97–0.998  
 13. W_q vs W_k mismatch → W_q ← W_k at init  
 14. Zero d_prev write → skip  
 15. Slow M_s noise → zero init  
@@ -40,9 +40,9 @@ After fixes, production NeuroField (`d_model=64`) reaches **0.973** eval accurac
 
 ## Metacognition (brain-inspired)
 
-- **Monitor:** rel surprise, router conflict, confidence, arousal  
-- **Control:** k (effort), gate_bias δ (encoding), want_replay (consolidation)  
-- Neuromod: `g = σ(a_s(S̃−1) + a_c|h| + b + δ)`
+- **Monitor:** relative surprise `S_rel = S / bar_S`, router conflict, confidence = sigmoid(-(S_rel - 1)), arousal = 0.7*S_rel + 0.3*conflict  
+- **Control:** k (effort), gate_bias delta (encoding), want_replay (consolidation)  
+- Neuromod: `g = sigmoid(a_s*(S_rel - 1) + a_c*|h| + b + delta)`
 
 ## Sandbox
 
