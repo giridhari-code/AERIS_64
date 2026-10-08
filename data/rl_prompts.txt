@@ -1,0 +1,6 @@
+# Prompts for mini RL — one per line
+hello
+who are you
+what is your name
+thank you
+what can you do

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1d24"/>
+      <stop offset="100%" style="stop-color:#0d0f14"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f0f2f5"/>
+      <stop offset="50%" style="stop-color:#c8ccd4"/>
+      <stop offset="100%" style="stop-color:#9aa1ad"/>
+    </linearGradient>
+    <radialGradient id="cyan" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#7df9ff"/>
+      <stop offset="70%" style="stop-color:#00d4ff"/>
+      <stop offset="100%" style="stop-color:#0099cc"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="108" ry="108" fill="url(#bg)"/>
+  <!-- left arc -->
+  <path d="M 150 380 Q 130 200 256 100 Q 200 220 190 360 Z" fill="url(#metal)" opacity="0.95"/>
+  <!-- right arc -->
+  <path d="M 362 380 Q 382 200 256 100 Q 312 220 322 360 Z" fill="url(#metal)" opacity="0.95"/>
+  <!-- cleaner arcs as strokes -->
+  <path d="M 168 360 C 150 240 200 140 256 110" fill="none" stroke="url(#metal)" stroke-width="36" stroke-linecap="round"/>
+  <path d="M 344 360 C 362 240 312 140 256 110" fill="none" stroke="url(#metal)" stroke-width="36" stroke-linecap="round"/>
+  <!-- cyan core -->
+  <circle cx="256" cy="340" r="28" fill="url(#cyan)" filter="url(#glow)"/>
+  <circle cx="256" cy="340" r="14" fill="#e6ffff" opacity="0.9"/>
+</svg>

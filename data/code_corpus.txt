@@ -1,0 +1,24 @@
+# Code mixture stand-in (GitHub / StackOverflow style samples)
+
+def add(a, b):
+    return a + b
+
+def fib(n):
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+def greet(name):
+    return f"Hello {name}"
+
+# StackOverflow-style
+# Q: How do I reverse a list in Python?
+# A: use lst[::-1] or lst.reverse()
+
+def reverse_list(lst):
+    return lst[::-1]
+
+# ETL snippet
+def extract_transform_load(rows):
+    cleaned = [r.strip() for r in rows if r]
+    return cleaned

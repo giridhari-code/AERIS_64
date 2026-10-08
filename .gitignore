@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+*.log
+docs/logs/
+runs/
+.DS_Store
+
+# Model weights — train locally / share via Drive; do not commit pickles
+*.pt
+*.pth
+*.bin
+*.safetensors
+docs/**/model.pt
+docs/**/model.safetensors
+docs/runs/

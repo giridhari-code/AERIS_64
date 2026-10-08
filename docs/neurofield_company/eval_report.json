@@ -1,0 +1,16 @@
+{
+  "train_nll": 1.9433776140213013,
+  "val_nll": 0.25994279980659485,
+  "val_perplexity": 1.2968559041356293,
+  "identity_hit": true,
+  "generations": {
+    "who am I": "who am I\nI am NeuroField.\nMy name is NeuroField.",
+    "namaste": "namaste\nshukriya\nwho am I\nI am NeuroField.\nMy n",
+    "Self-learning": "Self-learning holellellellellelle lo lelester islelle",
+    "I am": "I am NeuroField.\nMy name is NeuroField.\nI am",
+    "mera naam": "mera naame is NeuroField.\nI am as is NeuroField.\n"
+  },
+  "eval_latency_s": 0.357,
+  "num_tokens": 3276,
+  "vocab_hint": 73
+}

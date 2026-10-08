@@ -1,0 +1,4 @@
+{
+  "format": "neurofield-safetensors-v1",
+  "converted_from": "docs/neurofield_ddia_trained.pt"
+}

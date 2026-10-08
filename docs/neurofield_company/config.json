@@ -1,0 +1,12 @@
+{
+  "d_model": 48,
+  "d_k": 24,
+  "d_v": 24,
+  "n_skills": 4,
+  "top_k": 2,
+  "k_max": 2,
+  "dendrite_window": 3,
+  "vocab_size": 117,
+  "tie_embeddings": true,
+  "tokenizer": "char"
+}

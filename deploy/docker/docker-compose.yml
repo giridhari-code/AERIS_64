@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  neurofield-api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PYTHON_VERSION: "3.11"
+    image: neurofield:2.2.0
+    container_name: neurofield-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      NEUROFIELD_CHECKPOINT: /app/checkpoints/model   # folder with model.safetensors + tokenizer.json
+      NEUROFIELD_CONFIG: /app/configs/default.yaml
+      NEUROFIELD_DEVICE: cpu   # set cuda if GPU available
+      NEUROFIELD_HOST: 0.0.0.0
+      NEUROFIELD_PORT: 8000
+      NEUROFIELD_LOG_JSON: "1"
+    volumes:
+      - ./checkpoints:/app/checkpoints:ro
+      - ./logs:/app/logs
+      - ../../configs:/app/configs:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Optional: Prometheus scraper can hit /metrics
+  # Optional: put a reverse proxy (nginx/traefik) in front for TLS

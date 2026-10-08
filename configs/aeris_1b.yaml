@@ -1,0 +1,61 @@
+# AERIS 1B — NeuroField two-speed memory architecture, ~1.0B parameters.
+# Exact count (tied embeddings): 1,004,511,364  -> run `python scripts/count_params.py configs/aeris_1b.yaml`
+#
+# NOTE: this file defines the ARCHITECTURE + a sane training recipe.
+# It does NOT ship trained 1B weights. Training needs real data
+# (see scripts/prepare_data.py) and a large GPU; see docs/TRAIN_1B.md.
+
+model:
+  d_model: 3584
+  d_k: 128
+  d_v: 128
+  n_skills: 16
+  top_k: 2
+  k_max: 4
+  dendrite_window: 4
+  vocab_size: 32000
+  max_seq_len: 2048
+  tie_embeddings: true
+  dropout: 0.0
+
+training:
+  batch_size: 8               # micro-batch (sequences) per forward
+  grad_accum_steps: 16        # effective batch = 8*16*seq_len tokens/step
+  seq_len: 512
+  precision: "bf16"           # "fp32" | "bf16" (autocast)
+  lr: 3.0e-4
+  weight_decay: 0.1
+  warmup_steps: 2000
+  max_steps: 100000
+  grad_clip: 1.0
+  lambda_err: 0.1
+  lambda_bal: 0.01
+  replay_every: 200
+  replay_eta: 0.02
+  truncate_write_window: 32
+  device: "cuda"
+  seed: 42
+  log_every: 20
+  eval_every: 1000
+  checkpoint_every: 1000
+  output_dir: "runs/aeris_1b"
+
+data:
+  train_path: "data/tokens/train.bin"   # produced by scripts/prepare_data.py
+  val_path: "data/tokens/val.bin"       # held-out, never trained on
+  tokenizer: "bpe"
+  hf_tokenizer_name: null
+
+safety:
+  enable_audit: false          # per-token audit is for serving/debug, not pre-training
+  max_write_norm: 10.0
+  max_memory_norm: 50.0
+  gate_cap: 1.0
+  anomaly_z_threshold: 4.0
+  freeze_on_anomaly: false
+  per_session_state: true
+
+logging:
+  level: "INFO"
+  wandb: false
+  wandb_project: "aeris-1b"

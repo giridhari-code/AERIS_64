@@ -1,0 +1,23 @@
+{
+  "train_nll": 0.09619153733925312,
+  "val_nll": 4.017485845656622,
+  "val_perplexity": 55.56124054477705,
+  "val_tokens": 43,
+  "identity_hit": false,
+  "identity_marker": "AERIS_main",
+  "generations": {
+    "who am I": "who am I help you?\n<|user|> hi\n<|assistant|> Hi. I am AERIS_64. How",
+    "namaste": "namaste\n<|assistant|> Namaste. Main AERIS_64 hoon. Aapki ky",
+    "I am": "I am AERIS_64. How can I help you?\n<|user|> namaste",
+    "mera naam": "mera naamstaste\n<|assistant|> Namaste. Main AERIS_64 hoon. Aa"
+  },
+  "eval_latency_s": 0.915,
+  "num_train_tokens": 292,
+  "warnings": [],
+  "split": {
+    "blocks": 19718,
+    "unique": 14,
+    "train": 13,
+    "val": 1
+  }
+}

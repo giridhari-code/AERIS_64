@@ -1,0 +1,8 @@
+{
+  "product": "AERIS_64",
+  "stage": "align_sft_pref",
+  "constitution": "data/align/constitution.txt",
+  "note": "mini Anthropic-inspired post-train; not full CAI/RLAIF; weights are a legacy pickle model.pt (format was previously mislabeled safetensors)",
+  "format": "torch-pt-legacy",
+  "framework": "pytorch"
+}
