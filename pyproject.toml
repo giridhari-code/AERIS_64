@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neurofield"
-version = "2.2.0"
-description = "NeuroField: two-speed memory architecture (AERIS 1B recipe)"
+version = "2.3.0"
+description = "NeuroField / AESC: two-speed memory architecture (v2.3)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}

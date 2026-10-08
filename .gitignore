@@ -1,20 +1,33 @@
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
 venv/
-.env
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# Env / secrets
+.env
+*.pem
+
+# Logs & local runs
 *.log
-docs/logs/
 runs/
+artifacts/**
+!artifacts/.gitkeep
+docs/logs/
 .DS_Store
 
-# Model weights — train locally / share via Drive; do not commit pickles
+# Model weights — train locally; do not commit
 *.pt
 *.pth
 *.bin
 *.safetensors
-docs/**/model.pt
-docs/**/model.safetensors
-docs/runs/
+checkpoints/**/model.pt
+checkpoints/**/model.safetensors
+!checkpoints/examples/**
+!checkpoints/README.md

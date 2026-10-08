@@ -1,178 +1,128 @@
-# NeuroField / AERIS — v2.2
+# NeuroField / AERIS
 
-**Author:** Giridhari · **Contact:** giriisdev@gmail.com  
-**License:** personal / non-commercial terms — see [LICENSE](LICENSE), [NOTICE](NOTICE), [DATA_POLICY.md](DATA_POLICY.md).  
-Data removal or legal concerns about files in this repo → **giriisdev@gmail.com**.
+**Two-speed memory architecture** for recurrent language models  
+Research code · production-oriented layout · not a finished frontier product
 
-Research architecture (**NeuroField two-speed memory**) + inference API + training toolkit,
-now with a **1.0B-parameter configuration** (`configs/aeris_1b.yaml`).
+| | |
+|---|---|
+| **Author** | Giridhari Karmakar · giriisdev@gmail.com |
+| **Paper** | [docs/paper/AESC_v2_3_Technical_Report.pdf](docs/paper/AESC_v2_3_Technical_Report.pdf) |
+| **License** | See [LICENSE](LICENSE), [NOTICE](NOTICE), [DATA_POLICY.md](DATA_POLICY.md) |
 
-> **Read this first**
-> * The 1B model is a **config + training recipe**. **No trained 1B weights are included** —
->   training one needs real data and a large GPU (see [docs/TRAIN_1B.md](docs/TRAIN_1B.md)).
-> * The checkpoints in `docs/` (`AERIS_64`, `neurofield_*`) are **~60k-parameter demos** trained on
->   ~10 KB of hand-written text. They memorise that text; they are not assistants.
-> * Architecture quality at 1B is **unproven**. Benchmark against a standard Transformer first.
+---
+
+## What this is
+
+NeuroField (AESC) is a recurrent LM with:
+
+- k-step neural field  
+- predictive dendrite (delayed error)  
+- top-k skill routing  
+- **fast memory** (surprise-gated delta rule)  
+- **slow memory** (replay consolidation)  
+- metacognition (monitor → control)  
+- optional tool **sandbox**
+
+The small checkpoints under `checkpoints/examples/` are **side-car configs only** (weights are not in git). Train locally to serve a model.
+
+---
+
+## Repository layout
+
+```text
+AERIS_64/
+├── src/neurofield/          # Library (model, modules, serve, train, sandbox)
+├── configs/                 # YAML configs (default, presets, 1B recipe)
+├── scripts/
+│   ├── train/               # Training entrypoints
+│   ├── eval/                # Evaluation
+│   ├── data/                # Data prep
+│   └── research/            # Ablations, param counts, probes
+├── tests/                   # pytest
+├── data/
+│   ├── samples/             # Tiny demo corpora
+│   └── align/               # Alignment text
+├── checkpoints/
+│   └── examples/            # Config/tokenizer side-cars (no .safetensors in git)
+├── docs/
+│   ├── paper/               # Technical reports
+│   ├── guides/              # How to train / scale
+│   ├── reference/           # API, model card, tokens
+│   ├── audits/              # Engineering audits & patch notes
+│   └── archive/             # Historical notes
+├── deploy/                  # Docker, k8s, systemd
+├── artifacts/               # Local outputs (gitignored content)
+└── pyproject.toml
+```
+
+---
 
 ## Quick start
 
 ```bash
-pip install -e ".[serve,dev]"            # + ".[data]" for tokenizers
-make test
+git clone https://github.com/giridhari-code/AERIS_64.git
+cd AERIS_64
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[serve,dev]"
+```
 
-# serve a checkpoint (folder with model.safetensors [+ tokenizer.json])
-NEUROFIELD_CHECKPOINT=docs/neurofield_india PYTHONPATH=src \
-  uvicorn "neurofield.serving.server:create_app" --factory --port 8000
+### Tests
+
+```bash
+make test
+# or: PYTHONPATH=src pytest tests/ -q
+```
+
+### Train a small local checkpoint (then serve)
+
+```bash
+export PYTHONPATH=src
+python scripts/train/train_company.py \
+  --data data/samples/company_corpus.txt data/samples/india_multilang.txt \
+  --tokenizer char --steps 500 --d-model 64 \
+  --out checkpoints/local_run
+
+# Serve (folder must contain model.safetensors)
+export NEUROFIELD_CHECKPOINT=checkpoints/local_run
+uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
 ```
 
 Open http://127.0.0.1:8000/
 
-## 1B model
+### Research ablation (associative recall)
 
 ```bash
-python scripts/count_params.py configs/aeris_1b.yaml        # 1,004,511,364 params, no torch needed
-python scripts/prepare_data.py --input "data/raw/*.txt" --out-dir data/tokens --vocab-size 32000
-python -m neurofield.cli --config configs/aeris_1b.yaml --tokenizer-json data/tokens/tokenizer.json
+PYTHONPATH=src python scripts/research/contribution_ablation.py \
+  --steps 800 --seeds 0 --batch 8 --d-model 64 \
+  --ablations full,no_fast_mem,no_slow_mem,no_neuromod,no_metacog,skills_only \
+  --device cpu --out artifacts/contrib.json
 ```
 
-## Docs
+---
 
-| Doc | Content |
-|-----|---------|
-| [docs/TRAIN_1B.md](docs/TRAIN_1B.md) | 1B recipe, memory, data, caveats |
-| [docs/AUDIT_V2_2.md](docs/AUDIT_V2_2.md) | Audit findings, what was fixed, what is still open |
-| [docs/RUN_AND_TRAIN.md](docs/RUN_AND_TRAIN.md) | Install, run, train (small models) |
-| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | HTTP API |
-| [docs/MODEL_CARD.md](docs/MODEL_CARD.md) | Model card |
-| [data/README.md](data/README.md) | What the bundled data is (and is not) |
+## Important
 
-## Structure
+- **Weights are not in git** (`*.safetensors` ignored). See [docs/reference/WEIGHTS_NOT_IN_GIT.md](docs/reference/WEIGHTS_NOT_IN_GIT.md).  
+- Example folders under `checkpoints/examples/` have config/vocab only — serving them will fail until you train or copy weights in.  
+- 1B config: `configs/aeris_1b.yaml` — recipe only, no pretrained 1B weights.  
+- H1 (10M AESC ≈ 100M Transformer on memory tasks) is **untested**. See the v2.3 paper.
 
-```
-├── configs/                  # YAML configs
-├── src/neurofield/
-│   ├── model.py              # Core model (Appendix A)
-│   ├── modules/              # dendrite, field, memory, router...
-│   ├── data/                 # datasets
-│   ├── training/             # trainer
-│   ├── safety/               # audit + anomaly monitor
-│   ├── serving/              # FastAPI inference server
-│   └── utils/                # structured logging
-├── deploy/
-│   ├── docker/               # Dockerfile + compose + entrypoint
-│   ├── k8s/                  # Deployment, Service, PDB
-│   └── systemd/              # (optional unit files)
-├── scripts/
-├── tests/
-├── Makefile
-├── pyproject.toml
-└── .env.example
-```
+---
 
-## Install
+## Docs index
 
-```bash
-pip install -e ".[serve,dev]"
-```
+| Path | Content |
+|------|---------|
+| [docs/paper/](docs/paper/) | AESC v2.3 technical report |
+| [docs/guides/RUN_AND_TRAIN.md](docs/guides/RUN_AND_TRAIN.md) | Install, run, train |
+| [docs/guides/TRAIN_1B.md](docs/guides/TRAIN_1B.md) | 1B recipe |
+| [docs/reference/API_REFERENCE.md](docs/reference/API_REFERENCE.md) | HTTP API |
+| [docs/audits/](docs/audits/) | Audits and patch notes |
 
-## Training
+---
 
-```bash
-neurofield-train \
-  --config configs/default.yaml \
-  --train-data /data/train.bin \
-  --val-data /data/val.bin \
-  --output-dir runs/exp1 \
-  --device cuda
-```
+## Citation
 
-## Inference Server (Production)
+If you use this code or report:
 
-```bash
-# Local
-export NEUROFIELD_CHECKPOINT=runs/exp1/checkpoint_best.pt
-# correct: factory + env (NOT create_app(checkpoint=...) as a string)
-NEUROFIELD_CHECKPOINT="$NEUROFIELD_CHECKPOINT" PYTHONPATH=src \
-  uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
-  --host 0.0.0.0 --port 8000
-
-# Docker
-cd deploy/docker
-docker compose up --build
-```
-
-### API
-
-| Endpoint            | Method | Purpose                    |
-|---------------------|--------|----------------------------|
-| `/healthz`          | GET    | Liveness probe             |
-| `/readyz`           | GET    | Readiness (model loaded)   |
-| `/metrics`          | GET    | Prometheus-style metrics   |
-| `/v1/completions`   | POST   | Generate tokens            |
-| `/v1/reset`         | POST   | Reset session state        |
-
-Example request:
-
-```bash
-curl -X POST http://localhost:8000/v1/completions \
-  -H "Content-Type: application/json" \
-  -d '{"input_ids":[1,2,3,4], "max_new_tokens":32, "temperature":0.8}'
-```
-
-## Kubernetes
-
-```bash
-kubectl apply -f deploy/k8s/deployment.yaml
-```
-
-- Non-root (uid 10001)
-- Liveness + Readiness probes
-- GPU resource requests
-- PodDisruptionBudget
-- Prometheus annotations
-
-## Safety (built-in)
-
-- Per-session state isolation
-- Write / memory norm caps
-- Audit log of gates, norms, entropy
-- Online z-score anomaly detector
-- Optional freeze-on-anomaly
-
-## Makefile targets
-
-```
-make install-dev   # install with serve + test deps
-make test          # run tests
-make docker-build  # build image
-make docker-run    # compose up
-make lint          # ruff
-```
-
-## License
-
-MIT
-
-## Run & Train
-
-See **[docs/RUN_AND_TRAIN.md](docs/RUN_AND_TRAIN.md)** for full install, serve, and training steps.
-
-
-## Mini RL
-
-See [docs/REINFORCEMENT_LEARNING.md](docs/REINFORCEMENT_LEARNING.md) and `scripts/train_rl.py`.
-
-
-## Scale & optimize
-
-See [docs/SCALE_AND_OPTIMIZE.md](docs/SCALE_AND_OPTIMIZE.md).
-
-
-## Multi-machine / Colab training
-
-See [docs/MULTI_MACHINE_TRAINING.md](docs/MULTI_MACHINE_TRAINING.md) — one official checkpoint, resume chain, no silent weight forks.
-
-
-## Company-style training process
-
-Full stage map + 7-day plan: [docs/TRAINING_PROCESS_COMPANY_STYLE.md](docs/TRAINING_PROCESS_COMPANY_STYLE.md).
+> Karmakar, G. (2026). *AESC v2.3: Two-Speed Memory Architecture (Revised Technical Report)*. https://github.com/giridhari-code/AERIS_64

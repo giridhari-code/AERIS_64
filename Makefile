@@ -1,10 +1,7 @@
-# --- 1B ---
-.PHONY: count-1b
-.PHONY: install install-dev test lint format build docker-build docker-run serve serve-chat clean
+.PHONY: install install-dev test lint format build docker-build docker-run serve serve-chat count-1b ablation clean
 
 PYTHON ?= python
-PACKAGE = neurofield
-IMAGE  = neurofield:2.2.0
+IMAGE  = neurofield:2.3.0
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -30,17 +27,20 @@ docker-build:
 docker-run:
 	docker compose -f deploy/docker/docker-compose.yml up --build
 
-# API only (Swagger at /docs)
+# Requires NEUROFIELD_CHECKPOINT=path/to/dir with model.safetensors
 serve:
 	PYTHONPATH=src uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
 
-# Chat frontend + API (open http://127.0.0.1:8000/)
 serve-chat:
-	NEUROFIELD_CHECKPOINT=$${NEUROFIELD_CHECKPOINT:-docs/neurofield_india} PYTHONPATH=src \
-	uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+	@test -n "$$NEUROFIELD_CHECKPOINT" || (echo "Set NEUROFIELD_CHECKPOINT to a folder with model.safetensors"; exit 1)
+	PYTHONPATH=src uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
 
 count-1b:
-	$(PYTHON) scripts/count_params.py configs/aeris_1b.yaml
+	PYTHONPATH=src $(PYTHON) scripts/research/count_params.py configs/aeris_1b.yaml
+
+ablation:
+	PYTHONPATH=src $(PYTHON) scripts/research/contribution_ablation.py \
+		--steps 400 --seeds 0 --device cpu --out artifacts/contrib.json
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache .ruff_cache
