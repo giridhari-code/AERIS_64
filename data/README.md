@@ -1,24 +1,46 @@
-# Training data (demo only)
+# Data
 
-All files here are **short, author-written or synthetic** samples for experiments.
+| Path | Role |
+|------|------|
+| `samples/` | Tiny demo corpora (identity, code, multilingual) |
+| `align/` | Alignment / SFT style snippets |
+| `ready/` | **Generated** train corpus (`build_dataset.py`) — not required in git |
+| `raw/` | Optional: put your own large `.txt` dumps here |
 
-They are **not** a full web crawl and are **not** intended as a commercial dataset.
+## Build a train-ready dataset (local)
 
-| File | Purpose |
-|------|---------|
-| `company_corpus.txt` | Product / architecture blurbs |
-| `assistant_style.txt` | Short assistant-style lines |
-| `code_corpus.txt` | Tiny code snippets |
-| `india_multilang.txt` | Sample multilingual lines |
-| `skills_real.txt` | Skill-routing style text |
-| `align/` | Mini constitution / SFT / preference demos |
+```bash
+# ~100k synthetic chat + all samples/align → data/ready/train.txt
+python scripts/data/build_dataset.py
 
-## License / contact
+# larger synthetic
+python scripts/data/build_dataset.py --synthetic-chars 500000
 
-See root `LICENSE`, `NOTICE`, and `DATA_POLICY.md`.  
-Data removal or concerns: **giriisdev@gmail.com**
+# add your own files
+python scripts/data/build_dataset.py --extra data/raw/my_books.txt data/raw/wiki.txt
+```
 
-## Add your own data
+## Train on it
 
-Put your files here, keep them legal to use, and document the source yourself.
-Do not commit private user data.
+```bash
+export PYTHONPATH=src
+python scripts/train/train_company.py \
+  --data data/ready/train.txt \
+  --tokenizer char \
+  --preset small \
+  --steps 2000 \
+  --out checkpoints/local_run
+```
+
+## 1B-scale data (real)
+
+`data/ready/train.txt` is **not** enough for 1B parameters.  
+You need multi-GB clean text (billions of tokens). Put files under `data/raw/` and:
+
+```bash
+python scripts/data/build_dataset.py --synthetic-chars 0 --extra data/raw/*.txt
+# or BPE pack:
+python scripts/data/prepare_data.py --input "data/raw/*.txt" --out-dir data/tokens --vocab-size 32000
+```
+
+See `docs/guides/TRAIN_1B.md`.
