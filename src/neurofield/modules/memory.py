@@ -1,4 +1,11 @@
-"""Fast (delta-rule) and slow (consolidated) memory matrices — paper-faithful."""
+"""Fast (delta-rule) and slow (context-window ring) memory — AESC / NeuroField.
+
+Fast memory M  — short segment, written every token (delta rule).
+Slow memory    — ring of slots covering the context window:
+                 n_slots ≈ context_window / segment_len
+                 segment end → snapshot fast M into next slot
+                 read → content-address over all filled slots
+"""
 
 from __future__ import annotations
 
