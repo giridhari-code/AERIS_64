@@ -21,6 +21,7 @@ class ModelConfig:
     dendrite_window: int = 3
     vocab_size: int = 32000
     max_seq_len: int = 2048
+    context_slots: int = 0  # 0 => auto max_seq_len // truncate_window; slow mem ring size
     tie_embeddings: bool = True
     dropout: float = 0.0
 

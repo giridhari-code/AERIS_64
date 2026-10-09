@@ -73,7 +73,8 @@ class NeuroField(nn.Module):
         self.neuromod = Neuromodulator(cfg.d_model)
         self.router = SkillRouter(cfg.d_model, cfg.n_skills, cfg.top_k)
         self.fast_mem = FastMemory(cfg.d_model, cfg.d_k, cfg.d_v)
-        self.slow_mem = SlowMemory(cfg.d_model, cfg.d_k, cfg.d_v)
+        n_slots = max(4, int(getattr(cfg, 'context_slots', 0) or max(8, cfg.max_seq_len // 32)))
+        self.slow_mem = SlowMemory(cfg.d_model, cfg.d_k, cfg.d_v, n_slots=n_slots)
 
         self.P_f = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
         self.P_s = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
@@ -96,6 +97,10 @@ class NeuroField(nn.Module):
         self.drop = nn.Dropout(cfg.dropout)
         # Truncated BPTT window (overridable via safety or default 32 per paper config)
         self._truncate_window = int(getattr(self.safety, "truncate_write_window", 32) or 32)
+        if not getattr(cfg, "context_slots", None):
+            self.slow_mem.n_slots = max(4, cfg.max_seq_len // max(1, self._truncate_window))
+        # Slow query basis matches fast keys so context slots retrieve what was written
+        self.slow_mem.tie_query_to(self.fast_mem.W_k)
 
     def set_ablation(self, ablation: AblationConfig) -> None:
         """Hot-swap ablation flags without rebuilding parameters (eval / contrib runs)."""
@@ -114,6 +119,12 @@ class NeuroField(nn.Module):
             "pending_pred": None,  # prediction made at t for x_{t+1}
             "bar_S": None,  # per-session running surprise (isolation)
             "last_router_ent": None,  # prior-step conflict for metacognition
+            # Context window ring in slow memory
+            "slow_slots": torch.zeros(
+                batch, self.slow_mem.n_slots, self.cfg.d_k, self.cfg.d_v, device=device
+            ),
+            "slow_ptr": 0,
+            "slow_filled": torch.zeros(batch, self.slow_mem.n_slots, device=device),
         }
 
     def forward(
@@ -140,6 +151,11 @@ class NeuroField(nn.Module):
         pending_pred = state.get("pending_pred")
         bar_S = state.get("bar_S")  # per-session surprise baseline
         last_router_ent = state.get("last_router_ent")
+        slow_slots = state.get("slow_slots")
+        slow_ptr = int(state.get("slow_ptr") or 0)
+        slow_filled = state.get("slow_filled")
+        if slow_slots is None:
+            slow_slots, slow_ptr, slow_filled = self.slow_mem.init_slots(B, device)
 
         logits_list: list[Tensor] = []
         err_energy = torch.tensor(0.0, device=device)
@@ -239,13 +255,19 @@ class NeuroField(nn.Module):
                     M = M * scale
 
                 r = self.fast_mem.read(M, d_t)
+                # Segment boundary → consolidate fast M into slow context-window ring
+                if t > 0 and (t % self._truncate_window == 0):
+                    w = all_S[-1] if all_S else torch.ones(B, device=device)
+                    slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
+                        slow_slots, slow_ptr, slow_filled, M, weight=w
+                    )
             else:
                 write_norms.append(torch.tensor(0.0, device=device))
                 mem_norms.append(M.detach().norm())
                 r = torch.zeros(B, self.cfg.d_v, device=device)
 
             if ab.use_slow_memory:
-                u = self.slow_mem.read(d_t)
+                u = self.slow_mem.read(d_t, slots=slow_slots, filled=slow_filled)
             else:
                 u = torch.zeros(B, self.cfg.d_v, device=device)
 
@@ -303,6 +325,9 @@ class NeuroField(nn.Module):
             "pending_pred": pending_pred.detach() if pending_pred is not None else None,
             "bar_S": bar_S.detach() if isinstance(bar_S, Tensor) else bar_S,
             "last_router_ent": last_router_ent.detach() if isinstance(last_router_ent, Tensor) else last_router_ent,
+            "slow_slots": slow_slots.detach() if isinstance(slow_slots, Tensor) else slow_slots,
+            "slow_ptr": slow_ptr,
+            "slow_filled": slow_filled.detach() if isinstance(slow_filled, Tensor) else slow_filled,
         }
 
         audit = None
