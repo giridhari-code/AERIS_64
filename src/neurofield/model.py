@@ -125,7 +125,8 @@ class NeuroField(nn.Module):
 
         # Fast-path strong; slow-path quiet until replay fills M_s (was xavier noise).
         nn.init.xavier_uniform_(self.P_f.weight, gain=2.0)
-        nn.init.zeros_(self.P_s.weight)
+        # Slow context path must be able to contribute (was zeros → dead ring)
+        nn.init.xavier_uniform_(self.P_s.weight, gain=1.0)
         # mem_scale starts able to dominate skills when recall needs it
         with torch.no_grad():
             self.mem_scale.fill_(2.0)
