@@ -126,3 +126,8 @@ PYTHONPATH=src python scripts/research/contribution_ablation.py \
 If you use this code or report:
 
 > Karmakar, G. (2026). *AESC v2.3: Two-Speed Memory Architecture (Revised Technical Report)*. https://github.com/giridhari-code/AERIS_64
+
+
+## Component reference
+
+Har module ka order + kaam: [docs/COMPONENTS_FULL_GUIDE.md](docs/COMPONENTS_FULL_GUIDE.md).
