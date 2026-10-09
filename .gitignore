@@ -31,3 +31,8 @@ checkpoints/**/model.pt
 checkpoints/**/model.safetensors
 !checkpoints/examples/**
 !checkpoints/README.md
+
+# Generated datasets
+data/ready/
+data/tokens/
+data/raw/
