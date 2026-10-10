@@ -1,4 +1,4 @@
-"""External tools: web search, weather, MCP-style catalog."""
+"""External tools: web, weather, time, calc, wiki, FX + MCP catalog."""
 
 from neurofield.tools.catalog import list_mcp_tools, tool_schemas
 from neurofield.tools.orchestrate import enrich_prompt_with_tools

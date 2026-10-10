@@ -55,6 +55,10 @@ from neurofield.tools.orchestrate import enrich_prompt_with_tools
 from neurofield.tools.catalog import list_mcp_tools
 from neurofield.tools.weather import weather_report
 from neurofield.tools.web_search import web_search_report
+from neurofield.tools.timeutil import now_report
+from neurofield.tools.calculator import calculate
+from neurofield.tools.wikipedia import wikipedia_summary
+from neurofield.tools.currency import convert_currency
 from neurofield.serving.reply_polish import polish_reply
 from neurofield.utils.logging import setup_production_logging
 from neurofield.utils.text_norm import normalize_prompt
@@ -658,6 +662,39 @@ def create_app(
         if not loc:
             raise HTTPException(status_code=400, detail="location required")
         return {"location": loc, "report": weather_report(loc)}
+
+    @app.post("/v1/tools/time")
+    def tools_time(body: dict | None = None, api_key: Optional[str] = Depends(require_api_key)):
+        body = body or {}
+        tz = str(body.get("timezone") or "").strip() or None
+        return {"report": now_report(tz)}
+
+    @app.post("/v1/tools/calculator")
+    def tools_calculator(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        expr = str((body or {}).get("expression") or "").strip()
+        if not expr:
+            raise HTTPException(status_code=400, detail="expression required")
+        return {"report": calculate(expr)}
+
+    @app.post("/v1/tools/wikipedia")
+    def tools_wikipedia(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        topic = str((body or {}).get("topic") or "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic required")
+        lang = str((body or {}).get("lang") or "en").strip() or "en"
+        return {"report": wikipedia_summary(topic, lang=lang)}
+
+    @app.post("/v1/tools/currency")
+    def tools_currency(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        try:
+            amount = float((body or {}).get("amount"))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail="amount required") from e
+        fr = str((body or {}).get("from") or "").strip()
+        to = str((body or {}).get("to") or "").strip()
+        if not fr or not to:
+            raise HTTPException(status_code=400, detail="from and to required")
+        return {"report": convert_currency(amount, fr, to)}
 
     return app
 
