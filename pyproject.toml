@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neurofield"
-version = "2.3.0"
+version = "2.3.1"
 description = "NeuroField / AESC: two-speed memory architecture (v2.3)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,9 +32,13 @@ serve = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
     "pydantic>=2.5",
+    "httpx>=0.26",
+]
+sdk = [
+    "httpx>=0.26",
 ]
 all = [
-    "neurofield[dev,serve,data]",
+    "neurofield[dev,serve,data,sdk]",
 ]
 
 [project.scripts]
