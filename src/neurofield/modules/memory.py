@@ -1,9 +1,18 @@
-"""Fast (delta-rule) and slow (consolidated) memory matrices — paper-faithful."""
+"""Fast (delta-rule) and slow (context-window ring) memory — AESC / NeuroField.
+
+Fast memory M  — short segment, written every token (delta rule).
+Slow memory    — ring of slots covering the context window:
+                 n_slots ≈ context_window / segment_len
+                 segment end → snapshot fast M into next slot
+                 read → content-address over ALL filled slots
+                 → long context is handled here, not by stretching fast M
+"""
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
 
 
@@ -30,13 +39,10 @@ class FastMemory(nn.Module):
         self.W_q = nn.Linear(d_model, d_k, bias=False)
         self.W_v = nn.Linear(d_model, d_v, bias=False)
 
-        # Decay must survive a full recall sequence (≈ 2*n_pairs + 2 tokens).
-        # Old init linspace(1, 6) → λ≈0.73..0.997: fast channels wiped in <10 steps.
-        # New: λ ≈ 0.97 .. 0.998 so associations persist across the episode.
+        # Decay must survive a full segment (≈ truncate window tokens).
         self.log_lambda = nn.Parameter(torch.linspace(3.5, 6.5, d_k))
 
         nn.init.xavier_uniform_(self.W_k.weight)
-        # Key/query alignment at init — retrieval works before W_q is trained.
         self.W_q.weight.data.copy_(self.W_k.weight.data)
         nn.init.xavier_uniform_(self.W_v.weight)
 
@@ -51,10 +57,8 @@ class FastMemory(nn.Module):
         o_t: Tensor,     # (B, D) skill output → value
         g: Tensor,       # (B, 1) gate
     ) -> Tensor:
-        # Skip meaningless write when previous dendrite is still the zero state
-        # (first token of a sequence / fresh session).
         prev_norm = d_prev.norm(dim=-1, keepdim=True).clamp(min=1e-8)
-        active = (prev_norm > 1e-4).float()  # (B, 1)
+        active = (prev_norm > 1e-4).float()
         g_eff = g * active
 
         k = self.W_k(d_prev)
@@ -74,23 +78,21 @@ class FastMemory(nn.Module):
 
 class SlowMemory(nn.Module):
     """
-    Context-window handler (slow path).
-
-    Fast memory = short segment (delta-rule within a few dozen tokens).
-    Slow memory = ring of segment slots covering the **context window**:
+    Context-window handler (slow path) — ring of slots.
 
         n_slots ≈ context_window / segment_len
 
-    At each segment boundary the current fast matrix M is written into the
-    next ring slot. Read content-addresses over all filled slots so long
-    context is retrieved here instead of stretching fast M.
+    Write (segment end or EOS):
+        slots[ptr] ← snapshot(fast M)
+        ptr ← (ptr + 1) % n_slots
 
-    State tensors (per batch sequence, carried in model state — not weights):
-        slots: (B, n_slots, d_k, d_v)
-        ptr:   int  (next write index)
-        filled:(B, n_slots)  0/1
+    Read (every token):
+        query all filled slots with q = normalize(W_q d_t)
+        softmax over slot scores → weighted mix of slot reads
+        (+ small global prior M_s from training replay)
 
-    Learned: W_q (query). Prefer tying to FastMemory.W_k at init.
+    Long context is retrieved from the ring; fast M only covers the
+    current short segment.
     """
 
     def __init__(self, d_model: int, d_k: int, d_v: int, n_slots: int = 8):
@@ -99,8 +101,10 @@ class SlowMemory(nn.Module):
         self.d_v = d_v
         self.n_slots = max(1, int(n_slots))
         self.W_q = nn.Linear(d_model, d_k, bias=False)
-        # Optional global prior (still updated by classic replay for compat)
+        # Global prior still updated by classic replay (compat / long-term)
         self.M_s = nn.Parameter(torch.zeros(d_k, d_v))
+        # Softmax temperature for slot attention (learnable log-scale)
+        self.log_temp = nn.Parameter(torch.tensor(0.0))
         nn.init.xavier_uniform_(self.W_q.weight)
 
     def init_slots(self, batch: int, device: torch.device) -> tuple[Tensor, int, Tensor]:
@@ -116,22 +120,28 @@ class SlowMemory(nn.Module):
         M: Tensor,           # (B, d_k, d_v) fast memory snapshot
         weight: Tensor | None = None,  # (B,) optional strength
     ) -> tuple[Tensor, int, Tensor]:
-        """Consolidate one segment of context into the ring (context window)."""
+        """Ring write: one segment of context into the next slot."""
         B, S, _, _ = slots.shape
         if M.dim() != 3 or M.size(0) != B:
             return slots, ptr, filled
-        w = 1.0
         if weight is not None:
             w = weight.detach().reshape(B, 1, 1).clamp(min=0.0)
-            # normalize lightly
             w = w / (w.mean() + 1e-8)
+            snap = M.detach() * w
+        else:
+            snap = M.detach()
         new_slots = slots.clone()
         new_filled = filled.clone()
-        snap = M.detach() * (w if isinstance(w, Tensor) else 1.0)
         new_slots[:, ptr] = snap
         new_filled[:, ptr] = 1.0
         new_ptr = (ptr + 1) % S
         return new_slots, new_ptr, new_filled
+
+    def _slot_keys(self, slots: Tensor) -> Tensor:
+        """(B, S, d_k) key summary per slot from the stored matrix."""
+        # Row energy of M as a key fingerprint in R^{d_k}
+        k = slots.norm(dim=-1)  # (B, S, d_k)
+        return F.normalize(k, dim=-1, eps=1e-8)
 
     def read(
         self,
@@ -139,33 +149,30 @@ class SlowMemory(nn.Module):
         slots: Tensor | None = None,
         filled: Tensor | None = None,
     ) -> Tensor:
-        """
-        Query context window slots + small global prior M_s.
-        If slots is None, falls back to classic M_s-only read.
-        """
+        """Query all filled context slots + global prior."""
         q = self.W_q(d_t)
-        q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
-        # Global prior
+        q = F.normalize(q, dim=-1, eps=1e-8)
         u_prior = torch.einsum("kd,bk->bd", self.M_s, q)
 
         if slots is None or filled is None:
             return u_prior
 
-        # Per-slot read: r_s = M_s^T q  -> (B, S, d_v)
+        # Per-slot value read: (B, S, d_v)
         r = torch.einsum("bskd,bk->bsd", slots, q)
-        # Slot keys = mean over value dim -> (B, S, d_k)
-        k_slot = slots.mean(dim=-1)
+        # Content address over slots
+        k_slot = self._slot_keys(slots)
         scores = torch.einsum("bk,bsk->bs", q, k_slot)
-        # Mask empty slots
+        temp = self.log_temp.exp().clamp(min=0.1, max=10.0)
+        scores = scores / temp
         scores = scores.masked_fill(filled <= 0, -1e9)
-        # If nothing filled, only prior
-        any_fill = filled.sum(dim=-1, keepdim=True)  # (B,1)
+
+        any_fill = (filled.sum(dim=-1, keepdim=True) > 0).float()  # (B, 1)
         alpha = torch.softmax(scores, dim=-1)
-        alpha = torch.where(any_fill > 0, alpha, torch.zeros_like(alpha))
+        alpha = alpha * any_fill  # zero mass if nothing filled
         u_ctx = torch.einsum("bs,bsd->bd", alpha, r)
-        # Context window dominates when slots are filled; else global prior only
-        gate = (any_fill > 0).float()  # (B,1)
-        return gate * (0.85 * u_ctx + 0.15 * u_prior) + (1.0 - gate) * u_prior
+
+        # Prefer context ring when slots exist; keep a small prior residual
+        return any_fill * (0.9 * u_ctx + 0.1 * u_prior) + (1.0 - any_fill) * u_prior
 
     def replay(self, M: Tensor, surprises: Tensor, eta: float) -> None:
         """Legacy global prior update (batch-level consolidation)."""

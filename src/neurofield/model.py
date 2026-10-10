@@ -47,12 +47,44 @@ def _mean_t(xs: list[Tensor]) -> float:
 
 class NeuroField(nn.Module):
     """
-    Full forward pass of NeuroField v2.
+    NeuroField / AESC — two-speed memory language model.
+
+    =====================================================================
+    PER-TOKEN LOOP (every word / token t = 0 .. T-1)
+    =====================================================================
+
+        x_t  →  Embedding
+             →  Dendrite(x_hist, error)     →  d_t   (changes every token)
+             →  Metacognition               →  k, gate_bias
+             →  Neural Field(h, d_t, r, k)  →  h     (k recurrent steps)
+             →  Predictor(h)                →  pending pred for x_{t+1}
+             →  Router / Skills(h)          →  o_t
+             →  Neuromodulator              →  g
+             →  FastMemory write/read       →  M, r
+             →  SlowMemory read (ring)      →  u
+             →  logits_t
+
+        Next token: same loop again — d_t is recomputed each step
+        (dendrite window + delayed error), so the field always sees
+        a fresh local feature, not a static context vector.
+
+    =====================================================================
+    TWO-SPEED MEMORY
+    =====================================================================
+
+    Fast memory M:
+        Short segment. Delta-rule write every token (key=d_{t-1}, value=o_t).
+        Survives ~segment_len tokens (truncate window).
+
+    Slow memory = context-window ring of slots:
+        n_slots ≈ context_window / segment_len
+        At each segment boundary: snapshot fast M → next ring slot.
+        Read: content-address over all filled slots (long context lives here).
 
     Timing (leakage-safe):
       - Predictor forecasts x(t+1) from state after token t.
-      - Error is computed when x(t+1) arrives and is used from step t+1 onward.
-      - Nothing computed from x(t+1) reaches the logits that predict x(t+1).
+      - Error is used only from step t+1 onward.
+      - Nothing from x(t+1) reaches the logits that predict x(t+1).
     """
 
     def __init__(
@@ -73,8 +105,13 @@ class NeuroField(nn.Module):
         self.neuromod = Neuromodulator(cfg.d_model)
         self.router = SkillRouter(cfg.d_model, cfg.n_skills, cfg.top_k)
         self.fast_mem = FastMemory(cfg.d_model, cfg.d_k, cfg.d_v)
-        n_slots = max(4, int(getattr(cfg, 'context_slots', 0) or max(8, cfg.max_seq_len // 32)))
+        # Context window ring: n_slots ≈ max_seq_len / segment_len
+        segment = max(1, int(self.safety.truncate_write_window))
+        n_slots = int(getattr(cfg, "context_slots", 0) or 0)
+        if n_slots <= 0:
+            n_slots = max(4, (cfg.max_seq_len + segment - 1) // segment)
         self.slow_mem = SlowMemory(cfg.d_model, cfg.d_k, cfg.d_v, n_slots=n_slots)
+        self._segment_len = segment
 
         self.P_f = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
         self.P_s = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
@@ -86,19 +123,17 @@ class NeuroField(nn.Module):
         if cfg.tie_embeddings:
             self.head.weight = self.embed.weight
 
-        # Fast-path strong; slow-path quiet until replay fills M_s (was xavier noise).
+        # Fast path strong; slow context path also active (ring reads need P_s)
         nn.init.xavier_uniform_(self.P_f.weight, gain=2.0)
-        nn.init.zeros_(self.P_s.weight)
-        # mem_scale starts able to dominate skills when recall needs it
+        nn.init.xavier_uniform_(self.P_s.weight, gain=1.0)
         with torch.no_grad():
             self.mem_scale.fill_(2.0)
 
         self.meta = Metacognition(k_max=cfg.k_max)
         self.drop = nn.Dropout(cfg.dropout)
-        # Truncated BPTT window (overridable via safety or default 32 per paper config)
+        # Segment length = truncate window (fast M lifetime; ring write boundary)
         self._truncate_window = int(getattr(self.safety, "truncate_write_window", 32) or 32)
-        if not getattr(cfg, "context_slots", None):
-            self.slow_mem.n_slots = max(4, cfg.max_seq_len // max(1, self._truncate_window))
+        self._segment_len = self._truncate_window
         # Slow query basis matches fast keys so context slots retrieve what was written
         self.slow_mem.tie_query_to(self.fast_mem.W_k)
 
@@ -183,7 +218,7 @@ class NeuroField(nn.Module):
             else:
                 S = torch.ones(B, device=device)
 
-            # Dendrite (uses the delayed error)
+            # Dendrite: local window + delayed error → d_t (fresh every token)
             d_t = self.dendrite(x_hist, error)
 
             # Metacognition: monitor (surprise, conflict) → control (k, gate_bias)
@@ -203,10 +238,10 @@ class NeuroField(nn.Module):
                 k = max(1, int(ab.fixed_k))
             ks.append(k)
 
-            # Field
+            # Neural field: k recurrent steps on this token's d_t (d_t is new every t)
             h = self.field(h, d_t, r, k)
 
-            # Predict next embedding (will be compared when x_{t+1} arrives)
+            # Predict next embedding (compared when x_{t+1} arrives — delayed error)
             pending_pred = self.predictor(h)
 
             # Skills + router
@@ -255,8 +290,10 @@ class NeuroField(nn.Module):
                     M = M * scale
 
                 r = self.fast_mem.read(M, d_t)
-                # Segment boundary → consolidate fast M into slow context-window ring
-                if t > 0 and (t % self._truncate_window == 0):
+                # Segment end (or last token) → fast M snapshot into slow context ring
+                at_segment = (t > 0 and (t % self._truncate_window == 0))
+                at_eos = (t == T - 1)
+                if at_segment or at_eos:
                     w = all_S[-1] if all_S else torch.ones(B, device=device)
                     slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
                         slow_slots, slow_ptr, slow_filled, M, weight=w

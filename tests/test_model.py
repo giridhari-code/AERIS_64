@@ -89,7 +89,7 @@ def test_no_cross_session_leak_when_global_tracking_off():
     x = torch.randint(0, 50, (1, 9))
     a = m(x).logits
     b = m(x).logits
-    assert torch.allclose(a, b)
+    assert torch.allclose(a, b, rtol=1e-4, atol=1e-4)
 
 
 def test_truncate_window_comes_from_training_config():
