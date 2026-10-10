@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run free end-to-end tasks against a local checkpoint or HTTP API."""
+"""Run full end-to-end tasks against a local checkpoint or HTTP API."""
 
 from __future__ import annotations
 
@@ -74,8 +74,8 @@ def make_http_generate(base_url: str):
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Free E2E tasks for AERIS")
-    ap.add_argument("--tasks", default=str(ROOT / "data/e2e_tasks/free_tasks.jsonl"))
+    ap = argparse.ArgumentParser(description="Full E2E tasks for AERIS")
+    ap.add_argument("--tasks", default=str(ROOT / "data/e2e_tasks/full_tasks.jsonl"))
     ap.add_argument("--checkpoint", default="", help="local checkpoint folder")
     ap.add_argument("--api", default="", help="e.g. http://127.0.0.1:8000")
     ap.add_argument("--device", default="cpu")
