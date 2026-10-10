@@ -17,3 +17,4 @@ Start here: [guides/RUN_AND_TRAIN.md](guides/RUN_AND_TRAIN.md)
 | [paper/NeuroField_AESC_v2_4_Research_Note.md](paper/NeuroField_AESC_v2_4_Research_Note.md) | v2.4 token loop + context slow memory |
 | SDK | `from neurofield.sdk import AerisClient` |
 | [guides/E2E_TASKS.md](guides/E2E_TASKS.md) | Full end-to-end tasks harness |
+| [guides/WEB_TOOLS_AND_MCP.md](guides/WEB_TOOLS_AND_MCP.md) | Web search, weather, MCP-style tools |

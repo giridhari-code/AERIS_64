@@ -51,6 +51,10 @@ from neurofield.safety import SafetyMonitor
 from neurofield.serving.adaptive_length import adaptive_sampling, should_stop_generation
 from neurofield.serving.auth import client_ip, rate_limit_from_env, require_api_key
 from neurofield.serving.chat_history import append_turn, build_prompt, reset_history, set_use_specials
+from neurofield.tools.orchestrate import enrich_prompt_with_tools
+from neurofield.tools.catalog import list_mcp_tools
+from neurofield.tools.weather import weather_report
+from neurofield.tools.web_search import web_search_report
 from neurofield.serving.reply_polish import polish_reply
 from neurofield.utils.logging import setup_production_logging
 from neurofield.utils.text_norm import normalize_prompt
@@ -495,7 +499,9 @@ def create_app(
 
     def _prepare_chat(req: ChatRequest, sid: str) -> tuple[str, list[int], int, float]:
         prompt = normalize_prompt(req.prompt)
-        input_ids = _encode(build_prompt(sid, prompt)) or _encode(prompt) or [0]
+        # Real-world facts (weather / web) injected when tools enabled
+        enriched, _tool_note = enrich_prompt_with_tools(prompt)
+        input_ids = _encode(build_prompt(sid, enriched)) or _encode(enriched) or [0]
         max_new, temperature = adaptive_sampling(
             prompt,
             user_max=req.max_new_tokens,
@@ -628,6 +634,30 @@ def create_app(
             sid = _valid_session_id(req.session_id)
             _sandbox().reset(sid)
             return {"status": "reset", "session_id": sid}
+
+
+    # ------------------------------------------------------------------
+    # Web / weather tools + MCP-style catalog (NEUROFIELD_WEB_TOOLS=0 to disable chat auto-use)
+    # ------------------------------------------------------------------
+    @app.get("/v1/tools/mcp")
+    def tools_mcp_list(api_key: Optional[str] = Depends(require_api_key)):
+        """MCP-style tools/list payload for clients and agents."""
+        return list_mcp_tools()
+
+    @app.post("/v1/tools/web_search")
+    def tools_web_search(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        q = str((body or {}).get("query") or "").strip()
+        if not q:
+            raise HTTPException(status_code=400, detail="query required")
+        n = int((body or {}).get("max_results") or 5)
+        return {"query": q, "report": web_search_report(q, max_results=n)}
+
+    @app.post("/v1/tools/weather")
+    def tools_weather(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        loc = str((body or {}).get("location") or "").strip()
+        if not loc:
+            raise HTTPException(status_code=400, detail="location required")
+        return {"location": loc, "report": weather_report(loc)}
 
     return app
 
