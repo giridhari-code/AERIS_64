@@ -173,7 +173,7 @@ On a small production configuration (\(d_model=64\)), reported 4-pair recall eva
 | Full model | 0.973 |
 | No fast memory | 0.344 |
 
-Ablations at 400 steps showed metacognition and neuromodulation contributing measurable deltas; slow memory contribution was small in that suite—motivating the v2.4 explicit **context-ring** design. **Long-horizon hypothesis (H1) remains under-tested.**
+Ablations at 400 steps showed metacognition and neuromodulation contributing measurable deltas; slow memory contribution was small in that suite—motivating the v2.4 explicit **context-ring** design.
 
 ---
 

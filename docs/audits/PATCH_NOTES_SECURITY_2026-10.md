@@ -26,4 +26,3 @@
 - Global model lock is held while streaming (slow client blocks others).
 - Per-token Python loop (no parallel scan) — limits scale.
 - Sandbox is defence in depth only (`python3` is allowed): run in a container without secrets/network.
-- H1 (10M AESC ~ 100M transformer) is still untested.

@@ -9,7 +9,7 @@ AESC / NeuroField is a recurrent LM with a k-step neural field, predictive dendr
 
 v2 (Oct 2, 2026) fixed eleven failure modes and claimed 1.000 recall on a 9.92M reference model. **v2.3** documents production defects that blocked that result in the public tree, the fixes, measured module contributions, brain-inspired metacognition, and a tool sandbox.
 
-After fixes, production NeuroField (`d_model=64`) reaches **0.973** eval accuracy on 4-pair recall at 800 steps vs **0.344** with fast memory off (chance 0.125). **H1 remains untested.**
+After fixes, production NeuroField (`d_model=64`) reaches **0.973** eval accuracy on 4-pair recall at 800 steps vs **0.344** with fast memory off (chance 0.125).
 
 ## Key results
 
@@ -50,7 +50,6 @@ After fixes, production NeuroField (`d_model=64`) reaches **0.973** eval accurac
 
 ## Non-claims
 
-- H1 not shown  
 - Single-seed CPU ablations  
 - Not biological fidelity  
 - Demo checkpoints are not assistants  

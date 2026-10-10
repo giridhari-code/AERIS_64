@@ -22,6 +22,7 @@
   Behaviour change: re-validate / re-train checkpoints trained with the old rule.
 
 ### Repo
+- Removed the H1 ("10M AESC ≈ 100M Transformer") hypothesis from README, technical report (.md), research note and audit docs. The PDF copy of the report still contains it until regenerated.
 - `normalize_prompt` now implements the `namste`/`vanakam` fixes that `test_normalize_hindlish` already expected.
 - `pyproject` license metadata now matches `LICENSE` (was "MIT"); Makefile/k8s versions and default checkpoint path;
   `convert_pt_to_safetensors` works again; calculator no longer touches `ast.Num` (removed in Python 3.14);

@@ -31,7 +31,6 @@
 ## Claims (conservative)
 
 - Fast memory **materially improves** associative recall on the synthetic task used in evidence scripts.
-- This is **not** a claim that 10M matches 100M compute-matched transformers.
 - Safety layer is implemented and wired; treat as **design + basic enforcement**, not fully production-hardened.
 
 ## How to serve with model loaded
