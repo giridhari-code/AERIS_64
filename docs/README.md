@@ -9,3 +9,7 @@
 | [archive/](archive/) | Historical / superseded notes |
 
 Start here: [guides/RUN_AND_TRAIN.md](guides/RUN_AND_TRAIN.md)
+
+| [guides/SDLC.md](guides/SDLC.md) | Build → train → eval → release lifecycle |
+| SDK | `from neurofield.sdk import AerisClient` |
+
