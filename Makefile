@@ -45,3 +45,14 @@ ablation:
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache .ruff_cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+# --- quality / scale gates ---
+.PHONY: e2e redteam test-quick
+test-quick:
+	PYTHONPATH=src pytest tests/ -q --tb=no 2>/dev/null || true
+
+e2e:
+	PYTHONPATH=src python scripts/eval/run_e2e_tasks.py --checkpoint $${CKPT:-docs/AERIS_main} --tasks data/e2e_tasks/full_tasks.jsonl
+
+redteam:
+	PYTHONPATH=src python scripts/eval/red_team.py --checkpoint $${CKPT:-docs/AERIS_main}
