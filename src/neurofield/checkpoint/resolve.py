@@ -91,8 +91,27 @@ def load_model_from_checkpoint(
     unexpected = list(getattr(res, "unexpected_keys", []))
     if unexpected:
         logger.warning("Ignoring %d unexpected keys: %s", len(unexpected), unexpected[:5])
-    if missing:
-        msg = f"{len(missing)} weights missing from checkpoint (would stay random): {missing[:5]}"
+
+    # New architecture knobs that older checkpoints never saved — safe to keep init.
+    # (e.g. slow_mem.log_temp added for context-window slot attention temperature)
+    _COMPAT_MISSING_PREFIXES = (
+        "slow_mem.log_temp",
+    )
+    hard_missing = [
+        k for k in missing
+        if not any(k == p or k.startswith(p + ".") for p in _COMPAT_MISSING_PREFIXES)
+    ]
+    soft_missing = [k for k in missing if k not in hard_missing]
+    if soft_missing:
+        logger.warning(
+            "Compat: %d new param(s) not in checkpoint, keeping init values: %s",
+            len(soft_missing), soft_missing[:8],
+        )
+    if hard_missing:
+        msg = (
+            f"{len(hard_missing)} weights missing from checkpoint "
+            f"(would start random): {hard_missing[:5]}"
+        )
         if strict:
             raise RuntimeError(msg)
         logger.error(msg)
