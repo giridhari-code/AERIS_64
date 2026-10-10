@@ -1,52 +1,50 @@
-# Free END-TO-END tasks
+# Full END-TO-END tasks
 
-Open-ended tasks through the **full path**: prompt → model (or HTTP API) → text out.
+Complete pipeline checks: **prompt → model (or HTTP API) → text out**.
 
-Not multiple-choice. Tiny checkpoints will fail many free tasks; the harness still tests the pipeline.
+Name was briefly "free" (typo); the intended meaning is **full** E2E — whole system path, not a single-module unit test.
 
 ## Files
 
 | Path | Role |
 |------|------|
-| `data/e2e_tasks/free_tasks.jsonl` | Task list (add your own) |
+| `data/e2e_tasks/full_tasks.jsonl` | Full E2E task list |
 | `src/neurofield/tasks/e2e.py` | Loader + runner |
 | `scripts/eval/run_e2e_tasks.py` | CLI |
 
-## Task JSONL format
+## Task format
 
 ```json
-{"id": "my_task", "category": "free", "prompt": "your open request", "expect_contains_any": ["optional", "keywords"], "max_tokens": 96, "notes": "..."}
+{"id": "my_task", "category": "e2e_custom", "prompt": "open request", "expect_contains_any": ["keyword"], "max_tokens": 96, "notes": "..."}
 ```
 
-- Empty `expect_contains_any` → graded as **FREE** (no auto pass/fail).
-- Any match → **PASS**, else **FAIL**.
+- Empty `expect_contains_any` → no auto grade (manual full task).
+- Keyword hit → PASS, else FAIL.
 
-## Run local checkpoint
+## Run
 
 ```bash
+# local checkpoint — full path through weights
 PYTHONPATH=src python scripts/eval/run_e2e_tasks.py \
   --checkpoint docs/AERIS_main \
-  --tasks data/e2e_tasks/free_tasks.jsonl \
+  --tasks data/e2e_tasks/full_tasks.jsonl \
   --device cpu
-```
 
-## Run against running server
-
-```bash
+# full path through running server
 PYTHONPATH=src python scripts/eval/run_e2e_tasks.py \
   --api http://127.0.0.1:8000 \
-  --tasks data/e2e_tasks/free_tasks.jsonl
+  --tasks data/e2e_tasks/full_tasks.jsonl
 ```
 
-## Add your free task
+## Categories
 
-Edit `free_tasks.jsonl`:
+| category | Meaning |
+|----------|---------|
+| `e2e_chat` | Greeting / identity through full stack |
+| `e2e_arch` | Architecture recall prompts |
+| `e2e_session` | Multi-step / session style |
+| `e2e_custom` | Your full domain task |
 
-```json
-{"id": "shop_faq", "category": "free", "prompt": "Shop kitne baje khulti hai?", "expect_contains_any": ["10", "baje", "subah"], "max_tokens": 64, "notes": "domain FAQ"}
-```
+## Honest note
 
-## Honest limits
-
-Free E2E **quality** needs trained weights + domain data.  
-This add = **task harness + sample free tasks**, not a new brain.
+Full E2E **harness** ≠ full intelligence. Quality still needs trained `model.safetensors` + data.

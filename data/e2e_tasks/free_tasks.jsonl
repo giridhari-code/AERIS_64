@@ -1,7 +1,3 @@
-{"id": "greet_en", "category": "chat", "prompt": "hello", "expect_contains_any": ["hello", "hi", "aeris", "help"], "max_tokens": 48, "notes": "short greeting"}
-{"id": "identity", "category": "chat", "prompt": "who are you", "expect_contains_any": ["aeris", "assistant", "neurofield"], "max_tokens": 64, "notes": "name/identity"}
-{"id": "greet_hi", "category": "chat", "prompt": "namaste", "expect_contains_any": ["namaste", "swagat", "help", "madad", "aeris"], "max_tokens": 64, "notes": "Hinglish/Hindi greeting"}
-{"id": "thanks", "category": "chat", "prompt": "thank you", "expect_contains_any": ["welcome", "swagat", "help"], "max_tokens": 48, "notes": "courtesy"}
-{"id": "free_explain", "category": "free", "prompt": "In one short sentence, what is fast memory in NeuroField?", "expect_contains_any": ["memory", "fast", "segment", "short"], "max_tokens": 96, "notes": "open explain — may fail on tiny ckpt"}
-{"id": "free_list", "category": "free", "prompt": "List three steps: embed, dendrite, field", "expect_contains_any": ["embed", "dendrite", "field"], "max_tokens": 96, "notes": "ordered recall of pipeline"}
-{"id": "free_user_task", "category": "free", "prompt": "USER_TASK_PLACEHOLDER", "expect_contains_any": [], "max_tokens": 128, "notes": "replace prompt with any free task; no auto pass criteria"}
+# Deprecated name — use full_tasks.jsonl (typo fix: free → full)
+# This file re-exports the same harness path for old commands.
+{"id": "see_full_tasks", "category": "meta", "prompt": "hello", "expect_contains_any": ["hello", "hi", "aeris", "help"], "max_tokens": 48, "notes": "compat; prefer data/e2e_tasks/full_tasks.jsonl"}

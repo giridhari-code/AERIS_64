@@ -1,8 +1,8 @@
 """
-Free END-TO-END tasks — open prompts, full pipeline, optional weak checks.
+FULL end-to-end tasks — complete pipeline checks.
 
-"Free" = not multiple-choice; natural language in → model/server out.
-Tiny checkpoints will fail many free tasks; the harness still measures the path.
+Prompt → encode → model (or HTTP API) → decode → optional keyword checks.
+Covers the full path (not a partial unit test of one module).
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def load_tasks(path: str | Path) -> list[dict[str, Any]]:
 def _check(output: str, task: dict[str, Any]) -> Optional[bool]:
     needles = task.get("expect_contains_any") or []
     if not needles:
-        return None  # free task, no auto grade
+        return None  # manual / custom full task
     out = (output or "").lower()
     return any(str(n).lower() in out for n in needles)
 
@@ -53,9 +53,7 @@ def run_task(
     generate_fn: Callable[..., str],
     **gen_kwargs: Any,
 ) -> TaskResult:
-    """
-    generate_fn(prompt, max_tokens=..., **kwargs) -> str
-    """
+    """generate_fn(prompt, max_tokens=..., **kwargs) -> str"""
     prompt = str(task.get("prompt") or "")
     max_tokens = int(task.get("max_tokens") or 64)
     t0 = time.perf_counter()
@@ -69,7 +67,7 @@ def run_task(
     passed = _check(output, task)
     return TaskResult(
         id=str(task.get("id") or "task"),
-        category=str(task.get("category") or "free"),
+        category=str(task.get("category") or "e2e"),
         prompt=prompt,
         output=(output or "")[:2000],
         passed=passed,

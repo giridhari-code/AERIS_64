@@ -1,0 +1,8 @@
+{"id": "greet_en", "category": "e2e_chat", "prompt": "hello", "expect_contains_any": ["hello", "hi", "aeris", "help"], "max_tokens": 48, "notes": "greeting full path"}
+{"id": "identity", "category": "e2e_chat", "prompt": "who are you", "expect_contains_any": ["aeris", "assistant", "neurofield"], "max_tokens": 64, "notes": "identity full path"}
+{"id": "greet_hi", "category": "e2e_chat", "prompt": "namaste", "expect_contains_any": ["namaste", "swagat", "help", "madad", "aeris"], "max_tokens": 64, "notes": "Hinglish greeting"}
+{"id": "thanks", "category": "e2e_chat", "prompt": "thank you", "expect_contains_any": ["welcome", "swagat", "help"], "max_tokens": 48, "notes": "courtesy"}
+{"id": "pipeline_list", "category": "e2e_arch", "prompt": "List three steps: embed, dendrite, field", "expect_contains_any": ["embed", "dendrite", "field"], "max_tokens": 96, "notes": "architecture recall"}
+{"id": "fast_mem", "category": "e2e_arch", "prompt": "In one short sentence, what is fast memory in NeuroField?", "expect_contains_any": ["memory", "fast", "segment", "short"], "max_tokens": 96, "notes": "module explain"}
+{"id": "multi_turn_setup", "category": "e2e_session", "prompt": "My name is Ram", "expect_contains_any": [], "max_tokens": 48, "notes": "session setup — grade manual"}
+{"id": "user_full_task", "category": "e2e_custom", "prompt": "USER_TASK_PLACEHOLDER", "expect_contains_any": [], "max_tokens": 128, "notes": "replace with full custom end-to-end task"}
