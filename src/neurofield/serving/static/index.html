@@ -416,11 +416,11 @@
 
       try {
         const body = {
-          message: q,
-          max_tokens: maxTok,
+          prompt: q,
+          max_new_tokens: maxTok,
           temperature: Number.isFinite(temp) ? temp : 0.7,
           auto_length: auto,
-          session_id: sessionId,
+          session_id: sessionId || null,
         };
         const r = await fetch("/v1/chat", {
           method: "POST",
@@ -430,7 +430,13 @@
         document.getElementById("typing")?.remove();
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          addBubble("bot", "Error: " + (err.detail || r.statusText || r.status));
+          let detail = err.detail;
+          if (Array.isArray(detail)) {
+            detail = detail.map(d => (d.msg || JSON.stringify(d))).join("; ");
+          } else if (detail && typeof detail === "object") {
+            detail = JSON.stringify(detail);
+          }
+          addBubble("bot", "Error: " + (detail || r.statusText || r.status));
         } else {
           const j = await r.json();
           sessionId = j.session_id || sessionId;
