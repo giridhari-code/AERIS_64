@@ -8,8 +8,12 @@ version = "2.3.1"
 description = "NeuroField / AESC: two-speed memory architecture (v2.3)"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
-authors = [{name = "NeuroField Contributors"}]
+license = {file = "LICENSE"}   # custom source-available, non-commercial (NOT MIT)
+authors = [{name = "Giridhari Karmakar", email = "giriisdev@gmail.com"}]
+classifiers = [
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+]
 dependencies = [
     "safetensors>=0.4.0",
     "torch>=2.1.0",

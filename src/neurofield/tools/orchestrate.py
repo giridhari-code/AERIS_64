@@ -40,9 +40,8 @@ _FX = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(USD|INR|EUR|GBP|JPY|AED)\s*(?:to|in|→|->)\s*(USD|INR|EUR|GBP|JPY|AED)\b",
     re.I,
 )
-_PLACE = re.compile(
-    r"\b(?:in|at|for)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)",
-    re.I,
+_PLACE = re.compile(  # preposition is case-insensitive; the place name must be Capitalised
+    r"\b(?i:in|at|for)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)",
 )
 _CITIES = (
     "New Delhi", "Delhi", "Mumbai", "Bombay", "Kolkata", "Calcutta", "Bangalore",

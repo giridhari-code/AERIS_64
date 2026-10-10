@@ -4,7 +4,7 @@ metadata:
   name: neurofield-api
   labels:
     app: neurofield
-    version: "2.2.0"
+    version: "2.3.1"
 spec:
   replicas: 2
   selector:
@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: neurofield
-        version: "2.2.0"
+        version: "2.3.1"
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
@@ -27,7 +27,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: neurofield
-          image: your-registry/neurofield:2.2.0   # <- replace with your registry
+          image: your-registry/neurofield:2.3.1   # <- replace with your registry
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -42,6 +42,12 @@ spec:
               value: cuda
             - name: NEUROFIELD_LOG_JSON
               value: "1"
+            - name: NEUROFIELD_API_KEYS        # required for /v1/tools/* (sandbox); auth for the API
+              valueFrom:
+                secretKeyRef:
+                  name: neurofield-api-keys
+                  key: keys
+                  optional: true               # without it the sandbox endpoints answer 503
           resources:
             requests:
               cpu: "2"

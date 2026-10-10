@@ -1,7 +1,7 @@
 .PHONY: install install-dev test lint format build docker-build docker-run serve serve-chat count-1b ablation clean
 
 PYTHON ?= python
-IMAGE  = neurofield:2.3.0
+IMAGE  = neurofield:2.3.1
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -52,7 +52,7 @@ test-quick:
 	PYTHONPATH=src pytest tests/ -q --tb=no 2>/dev/null || true
 
 e2e:
-	PYTHONPATH=src python scripts/eval/run_e2e_tasks.py --checkpoint $${CKPT:-docs/AERIS_main} --tasks data/e2e_tasks/full_tasks.jsonl
+	PYTHONPATH=src python scripts/eval/run_e2e_tasks.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main} --tasks data/e2e_tasks/full_tasks.jsonl
 
 redteam:
-	PYTHONPATH=src python scripts/eval/red_team.py --checkpoint $${CKPT:-docs/AERIS_main}
+	PYTHONPATH=src python scripts/eval/red_team.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main}

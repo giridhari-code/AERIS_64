@@ -26,6 +26,7 @@ Environment (NEUROFIELD_* wins; the short names are kept for compatibility)
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -49,7 +50,12 @@ from neurofield.config import NeuroFieldConfig
 from neurofield.model import NeuroField
 from neurofield.safety import SafetyMonitor
 from neurofield.serving.adaptive_length import adaptive_sampling, should_stop_generation
-from neurofield.serving.auth import client_ip, rate_limit_from_env, require_api_key
+from neurofield.serving.auth import (
+    client_ip,
+    rate_limit_from_env,
+    require_api_key,
+    require_api_key_strict,
+)
 from neurofield.serving.chat_history import append_turn, build_prompt, reset_history, set_use_specials
 from neurofield.tools.orchestrate import enrich_prompt_with_tools
 from neurofield.tools.catalog import list_mcp_tools
@@ -133,6 +139,24 @@ class ChatRequest(BaseModel):
     )
     session_id: Optional[str] = None
     stream: bool = False
+
+
+# Sandbox request bodies live at MODULE level on purpose. With
+# `from __future__ import annotations`, FastAPI resolves `req: ShellRequest` against the module
+# globals; classes defined inside create_app() were unresolvable, so every call to
+# /v1/tools/shell|python|reset used to fail with 422 ("query.req field required").
+class ShellRequest(BaseModel):
+    command: str = Field(..., min_length=1, max_length=4000)
+    session_id: str = Field(default="default-session", max_length=64)
+
+
+class PythonRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20_000)
+    session_id: str = Field(default="default-session", max_length=64)
+
+
+class ToolResetRequest(BaseModel):
+    session_id: str = Field(default="default-session", max_length=64)
 
 
 class ChatResponse(BaseModel):
@@ -355,6 +379,11 @@ def _postprocess(prompt: str, raw: str, enabled: bool) -> str:
 from neurofield.sandbox import SandboxConfig, SandboxRegistry
 
 _sandbox_registry: SandboxRegistry | None = None
+
+
+def _sandbox_id(sid: str, api_key: Optional[str]) -> str:
+    """Per-owner sandbox key: two API keys can never address the same sandbox/audit log."""
+    return hashlib.sha256(f"{api_key or ''}\0{sid}".encode()).hexdigest()[:32]
 
 
 def _sandbox() -> SandboxRegistry:
@@ -595,48 +624,51 @@ def create_app(
             _sessions.pop(session_id, None)
         reset_history(session_id)  # previously never called => history survived "reset"
         if __import__("os").environ.get("NEUROFIELD_SANDBOX", "1") != "0":
-            _sandbox().drop(session_id)
+            _sandbox().drop(_sandbox_id(session_id, api_key))
         return {"status": "reset", "session_id": session_id}
 
     # ------------------------------------------------------------------
     # Sandbox tools (production) — disabled when NEUROFIELD_SANDBOX=0
     # ------------------------------------------------------------------
     if __import__("os").environ.get("NEUROFIELD_SANDBOX", "1") != "0":
-        from pydantic import BaseModel, Field as PydField
-
-        class _ShellReq(BaseModel):
-            command: str = PydField(..., min_length=1, max_length=4000)
-            session_id: str = PydField(default="default", max_length=64)
-
-        class _PyReq(BaseModel):
-            code: str = PydField(..., min_length=1, max_length=20_000)
-            session_id: str = PydField(default="default", max_length=64)
-
-        class _ToolResetReq(BaseModel):
-            session_id: str = PydField(default="default", max_length=64)
-
+        # Code execution: API key REQUIRED (503 when none configured), rate-limited,
+        # and every sandbox/audit log is scoped to the calling key.
         @app.post("/v1/tools/shell")
-        def tools_shell(req: _ShellReq, api_key: Optional[str] = Depends(require_api_key)):
+        def tools_shell(
+            req: ShellRequest, request: Request, api_key: str = Depends(require_api_key_strict)
+        ):
+            _limit(request, api_key)
             sid = _valid_session_id(req.session_id)
-            result = _sandbox().get(sid).run_shell(req.command)
+            result = _sandbox().get(_sandbox_id(sid, api_key)).run_shell(req.command)
             return result.to_dict()
 
         @app.post("/v1/tools/python")
-        def tools_python(req: _PyReq, api_key: Optional[str] = Depends(require_api_key)):
+        def tools_python(
+            req: PythonRequest, request: Request, api_key: str = Depends(require_api_key_strict)
+        ):
+            _limit(request, api_key)
             sid = _valid_session_id(req.session_id)
-            result = _sandbox().get(sid).run_python(req.code)
+            result = _sandbox().get(_sandbox_id(sid, api_key)).run_python(req.code)
             return result.to_dict()
 
         @app.get("/v1/tools/audit")
-        def tools_audit(session_id: str = "default", api_key: Optional[str] = Depends(require_api_key)):
+        def tools_audit(
+            request: Request,
+            session_id: str = "default-session",
+            api_key: str = Depends(require_api_key_strict),
+        ):
+            _limit(request, api_key)
             sid = _valid_session_id(session_id)
-            sb = _sandbox().get(sid)
+            sb = _sandbox().get(_sandbox_id(sid, api_key))
             return {"session_id": sid, "calls": sb.calls, "audit": sb.audit()}
 
         @app.post("/v1/tools/reset")
-        def tools_reset(req: _ToolResetReq, api_key: Optional[str] = Depends(require_api_key)):
+        def tools_reset(
+            req: ToolResetRequest, request: Request, api_key: str = Depends(require_api_key_strict)
+        ):
+            _limit(request, api_key)
             sid = _valid_session_id(req.session_id)
-            _sandbox().reset(sid)
+            _sandbox().reset(_sandbox_id(sid, api_key))
             return {"status": "reset", "session_id": sid}
 
 
@@ -653,8 +685,11 @@ def create_app(
         q = str((body or {}).get("query") or "").strip()
         if not q:
             raise HTTPException(status_code=400, detail="query required")
-        n = int((body or {}).get("max_results") or 5)
-        return {"query": q, "report": web_search_report(q, max_results=n)}
+        try:
+            n = max(1, min(10, int((body or {}).get("max_results") or 5)))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail="max_results must be an integer") from e
+        return {"query": q[:300], "report": web_search_report(q[:300], max_results=n)}
 
     @app.post("/v1/tools/weather")
     def tools_weather(body: dict, api_key: Optional[str] = Depends(require_api_key)):

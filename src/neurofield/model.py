@@ -160,6 +160,7 @@ class NeuroField(nn.Module):
             ),
             "slow_ptr": 0,
             "slow_filled": torch.zeros(batch, self.slow_mem.n_slots, device=device),
+            "seg_pos": 0,  # tokens since the last slow-ring write (global, survives 1-token calls)
         }
 
     def forward(
@@ -189,6 +190,7 @@ class NeuroField(nn.Module):
         slow_slots = state.get("slow_slots")
         slow_ptr = int(state.get("slow_ptr") or 0)
         slow_filled = state.get("slow_filled")
+        seg_pos = int(state.get("seg_pos") or 0)
         if slow_slots is None:
             slow_slots, slow_ptr, slow_filled = self.slow_mem.init_slots(B, device)
 
@@ -290,14 +292,23 @@ class NeuroField(nn.Module):
                     M = M * scale
 
                 r = self.fast_mem.read(M, d_t)
-                # Segment end (or last token) → fast M snapshot into slow context ring
-                at_segment = (t > 0 and (t % self._truncate_window == 0))
-                at_eos = (t == T - 1)
-                if at_segment or at_eos:
-                    w = all_S[-1] if all_S else torch.ones(B, device=device)
+                # Slow-ring write. The position inside a segment is carried in
+                # state["seg_pos"], so one long training call and token-by-token
+                # decoding write at the same cadence (every `segment_len` tokens).
+                # A multi-token call (training / prompt prefill) also snapshots at its
+                # last token; a 1-token decode step never does (it used to, which
+                # flooded the ring and evicted real context within ~n_slots tokens).
+                seg_pos += 1
+                at_segment = seg_pos >= self._segment_len
+                at_chunk_end = (t == T - 1) and T > 1 and seg_pos > 0
+                if at_segment or at_chunk_end:
+                    # Per-sequence weight (B,): surprise relative to the session baseline.
+                    # No batch-mean normalisation => identical at B=1 (serving) and B>1.
+                    w = rel_S.detach().clamp(0.5, 2.0)
                     slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
                         slow_slots, slow_ptr, slow_filled, M, weight=w
                     )
+                    seg_pos = 0
             else:
                 write_norms.append(torch.tensor(0.0, device=device))
                 mem_norms.append(M.detach().norm())
@@ -365,6 +376,7 @@ class NeuroField(nn.Module):
             "slow_slots": slow_slots.detach() if isinstance(slow_slots, Tensor) else slow_slots,
             "slow_ptr": slow_ptr,
             "slow_filled": slow_filled.detach() if isinstance(slow_filled, Tensor) else slow_filled,
+            "seg_pos": seg_pos,
         }
 
         audit = None

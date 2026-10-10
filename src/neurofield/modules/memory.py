@@ -125,8 +125,9 @@ class SlowMemory(nn.Module):
         if M.dim() != 3 or M.size(0) != B:
             return slots, ptr, filled
         if weight is not None:
+            # per-sequence strength; NOT normalised by the batch mean (that made B=1
+            # serving always weight 1.0 while B>1 training did not)
             w = weight.detach().reshape(B, 1, 1).clamp(min=0.0)
-            w = w / (w.mean() + 1e-8)
             snap = M.detach() * w
         else:
             snap = M.detach()
