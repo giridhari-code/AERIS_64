@@ -123,20 +123,17 @@ class NeuroField(nn.Module):
         if cfg.tie_embeddings:
             self.head.weight = self.embed.weight
 
-        # Fast-path strong; slow-path quiet until replay fills M_s (was xavier noise).
+        # Fast path strong; slow context path also active (ring reads need P_s)
         nn.init.xavier_uniform_(self.P_f.weight, gain=2.0)
-        # Slow context path must be able to contribute (was zeros → dead ring)
         nn.init.xavier_uniform_(self.P_s.weight, gain=1.0)
-        # mem_scale starts able to dominate skills when recall needs it
         with torch.no_grad():
             self.mem_scale.fill_(2.0)
 
         self.meta = Metacognition(k_max=cfg.k_max)
         self.drop = nn.Dropout(cfg.dropout)
-        # Truncated BPTT window (overridable via safety or default 32 per paper config)
+        # Segment length = truncate window (fast M lifetime; ring write boundary)
         self._truncate_window = int(getattr(self.safety, "truncate_write_window", 32) or 32)
-        if not getattr(cfg, "context_slots", None):
-            self.slow_mem.n_slots = max(4, cfg.max_seq_len // max(1, self._truncate_window))
+        self._segment_len = self._truncate_window
         # Slow query basis matches fast keys so context slots retrieve what was written
         self.slow_mem.tie_query_to(self.fast_mem.W_k)
 
