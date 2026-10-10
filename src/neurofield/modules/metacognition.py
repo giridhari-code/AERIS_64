@@ -141,13 +141,16 @@ class Metacognition:
                 if conflict.numel() != B:
                     conflict = conflict.mean().expand(B)
                 ent_mean = conflict.mean()
-            # running entropy baseline (habituation to chronic uncertainty)
-            if self.bar_ent is None:
-                self.bar_ent = ent_mean
+            # running entropy baseline (session-local unless track_global)
+            if self.track_global:
+                if self.bar_ent is None:
+                    self.bar_ent = ent_mean
+                else:
+                    self.bar_ent = self.momentum * self.bar_ent + (1.0 - self.momentum) * ent_mean
+                bar_e = self.bar_ent
             else:
-                self.bar_ent = self.momentum * self.bar_ent + (1.0 - self.momentum) * ent_mean
-            # relative conflict
-            conflict = conflict / (self.bar_ent + 1e-8)
+                bar_e = ent_mean.clamp(min=1e-4)
+            conflict = conflict / (bar_e + 1e-8)
 
         # Confidence ≈ feeling of knowing: high when surprise low vs baseline
         # sigmoid so (0,1); temperature softens calibration
@@ -164,9 +167,12 @@ class Metacognition:
         gate_bias = self._encoding_bias(rel_S, conf, conflict)
 
         # Consolidation request (offline replay analogue)
-        self.tokens_seen += 1
-        self.cum_surprise += float(mean_S.item())
-        want_replay = self._should_consolidate()
+        if self.track_global:
+            self.tokens_seen += 1
+            self.cum_surprise += float(mean_S.item())
+            want_replay = self._should_consolidate()
+        else:
+            want_replay = False
 
         # Optional load: if memory already huge, slightly lower encoding bias
         if mem_norm is not None:
