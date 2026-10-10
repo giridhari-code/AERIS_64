@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import threading
 import time
 from dataclasses import dataclass, field
@@ -61,6 +62,11 @@ class SessionSandbox:
     def audit(self) -> list[dict[str, Any]]:
         return list(self.executor.audit_log)
 
+    def close(self) -> None:
+        """Delete the on-disk work dir (called when the session is evicted/dropped)."""
+        with self._lock:
+            shutil.rmtree(self.executor.work_dir, ignore_errors=True)
+
 
 class SandboxRegistry:
     def __init__(
@@ -84,7 +90,8 @@ class SandboxRegistry:
             if sb is None:
                 if len(self._sessions) >= self.max_sessions:
                     oldest = min(self._sessions.values(), key=lambda s: s.last_used)
-                    del self._sessions[oldest.session_id]
+                    self._sessions.pop(oldest.session_id, None)
+                    oldest.close()
                 sb = SessionSandbox(
                     session_id=session_id,
                     cfg=self.cfg,
@@ -102,10 +109,12 @@ class SandboxRegistry:
 
     def drop(self, session_id: str) -> None:
         with self._lock:
-            self._sessions.pop(session_id, None)
+            sb = self._sessions.pop(session_id, None)
+        if sb is not None:
+            sb.close()
 
     def _evict_unlocked(self) -> None:
         now = time.time()
         dead = [sid for sid, s in self._sessions.items() if now - s.last_used > self.ttl_sec]
         for sid in dead:
-            del self._sessions[sid]
+            self._sessions.pop(sid).close()

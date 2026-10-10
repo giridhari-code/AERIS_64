@@ -92,3 +92,27 @@ def test_auth_header_only_and_session_owner(ckpt_dir, monkeypatch):
     assert c.post("/v1/chat", json=body, headers={"X-API-Key": "key-one"}).status_code == 200
     assert c.post("/v1/chat", json=body, headers={"X-API-Key": "key-two"}).status_code == 403
     assert c.post("/v1/reset?session_id=owned-by-one-1", headers={"X-API-Key": "key-two"}).status_code == 403
+
+
+def test_sandbox_tools_closed_without_api_keys(client):
+    r = client.post("/v1/tools/shell", json={"command": "echo hi"})
+    assert r.status_code == 503
+
+
+def test_sandbox_tools_dev_open_mode_and_default_session(ckpt_dir, monkeypatch):
+    monkeypatch.delenv("NEUROFIELD_API_KEYS", raising=False)
+    monkeypatch.setenv("NEUROFIELD_TOOLS_ALLOW_OPEN", "1")
+    c = TestClient(create_app(checkpoint=str(ckpt_dir), device="cpu"))
+    r = c.post("/v1/tools/shell", json={"command": "echo hi"})  # no session_id => default works now
+    assert r.status_code == 200 and r.json()["stdout"].strip() == "hi"
+
+
+def test_sandbox_sessions_are_scoped_per_api_key(ckpt_dir, monkeypatch):
+    monkeypatch.setenv("NEUROFIELD_API_KEYS", "key-one,key-two")
+    c = TestClient(create_app(checkpoint=str(ckpt_dir), device="cpu"))
+    body = {"command": "echo secret-from-one", "session_id": "shared-session-id"}
+    assert c.post("/v1/tools/shell", json=body).status_code == 401
+    assert c.post("/v1/tools/shell", json=body, headers={"X-API-Key": "key-one"}).status_code == 200
+    mine = c.get("/v1/tools/audit?session_id=shared-session-id", headers={"X-API-Key": "key-one"}).json()
+    other = c.get("/v1/tools/audit?session_id=shared-session-id", headers={"X-API-Key": "key-two"}).json()
+    assert mine["calls"] == 1 and other["calls"] == 0 and other["audit"] == []

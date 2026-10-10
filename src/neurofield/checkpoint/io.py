@@ -201,11 +201,16 @@ def convert_pt_to_safetensors(
     import shutil
     import tempfile
 
-    ckpt = load_checkpoint(pt_path)
-    root = Path(out_dir)
-    state = ckpt["model"]
-    if not isinstance(state, dict):
+    # load_checkpoint() refuses .pt on purpose, so go through the restricted loader
+    # (weights_only=True unless NEUROFIELD_ALLOW_PICKLE=1 for a file you trust).
+    obj = _torch_load(pt_path)
+    if isinstance(obj, dict) and isinstance(obj.get("model"), dict):
+        ckpt, state = obj, obj["model"]
+    elif isinstance(obj, dict) and obj and all(torch.is_tensor(v) for v in obj.values()):
+        ckpt, state = {}, obj  # bare state_dict
+    else:
         raise TypeError("Checkpoint has no state_dict")
+    root = Path(out_dir)
 
     tensors: dict[str, torch.Tensor] = {}
     seen: set[int] = set()

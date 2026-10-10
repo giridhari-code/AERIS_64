@@ -45,6 +45,29 @@ async def require_api_key(
     return x_api_key
 
 
+async def require_api_key_strict(
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+) -> str:
+    """Like ``require_api_key`` but NEVER open: for code-execution (sandbox) endpoints.
+
+    With no NEUROFIELD_API_KEYS configured the endpoints answer 503 instead of running
+    arbitrary commands for anyone who can reach the port. For local development only,
+    set NEUROFIELD_TOOLS_ALLOW_OPEN=1 to allow unauthenticated use (returns "").
+    """
+    keys = get_api_keys()
+    if not keys:
+        if os.environ.get("NEUROFIELD_TOOLS_ALLOW_OPEN", "0") == "1":
+            return ""
+        raise HTTPException(
+            status_code=503,
+            detail="Sandbox tools are disabled until NEUROFIELD_API_KEYS is set "
+            "(dev only: NEUROFIELD_TOOLS_ALLOW_OPEN=1).",
+        )
+    if not x_api_key or not _key_valid(x_api_key, keys):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+    return x_api_key
+
+
 def client_ip(request: Request) -> str:
     """Client IP. Honours X-Forwarded-For only if NEUROFIELD_TRUST_PROXY=1."""
     if os.environ.get("NEUROFIELD_TRUST_PROXY", "0") == "1":

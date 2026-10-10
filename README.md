@@ -102,8 +102,9 @@ PYTHONPATH=src python scripts/research/contribution_ablation.py \
 
 ## Important
 
-- **Weights are not in git** (`*.safetensors` ignored). See [docs/reference/WEIGHTS_NOT_IN_GIT.md](docs/reference/WEIGHTS_NOT_IN_GIT.md).  
-- Example folders under `checkpoints/examples/` have config/vocab only — serving them will fail until you train or copy weights in.  
+- **Weights are not in git** (`*.safetensors` ignored) with ONE exception: the tiny demo `checkpoints/examples/AERIS_main/model.safetensors` (~2.7 MB). See [docs/reference/WEIGHTS_NOT_IN_GIT.md](docs/reference/WEIGHTS_NOT_IN_GIT.md).  
+- The other folders under `checkpoints/examples/` have config/vocab only — serving them will fail until you train or copy weights in.  
+- **Sandbox tools (`/v1/tools/shell|python`) need `NEUROFIELD_API_KEYS`** (they answer 503 otherwise) and are defence-in-depth only: run the server in a container without secrets or network. See [docs/audits/PATCH_NOTES_SECURITY_2026-10.md](docs/audits/PATCH_NOTES_SECURITY_2026-10.md).  
 - 1B config: `configs/aeris_1b.yaml` — recipe only, no pretrained 1B weights.  
 - H1 (10M AESC ≈ 100M Transformer on memory tasks) is **untested**. See the v2.3 paper.
 

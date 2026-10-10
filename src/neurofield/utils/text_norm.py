@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-# Basic typo fixes only (English)
+# Basic typo fixes (English + a few Hinglish greetings)
 _REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bwhoami\b", re.I), "who am i"),
     (re.compile(r"\bhell+o\b", re.I), "hello"),
@@ -12,6 +12,9 @@ _REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bth?n?a?k\s*you\b", re.I), "thank you"),
     (re.compile(r"\bplz\b", re.I), "please"),
     (re.compile(r"\bpls\b", re.I), "please"),
+    # common Hinglish / regional greeting typos
+    (re.compile(r"\bnamste\b", re.I), "namaste"),
+    (re.compile(r"\bvanakam\b", re.I), "vanakkam"),
 ]
 
 def normalize_prompt(text: str) -> str:
