@@ -18,3 +18,4 @@ Start here: [guides/RUN_AND_TRAIN.md](guides/RUN_AND_TRAIN.md)
 | SDK | `from neurofield.sdk import AerisClient` |
 | [guides/E2E_TASKS.md](guides/E2E_TASKS.md) | Full end-to-end tasks harness |
 | [guides/WEB_TOOLS_AND_MCP.md](guides/WEB_TOOLS_AND_MCP.md) | Web search, weather, MCP-style tools |
+| [guides/DISTILL_FINETUNE_REDTEAM.md](guides/DISTILL_FINETUNE_REDTEAM.md) | Distill, fine-tune, red-team |
