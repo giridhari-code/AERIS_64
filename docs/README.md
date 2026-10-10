@@ -20,3 +20,4 @@ Start here: [guides/RUN_AND_TRAIN.md](guides/RUN_AND_TRAIN.md)
 | [guides/WEB_TOOLS_AND_MCP.md](guides/WEB_TOOLS_AND_MCP.md) | Web search, weather, MCP-style tools |
 | [guides/DISTILL_FINETUNE_REDTEAM.md](guides/DISTILL_FINETUNE_REDTEAM.md) | Distill, fine-tune, red-team |
 | [guides/SCALABILITY_AND_MAINTAINABILITY.md](guides/SCALABILITY_AND_MAINTAINABILITY.md) | Scale, maintain, operate |
+| [guides/TRAINING_0_TO_100.md](guides/TRAINING_0_TO_100.md) | Full training 0→100 |
