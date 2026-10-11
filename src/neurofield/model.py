@@ -352,14 +352,14 @@ class NeuroField(nn.Module):
             else:
                 seq_surprise = torch.ones(B, device=device)
             metrics = {
-                "ce": ce.item(),
-                "err_energy": (err_energy / max(1, T - 1)).item(),
-                "bal": (bal_loss / T).item(),
+                "ce": float(ce.detach().item()),
+                "err_energy": float((err_energy / max(1, T - 1)).detach().item()),
+                "bal": float((bal_loss / T).detach().item()),
                 "gate_mean": _mean_t(gates),
                 "mem_norm": _mean_t(mem_norms),
                 "k_mean": sum(ks) / max(1, len(ks)),
                 "router_ent": _mean_t(router_ents),
-                "mean_S": float(seq_surprise.mean().item()),
+                "mean_S": float(seq_surprise.detach().mean().item()),
             }
             # Stash for trainer replay (not serialized as metric float only)
             metrics["_seq_surprise"] = seq_surprise.detach()
