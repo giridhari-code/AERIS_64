@@ -79,7 +79,14 @@ class Trainer:
         self.extra_files = extra_files or {}  # name -> source path copied next to exports
 
         tc = cfg.training
-        self.device = torch.device(tc.device if torch.cuda.is_available() else "cpu")
+        from neurofield.training.gpu import configure_accelerator
+        _acc = configure_accelerator(
+            tc.device if tc.device != "cpu" else ("cuda" if torch.cuda.is_available() else "cpu"),
+            bf16=True if getattr(tc, "precision", "fp32") == "bf16" else False,
+            compile_model=bool(getattr(tc, "compile", False)),
+            tf32=True,
+        )
+        self.device = _acc.device
         self.model.to(self.device)
         # honour the config instead of the model's hardcoded default
         self.model._truncate_window = max(1, int(tc.truncate_write_window))
