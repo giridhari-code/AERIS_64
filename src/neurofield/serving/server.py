@@ -243,6 +243,13 @@ async def lifespan(app: FastAPI):
 # --------------------------------------------------------------------------
 # Session table
 # --------------------------------------------------------------------------
+
+def _session_memory_frozen(sid: str) -> bool:
+    """Paper §7: frozen sessions write with g=0."""
+    with _lock:
+        sess = _sessions.get(sid) or {}
+        return bool(sess.get("memory_frozen") or sess.get("anomaly"))
+
 def _valid_session_id(sid: Optional[str]) -> str:
     if sid is None:
         return uuid.uuid4().hex
@@ -323,6 +330,8 @@ def _token_stream(
         if reset:
             sess["state"] = None
         sess["anomaly"] = False
+        if reset:
+            sess["memory_frozen"] = False
         state = sess["state"]
         if state is None and slow_seed is not None:
             # fast memory/h start from zero; ONLY the user's slow ring is restored
@@ -355,8 +364,13 @@ def _token_stream(
                             and _cfg.safety.freeze_on_anomaly
                             and _monitor.should_freeze()
                         ):
-                            _model.freeze_writes()
-                            logger.warning("Anomaly freeze: %s", alarms)
+                            # Paper §7: freeze memory writes → g=0 (state flag), not permanent weight destroy
+                            sess["memory_frozen"] = True
+                            if state is not None:
+                                state["memory_frozen"] = True
+                            logger.warning("Anomaly freeze (g=0): %s", alarms)
+                    if state is not None and sess.get("memory_frozen"):
+                        state["memory_frozen"] = True
                     nid = _sample(out.logits[:, -1, :], temperature)
                     generated.append(nid)
                     cur = torch.tensor([[nid]], dtype=torch.long, device=_device)
