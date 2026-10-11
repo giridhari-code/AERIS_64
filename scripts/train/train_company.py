@@ -40,6 +40,8 @@ def main() -> None:
     ap.add_argument("--bf16", action="store_true", help="Force bf16 autocast (default: auto on CUDA)")
     ap.add_argument("--no-bf16", action="store_true", help="Disable bf16 even on CUDA")
     ap.add_argument("--compile", action="store_true", help="torch.compile model (PyTorch 2+)")
+    ap.add_argument("--fast", action="store_true",
+                    help="Speed mode: short seq, large batch, compile on CUDA (batch-parallel)")
     ap.add_argument("--no-tf32", action="store_true", help="Disable TF32 on CUDA")
     ap.add_argument("--out", default="docs/neurofield_company")
     ap.add_argument("--device", default="auto", help="cpu | cuda | cuda:0 | auto")
@@ -48,6 +50,19 @@ def main() -> None:
     ap.add_argument("--product", default="", help="product/model name stored in meta (default: output folder name)")
     ap.add_argument("--identity-marker", default="", help="string expected in the 'who am I' reply (default: product)")
     args = ap.parse_args()
+
+    # --fast: maximize batch parallelism, shorten sequential token loop
+    if args.fast:
+        if not args.seq_len:
+            args.seq_len = 32
+        if args.batch_size == 16:  # only if user left default
+            args.batch_size = 64
+        args.compile = True
+        args.cosine = True
+        if args.grad_accum < 1:
+            args.grad_accum = 1
+        print("[fast] seq_len=%d batch=%d compile=1 (sequence still serial; batch is parallel)" % (
+            args.seq_len, args.batch_size))
 
     parts = []
     for path in args.data:
@@ -128,12 +143,19 @@ def main() -> None:
             print(f"resume failed ({e}); training from scratch")
     opt = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
+    # Keep corpus on device for faster slice assembly (batch axis = parallel sequences)
+    ids = ids.to(device)
+    n_tok = int(ids.numel())
+
     def batch():
         bs, seq = args.batch_size, args.seq_len
-        hi = max(1, len(ids) - seq - 1)
-        ix = torch.randint(0, hi, (bs,))
-        x = torch.stack([ids[i : i + seq] for i in ix]).to(device)
-        y = torch.stack([ids[i + 1 : i + seq + 1] for i in ix]).to(device)
+        hi = max(1, n_tok - seq - 1)
+        ix = torch.randint(0, hi, (bs,), device=device)
+        # vectorized gather: (bs, seq)
+        offsets = torch.arange(seq, device=device).unsqueeze(0)  # (1, seq)
+        idx = ix.unsqueeze(1) + offsets
+        x = ids[idx]
+        y = ids[idx + 1]
         return x, y
 
     use_bf16 = accel.use_bf16
@@ -182,9 +204,13 @@ def main() -> None:
         last_loss = float(loss.item())
         if step % 100 == 0 or step == 1:
             gate = (out.metrics or {}).get("gate_mean", 0.0)
+            elapsed = max(1e-6, time.time() - t0)
+            tokens_done = step * args.batch_size * args.seq_len
+            tok_s = tokens_done / elapsed
             print(
                 f"  step {step:5d} | loss={last_loss:.3f} | "
-                f"lr={args.lr * lr_scale:.2e} | gate={gate:.3f}"
+                f"lr={args.lr * lr_scale:.2e} | gate={gate:.3f} | "
+                f"{tok_s:.0f} tok/s | seq={args.seq_len} bs={args.batch_size}"
             )
     if any(p.grad is not None for p in model.parameters() if p.requires_grad):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
