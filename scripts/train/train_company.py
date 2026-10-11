@@ -173,15 +173,29 @@ def main() -> None:
     # Keep corpus on device for faster slice assembly (batch axis = parallel sequences)
     ids = ids.to(device)
     n_tok = int(ids.numel())
+    # Short corpus: shrink seq so windows fit (avoids CUDA index OOB)
+    if n_tok < args.seq_len + 2:
+        new_seq = max(8, n_tok - 2)
+        if is_main():
+            print(
+                f"WARN: only {n_tok} tokens; seq_len {args.seq_len} → {new_seq} "
+                f"(use longer data for real training)"
+            )
+        args.seq_len = new_seq
+    V = int(cfg.vocab_size)
+    ids = ids.clamp(0, V - 1)
 
     def batch():
         bs, seq = args.batch_size, args.seq_len
+        # hi exclusive upper for start index so idx+1 stays in range
         hi = max(1, n_tok - seq - 1)
         ix = torch.randint(0, hi, (bs,), device=device)
         offsets = torch.arange(seq, device=device).unsqueeze(0)
         idx = ix.unsqueeze(1) + offsets
-        x = ids[idx]
-        y = ids[idx + 1]
+        # hard safety for tiny corpora
+        idx = idx.clamp(0, max(0, n_tok - 2))
+        x = ids[idx].clamp(0, V - 1)
+        y = ids[(idx + 1).clamp(0, n_tok - 1)].clamp(0, V - 1)
         # Chunk-parallel: (B, S) -> (B*n_chunks, chunk) so GPU sees more parallel rows,
         # each with a short serial token loop (architecture throughput knob).
         cp = int(getattr(args, "chunk_parallel", 0) or 0)
