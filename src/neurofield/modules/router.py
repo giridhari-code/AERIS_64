@@ -39,25 +39,18 @@ class SkillRouter(nn.Module):
         self.skills = nn.ModuleList([SkillOperator(d_model) for _ in range(n_skills)])
 
     def forward(self, h: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        """
-        Returns:
-            o_t: skill mixture (B, D)
-            router_probs: full softmax π (B, n_skills)
-            selected_weights: the top-k weights used in forward (B, n_skills)
-        """
-        logits = self.router(h)                      # (B, n_skills)
+        logits = self.router(h)  # (B, n_skills)
         pi = F.softmax(logits, dim=-1)
 
-        # Hard top-k selection for forward weights
         topk_vals, topk_idx = torch.topk(logits, self.top_k, dim=-1)
-        # Build sparse weight vector
+        # zeros_like under autocast can be fp32 while softmax(topk) is bf16 —
+        # scatter requires matching dtypes.
         w = torch.zeros_like(logits)
-        w.scatter_(-1, topk_idx, F.softmax(topk_vals, dim=-1))
+        src = F.softmax(topk_vals, dim=-1).to(dtype=w.dtype)
+        w.scatter_(-1, topk_idx, src)
 
-        # Straight-through estimator
         w_ste = w + pi - pi.detach()
 
-        # Weighted skill outputs
-        outs = torch.stack([op(h) for op in self.skills], dim=1)  # (B, n_skills, D)
+        outs = torch.stack([op(h) for op in self.skills], dim=1)
         o = torch.einsum("bs,bsd->bd", w_ste, outs)
         return o, pi, w
