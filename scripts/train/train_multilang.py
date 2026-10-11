@@ -13,6 +13,7 @@ from torch.optim import AdamW
 from neurofield.checkpoint import save_checkpoint
 from neurofield.config import ModelConfig, SafetyConfig
 from neurofield.model import NeuroField
+from neurofield.training.paper_step import maybe_replay
 
 
 def main() -> None:
@@ -68,11 +69,13 @@ def main() -> None:
     model.train()
     for step in range(1, args.steps + 1):
         x, y = batch()
-        loss = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005).loss
+        out = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005)
+        loss = out.loss
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
+        maybe_replay(model, out, step, replay_every=50, eta=0.02)
         if step % 100 == 0 or step == 1:
             print(f"  step {step:4d} | loss={loss.item():.3f}")
     print(f"Done in {time.time() - t0:.1f}s")

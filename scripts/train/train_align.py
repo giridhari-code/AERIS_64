@@ -23,6 +23,7 @@ from torch.optim import AdamW
 from neurofield.checkpoint import load_checkpoint, save_checkpoint
 from neurofield.config import ModelConfig, SafetyConfig, model_preset
 from neurofield.model import NeuroField
+from neurofield.training.paper_step import maybe_replay
 from neurofield.tokenizer.char import CharTokenizer
 
 
@@ -121,11 +122,13 @@ def main() -> None:
         i = int(torch.randint(0, hi, (1,)).item())
         x = ids[i : i + seq].unsqueeze(0).to(device)
         y = ids[i + 1 : i + seq + 1].unsqueeze(0).to(device)
-        loss = model(x, targets=y, lambda_err=0.02, lambda_bal=0.0).loss
+        out = model(x, targets=y, lambda_err=0.02, lambda_bal=0.0)
+        loss = out.loss
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
+        maybe_replay(model, out, step, replay_every=50, eta=0.02)
         if step % 50 == 0 or step == 1:
             print(f"  sft {step} loss={float(loss):.3f}")
     print(f"SFT done in {time.time()-t0:.1f}s")
