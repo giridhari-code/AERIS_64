@@ -42,6 +42,8 @@ def main() -> None:
     ap.add_argument("--compile", action="store_true", help="torch.compile model (PyTorch 2+)")
     ap.add_argument("--fast", action="store_true",
                     help="Speed mode: short seq, large batch, compile on CUDA (batch-parallel)")
+    ap.add_argument("--chunk-parallel", type=int, default=0,
+                    help="If >0, cut each seq into chunks of this len and stack on batch (more parallel sequences, shorter serial depth)")
     ap.add_argument("--no-tf32", action="store_true", help="Disable TF32 on CUDA")
     ap.add_argument("--out", default="docs/neurofield_company")
     ap.add_argument("--device", default="auto", help="cpu | cuda | cuda:0 | auto")
@@ -59,6 +61,8 @@ def main() -> None:
             args.batch_size = 64
         args.compile = True
         args.cosine = True
+        if not getattr(args, "chunk_parallel", 0):
+            args.chunk_parallel = 16
         if args.grad_accum < 1:
             args.grad_accum = 1
         print("[fast] seq_len=%d batch=%d compile=1 (sequence still serial; batch is parallel)" % (
@@ -151,11 +155,18 @@ def main() -> None:
         bs, seq = args.batch_size, args.seq_len
         hi = max(1, n_tok - seq - 1)
         ix = torch.randint(0, hi, (bs,), device=device)
-        # vectorized gather: (bs, seq)
-        offsets = torch.arange(seq, device=device).unsqueeze(0)  # (1, seq)
+        offsets = torch.arange(seq, device=device).unsqueeze(0)
         idx = ix.unsqueeze(1) + offsets
         x = ids[idx]
         y = ids[idx + 1]
+        # Chunk-parallel: (B, S) -> (B*n_chunks, chunk) so GPU sees more parallel rows,
+        # each with a short serial token loop (architecture throughput knob).
+        cp = int(getattr(args, "chunk_parallel", 0) or 0)
+        if cp > 0 and seq >= cp * 2:
+            n_chunks = seq // cp
+            use = n_chunks * cp
+            x = x[:, :use].reshape(bs * n_chunks, cp)
+            y = y[:, :use].reshape(bs * n_chunks, cp)
         return x, y
 
     use_bf16 = accel.use_bf16

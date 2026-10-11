@@ -207,11 +207,22 @@ class NeuroField(nn.Module):
         router_ents: list[Tensor] = []
 
         self.meta.training = self.training  # global baselines are train-only (see Metacognition._use_global)
-        for t in range(T):
-            x_t = self.drop(self.embed(input_ids[:, t]))
 
-            # Shift causal history
-            x_hist = torch.cat([x_hist[:, 1:], x_t.unsqueeze(1)], dim=1)
+        # ---- Parallel embed over time (one matmul for all tokens) ----
+        # State/memory/field remain sequential (causal). Embed + window prep are parallel.
+        x_emb = self.drop(self.embed(input_ids))  # (B, T, D)
+        W = self.cfg.dendrite_window
+        if W > 1:
+            pad = x_emb.new_zeros(B, W - 1, self.cfg.d_model)
+            x_pad = torch.cat([pad, x_emb], dim=1)  # (B, T+W-1, D)
+            # (B, T, W, D) causal windows ending at each t
+            windows = x_pad.unfold(1, W, 1).permute(0, 1, 3, 2).contiguous()
+        else:
+            windows = x_emb.unsqueeze(2)  # (B, T, 1, D)
+
+        for t in range(T):
+            x_t = x_emb[:, t]
+            x_hist = windows[:, t]  # (B, W, D)
 
             # Delayed error arrives now (from previous prediction)
             if pending_pred is not None:
