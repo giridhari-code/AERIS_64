@@ -1,6 +1,6 @@
 # Distributed training (DDP)
 
-Data-parallel training with **torchrun**. Parallel Form (`forward_parallel`) is separate — this is **multi-GPU / multi-process**.
+Data-parallel training with **torchrun**. This is **multi-GPU / multi-process** data parallel.
 
 ## Single process (default)
 
