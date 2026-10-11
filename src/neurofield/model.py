@@ -213,7 +213,18 @@ class NeuroField(nn.Module):
         lambda_err: float = 0.1,
         lambda_bal: float = 0.01,
         write_slow: bool = True,         # False: replay text (e.g. old chat turns) without writing the slow ring
+        parallel: bool = False,          # True → Parallel Form (depth passes; sequential path unchanged)
     ) -> ModelOutput:
+        if parallel:
+            return self.forward_parallel(
+                input_ids,
+                targets=targets,
+                state=state,
+                return_audit=return_audit,
+                lambda_err=lambda_err,
+                lambda_bal=lambda_bal,
+                write_slow=write_slow,
+            )
         B, T = input_ids.shape
         device = input_ids.device
 
@@ -479,6 +490,192 @@ class NeuroField(nn.Module):
 
     def reset_meta(self) -> None:
         self.meta.reset()
+
+
+    def forward_parallel(
+        self,
+        input_ids: Tensor,
+        targets: Optional[Tensor] = None,
+        state: Optional[dict] = None,
+        return_audit: bool = False,
+        lambda_err: float = 0.1,
+        lambda_bal: float = 0.01,
+        write_slow: bool = True,
+        k_depth: Optional[int] = None,
+    ) -> ModelOutput:
+        """
+        Parallel Form (paper §3 / successful 4-pair recall evidence):
+
+          X = Embed(tokens)                 # all T
+          D_win = DendriteWindow(X)         # causal, all T
+          H = D_win                         # start state (depth refinement)
+          for j in 1..k:                    # depth passes (not time recurrence)
+              E = sg(X) - shift(Predictor(H))   # one-step delayed error
+              D = D_win + gamma * E
+              O = RouterSkills(H)
+              M,R = delta-rule over T (key=shift(D), value=O, gate=G, query=D)
+              H = FieldStep(H, D, shift(R))
+          Z = Readout(O, R, SlowRead(D))
+
+        Sequential ``forward()`` is unchanged; use ``parallel=True`` or this method.
+        Single-seed evidence: 4-pair associative recall can reach 1.000; multi-seed / harder tasks open.
+        """
+        B, T = input_ids.shape
+        device = input_ids.device
+        ab = self.ablation
+        if state is None:
+            state = self._init_state(B, device)
+
+        X = self.drop(self.embed(input_ids))  # (B, T, D)
+        W = self.dendrite.window
+        # causal pad: zeros history before t=0
+        pad = X.new_zeros(B, W, X.size(-1))
+        if state.get("x_hist") is not None and state["x_hist"].shape[-2] == W:
+            pad = state["x_hist"]
+        xp = torch.cat([pad, X], dim=1)  # (B, W+T, D)
+        D_win = self.dendrite.window_features(xp, T)  # (B, T, D)
+
+        H = D_win
+        k_depth = int(k_depth or max(1, int(self.cfg.k_max)))
+        if not ab.use_metacognition:
+            k_depth = max(1, int(ab.fixed_k))
+
+        M = state["M"]
+        if M is None or M.shape[0] != B:
+            M = torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device)
+
+        def shift_bt(x: Tensor) -> Tensor:
+            """Position t gets value from t-1; t=0 is zeros. x: (B,T,*)."""
+            z = x.new_zeros(x[:, :1].shape)
+            return torch.cat([z, x[:, :-1]], dim=1)
+
+        R = torch.zeros(B, T, self.cfg.d_v, device=device)
+        O = H
+        bal_loss = X.new_zeros(())
+        err_energy = X.new_zeros(())
+        last_gates: list[Tensor] = []
+
+        for _j in range(k_depth):
+            # Predictor on all positions → shift so error at t uses pred from t-1
+            H_flat = H.reshape(B * T, -1)
+            pred_all = self.predictor(H_flat).view(B, T, -1)
+            pred_shift = shift_bt(pred_all)
+            # Change 1: detached target
+            E = X.detach() - pred_shift
+            err_energy = err_energy + E.pow(2).mean()
+
+            S = E.abs().mean(dim=-1).detach()  # (B, T)
+            # causal running mean of surprise along T (per batch)
+            bar = torch.cumsum(S, dim=1) / torch.arange(1, T + 1, device=device).float().clamp(min=1.0)
+            rel = (S / bar.clamp(min=1e-6)).clamp(0.1, 5.0)  # (B, T)
+
+            if ab.use_neuromodulator:
+                # gate per position from relative surprise + |h|
+                g_list = []
+                for t in range(T):
+                    g_t = self.neuromod(rel[:, t], H[:, t], gate_cap=self.safety.gate_cap)
+                    g_list.append(g_t)
+                G = torch.stack(g_list, dim=1)  # (B, T, 1)
+            else:
+                G = torch.full((B, T, 1), float(ab.fixed_gate), device=device)
+                G = G.clamp(max=self.safety.gate_cap)
+
+            if state.get("memory_frozen"):
+                G = torch.zeros_like(G)
+
+            D = self.dendrite.with_error(D_win, E)  # (B, T, D) — gamma * E
+            D_key = shift_bt(D)
+
+            # Router + skills all positions
+            O_list = []
+            for t in range(T):
+                o_t, pi_t, _w = self.router(H[:, t])
+                O_list.append(o_t)
+                bal_loss = bal_loss + (-(pi_t * (pi_t + 1e-8).log()).sum(-1)).mean()
+            O = torch.stack(O_list, dim=1)  # (B, T, D)
+
+            # Fast memory delta-rule over T (loop acceptable).
+            # Each depth pass uses its own M (paper §3: k matrices / fresh per pass)
+            # so future writes from depth j cannot leak into position 0 at depth j+1.
+            if ab.use_fast_memory:
+                R_list = []
+                M_t = torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device)
+                for t in range(T):
+                    M_t = self.fast_mem.write(M_t, D_key[:, t], O[:, t], G[:, t])
+                    if self.safety.max_memory_norm > 0:
+                        mn = M_t.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                        M_t = M_t * (self.safety.max_memory_norm / mn).clamp(max=1.0)
+                    r_t = self.fast_mem.read(M_t, D[:, t])
+                    R_list.append(r_t)
+                    last_gates.append(G[:, t].detach().mean())
+                R = torch.stack(R_list, dim=1)
+                M = M_t
+            else:
+                R = torch.zeros(B, T, self.cfg.d_v, device=device)
+
+            R_prev = shift_bt(R)
+            # Field one depth step at each position (no time recurrence of h)
+            H_list = []
+            for t in range(T):
+                H_list.append(self.field.single_step(H[:, t], D[:, t], R_prev[:, t]))
+            H = torch.stack(H_list, dim=1)
+
+        # Final router pass
+        O_list = []
+        for t in range(T):
+            o_t, pi_t, _w = self.router(H[:, t])
+            O_list.append(o_t)
+        O = torch.stack(O_list, dim=1)
+
+        if ab.use_slow_memory:
+            slow_slots = state.get("slow_slots")
+            slow_filled = state.get("slow_filled")
+            U_list = []
+            for t in range(T):
+                U_list.append(self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled))
+            U = torch.stack(U_list, dim=1)
+        else:
+            U = torch.zeros(B, T, self.cfg.d_v, device=device)
+
+        logits = self.head(
+            self.out_norm(O + self.mem_scale * self.P_f(R) + self.P_s(U))
+        )
+
+        loss = None
+        metrics: dict[str, float] = {}
+        if targets is not None:
+            ce = F.cross_entropy(
+                logits.reshape(-1, self.cfg.vocab_size),
+                targets.reshape(-1),
+                ignore_index=-100,
+            )
+            total = ce + lambda_err * (err_energy / max(1, k_depth)) + lambda_bal * (bal_loss / max(1, T * k_depth))
+            loss = total
+            metrics = {
+                "ce": float(ce.detach().item()),
+                "err_energy": float((err_energy / max(1, k_depth)).detach().item()),
+                "path": "parallel",
+                "k_depth": float(k_depth),
+            }
+
+        audit = None
+        if return_audit:
+            audit = {
+                "path": "parallel",
+                "k_depth": k_depth,
+                "gates": [float(g) for g in last_gates[-T:]] if last_gates else [],
+            }
+
+        new_state = {
+            **state,
+            "h": H[:, -1].detach() if T > 0 else state.get("h"),
+            "M": M.detach() if isinstance(M, Tensor) else M,
+            "x_hist": xp[:, T:].detach(),
+            "error": E[:, -1].detach() if T > 0 else state.get("error"),
+            "pending_pred": None,
+        }
+        return ModelOutput(logits=logits, loss=loss, metrics=metrics, audit=audit, state=new_state)
+
 
     def freeze_writes(self) -> None:
         for p in self.neuromod.parameters():
