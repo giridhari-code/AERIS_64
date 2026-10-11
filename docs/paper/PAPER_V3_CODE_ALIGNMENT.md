@@ -40,3 +40,18 @@ Repo HEAD at alignment: see `git log -1`.
 4. Multi-seed / baseline comparisons  
 
 *This file tracks alignment; it does not claim the architecture is proven end-to-end.*
+
+## Formula sync (2026-10-11)
+
+| Equation | Status |
+|----------|--------|
+| Dendrite `tanh(sum c⊙x)+γ⊙e` | OK |
+| Field k-step + R conv + memory read | OK |
+| Gate `σ(a_s(S̃-1)+…)` | OK |
+| Router STE top-k | OK |
+| Fast M **Change 5** decay-consistent delta | **Updated** |
+| Read `r = M^T q` | OK |
+| Error `sg(x)-pred`, delayed | OK |
+| §7 freeze `g=0` | OK |
+
+Reference Appendix A write used residual vs raw M; **Change 5** residual vs `ΛM` is now the implementation.
