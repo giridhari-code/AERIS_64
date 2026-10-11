@@ -23,3 +23,4 @@ Start here: [guides/RUN_AND_TRAIN.md](guides/RUN_AND_TRAIN.md)
 | [guides/TRAINING_0_TO_100.md](guides/TRAINING_0_TO_100.md) | Full training 0→100 |
 | [paper/PAPER_V3_CODE_ALIGNMENT.md](paper/PAPER_V3_CODE_ALIGNMENT.md) | Paper v3.1 ↔ code failure-mode map |
 | [guides/PARALLEL_FORM.md](guides/PARALLEL_FORM.md) | Parallel Form API + evidence |
+| [guides/DISTRIBUTED_TRAINING.md](guides/DISTRIBUTED_TRAINING.md) | torchrun / DDP multi-GPU |
