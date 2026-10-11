@@ -1,4 +1,4 @@
-"""NeuroField / AESC v2 core model (Appendix A sequential path + §7 freeze)."""
+"""NeuroField / AESC v2 core model — Parallel Form main path + §7 freeze."""
 
 from __future__ import annotations
 
@@ -204,6 +204,7 @@ class NeuroField(nn.Module):
             "seg_pos": 0,  # tokens since the last slow-ring write (global, survives 1-token calls)
         }
 
+
     def forward(
         self,
         input_ids: Tensor,               # (B, T)
@@ -212,266 +213,207 @@ class NeuroField(nn.Module):
         return_audit: bool = False,
         lambda_err: float = 0.1,
         lambda_bal: float = 0.01,
-        write_slow: bool = True,         # False: replay text (e.g. old chat turns) without writing the slow ring
+        write_slow: bool = True,
+        k_depth: Optional[int] = None,
     ) -> ModelOutput:
+        """
+        Parallel Form (main path): whole sequence + k depth passes.
+
+        Sequential per-token time loop removed. Distributed (DDP) is unchanged —
+        it only shards training across ranks; each rank still runs this forward.
+        """
         B, T = input_ids.shape
         device = input_ids.device
-
+        ab = self.ablation
         if state is None:
             state = self._init_state(B, device)
 
-        h = state["h"]
-        M = state["M"]
-        error = state["error"]
-        r = state["r"]
-        d_prev = state["d_prev"]
-        x_hist = state["x_hist"]
-        pending_pred = state.get("pending_pred")
-        bar_S = state.get("bar_S")  # per-session surprise baseline
-        last_router_ent = state.get("last_router_ent")
-        slow_slots = state.get("slow_slots")
-        slow_ptr = int(state.get("slow_ptr") or 0)
-        slow_filled = state.get("slow_filled")
-        seg_pos = int(state.get("seg_pos") or 0)
-        if slow_slots is None:
-            slow_slots, slow_ptr, slow_filled = self.slow_mem.init_slots(B, device)
+        k_depth = int(k_depth or max(1, int(self.cfg.k_max)))
+        if not ab.use_metacognition:
+            k_depth = max(1, int(ab.fixed_k))
 
-        logits_list: list[Tensor] = []
-        err_energy = torch.tensor(0.0, device=device)
-        bal_loss = torch.tensor(0.0, device=device)
-        all_S: list[Tensor] = []
-        # Per-step diagnostics are kept as 0-dim tensors and converted once at the
-        # end of forward (no per-token .item() => no per-token GPU sync).
-        gates: list[Tensor] = []
+        X = self.drop(self.embed(input_ids))  # (B, T, D)
+        W = self.dendrite.window
+        x_hist = state.get("x_hist")
+        if x_hist is None or x_hist.shape != (B, W, X.size(-1)):
+            x_hist = X.new_zeros(B, W, X.size(-1))
+        Xp = torch.cat([x_hist, X], dim=1)
+        D_win = self.dendrite.window_features(Xp, T)  # (B, T, D)
+
+        H = D_win.clone()
+        R = torch.zeros(B, T, self.cfg.d_v, device=device, dtype=X.dtype)
+        err_energy = X.new_zeros(())
+        bal_loss = X.new_zeros(())
+        gates_audit: list[Tensor] = []
         write_norms: list[Tensor] = []
         mem_norms: list[Tensor] = []
-        ks: list[int] = []
-        router_ents: list[Tensor] = []
 
-        self.meta.training = self.training  # global baselines are train-only (see Metacognition._use_global)
+        def _shift(x: Tensor) -> Tensor:
+            return torch.cat([x.new_zeros(x[:, :1].shape), x[:, :-1]], dim=1)
 
-        # ---- token-parallel work: depends only on the input tokens, so do it for all T at once ----
-        parallel = self.parallel_ops
-        o_list: list[Tensor] = []
-        r_list: list[Tensor] = []
-        u_list: list[Tensor] = []
-        if parallel:
-            X = self.drop(self.embed(input_ids))                    # (B, T, D) one lookup
-            Xp = torch.cat([x_hist, X], dim=1)                      # (B, W+T, D)
-            base_all = self.dendrite.window_features(Xp, T)         # (B, T, D)
+        frozen = bool(state.get("memory_frozen"))
 
-        for t in range(T):
-            if parallel:
-                x_t = X[:, t]
+        for _j in range(k_depth):
+            X_hat = self.predictor(H.reshape(B * T, -1)).view(B, T, -1)
+            E = X.detach() - _shift(X_hat)
+            err_energy = err_energy + E.pow(2).mean()
+            S = E.abs().mean(dim=-1)  # (B, T)
+
+            if ab.use_neuromodulator:
+                activity = H.abs().mean(dim=-1)
+                logit = (
+                    self.neuromod.a_s * (S - 0.5)
+                    + self.neuromod.a_c * activity
+                    + self.neuromod.bias
+                )
+                G = torch.sigmoid(logit).unsqueeze(-1).clamp(max=self.safety.gate_cap)
             else:
-                x_t = self.drop(self.embed(input_ids[:, t]))
-                # Shift causal history
-                x_hist = torch.cat([x_hist[:, 1:], x_t.unsqueeze(1)], dim=1)
+                G = torch.full(
+                    (B, T, 1), float(ab.fixed_gate), device=device, dtype=X.dtype
+                ).clamp(max=self.safety.gate_cap)
+            if frozen:
+                G = torch.zeros_like(G)
 
-            # Delayed error arrives now (from previous prediction)
-            if pending_pred is not None:
-                error, S = self.predictor.compute_error_and_surprise(pending_pred, x_t)
-                all_S.append(S)
-                err_energy = err_energy + error.pow(2).mean()
+            D = D_win + self.dendrite.gamma * E
+
+            o_list = []
+            for t in range(T):
+                o_t, pi_t, _w = self.router(H[:, t])
+                o_list.append(o_t)
+                bal_loss = bal_loss + (
+                    pi_t.mean(0) - 1.0 / max(1, self.cfg.n_skills)
+                ).pow(2).sum()
+            O = torch.stack(o_list, dim=1)
+
+            if ab.use_fast_memory:
+                # Fresh M each depth (leakage-safe across positions)
+                M = torch.zeros(
+                    B, self.cfg.d_k, self.cfg.d_v, device=device, dtype=X.dtype
+                )
+                # Optional: warm-start depth0 from session state for T=1 serve continuity
+                if _j == 0 and state.get("M") is not None and T == 1:
+                    M = state["M"]
+                reads = []
+                for t in range(T):
+                    d_prev = D[:, t - 1] if t > 0 else (
+                        state.get("d_prev")
+                        if state.get("d_prev") is not None
+                        else torch.zeros_like(D[:, 0])
+                    )
+                    if t == 0 and state.get("d_prev") is not None and d_prev.shape == D[:, 0].shape:
+                        d_prev = state["d_prev"]
+                    elif t == 0:
+                        d_prev = torch.zeros_like(D[:, 0])
+                    M_before = M
+                    M = self.fast_mem.write(M, d_prev, O[:, t], G[:, t])
+                    if self.safety.max_memory_norm > 0:
+                        mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                        M = M * (self.safety.max_memory_norm / mn).clamp(max=1.0)
+                    write_norms.append((M - M_before).detach().norm())
+                    mem_norms.append(M.detach().norm())
+                    reads.append(self.fast_mem.read(M, D[:, t]))
+                    gates_audit.append(G[:, t].detach().mean())
+                R = torch.stack(reads, dim=1)
             else:
-                S = torch.ones(B, device=device)
+                M = state.get("M")
+                if M is None:
+                    M = torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device)
+                R = torch.zeros(B, T, self.cfg.d_v, device=device, dtype=X.dtype)
 
-            # Dendrite: local window + delayed error → d_t (fresh every token)
-            d_t = (
-                self.dendrite.with_error(base_all[:, t], error)
-                if parallel
-                else self.dendrite(x_hist, error)
+            R_shift = _shift(R)
+            H = torch.stack(
+                [
+                    self.field.single_step(H[:, t], D[:, t], R_shift[:, t])
+                    for t in range(T)
+                ],
+                dim=1,
             )
 
-            # Metacognition: monitor (surprise, conflict) → control (k, gate_bias)
-            ab = self.ablation
-            gate_bias = None
-            if ab.use_metacognition:
-                ctrl = self.meta.step(
-                    S=S,
-                    bar_S=bar_S,
-                    router_entropy=last_router_ent,
-                    mem_norm=M.detach().norm(dim=(-2, -1)) if M is not None else None,
-                )
-                rel_S, bar_S, k = ctrl.rel_S, ctrl.bar_S, ctrl.k
-                gate_bias = ctrl.gate_bias
-            else:
-                rel_S = torch.ones(B, device=device)
-                k = max(1, int(ab.fixed_k))
-            ks.append(k)
+        o_list = []
+        for t in range(T):
+            o_t, _pi, _w = self.router(H[:, t])
+            o_list.append(o_t)
+        O = torch.stack(o_list, dim=1)
 
-            # Neural field: k recurrent steps on this token's d_t (d_t is new every t)
-            h = self.field(h, d_t, r, k)
-
-            # Predict next embedding (compared when x_{t+1} arrives — delayed error)
-            pending_pred = self.predictor(h)
-
-            # Skills + router
-            o_t, pi, _ = self.router(h)
-            bal_loss = bal_loss + (pi.mean(0) - 1.0 / self.cfg.n_skills).pow(2).sum()
-            step_ent = (-(pi * (pi + 1e-8).log()).sum(-1)).detach()  # (B,)
-            router_ents.append(step_ent.mean())
-            last_router_ent = step_ent  # feed conflict to metacognition next step
-
-            # Gate (neuromod + metacognitive encoding bias)
-            if ab.use_neuromodulator:
-                g = self.neuromod(
-                    rel_S, h, gate_cap=self.safety.gate_cap, gate_bias=gate_bias
-                )
-            else:
-                g = torch.full((B, 1), float(ab.fixed_gate), device=device)
-                g = g.clamp(max=self.safety.gate_cap)
-            # Paper §7: anomaly freeze → g=0 so fast memory only decays (no write)
-            if state is not None and state.get("memory_frozen"):
-                g = torch.zeros_like(g)
-            gates.append(g.detach().mean())
-
-            # Fast write (truncated BPTT) — paper: key=d_{t-1}, value=W_v o_t
-            M_before = M
-            if ab.use_fast_memory:
-                if t > 0 and (t % self._truncate_window != 0):
-                    M = self.fast_mem.write(M, d_prev, o_t, g)
-                else:
-                    M = self.fast_mem.write(M.detach(), d_prev, o_t, g)
-
-                # Write-norm audit + hard cap (paper Section 6)
-                delta_M = (M - M_before).detach()
-                # Per-sequence write norm (B,) — not batch-global scalar.
-                # Avoids one sequence's large write throttling the whole batch
-                # and keeps training (B>1) consistent with serving (B=1).
-                wn_b = delta_M.norm(dim=(-2, -1))  # (B,)
-                write_norms.append(wn_b.mean())
-                if self.safety.max_write_norm > 0:
-                    scale_w = (self.safety.max_write_norm / (wn_b + 1e-8)).clamp(max=1.0)
-                    scale_w = scale_w.view(-1, 1, 1)
-                    M = M_before + scale_w * (M - M_before)
-
-                mem_norms.append(M.detach().norm())
-
-                # Safety memory-norm cap
-                if self.safety.max_memory_norm > 0:
-                    mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-6)
-                    scale = (self.safety.max_memory_norm / mn).clamp(max=1.0)
-                    M = M * scale
-
-                r = self.fast_mem.read(M, d_t)
-                # Slow-ring write. The position inside a segment is carried in
-                # state["seg_pos"], so one long training call and token-by-token
-                # decoding write at the same cadence (every `segment_len` tokens).
-                # A multi-token call (training / prompt prefill) also snapshots at its
-                # last token; a 1-token decode step never does (it used to, which
-                # flooded the ring and evicted real context within ~n_slots tokens).
-                if write_slow:
-                    seg_pos += 1
-                at_segment = write_slow and seg_pos >= self._segment_len
-                at_chunk_end = write_slow and (t == T - 1) and T > 1 and seg_pos > 0
-                if at_segment or at_chunk_end:
-                    # Per-sequence weight (B,): surprise relative to the session baseline.
-                    # No batch-mean normalisation => identical at B=1 (serving) and B>1.
-                    w = rel_S.detach().clamp(0.5, 2.0)
+        if ab.use_slow_memory:
+            slow_slots = state.get("slow_slots")
+            slow_filled = state.get("slow_filled")
+            slow_ptr = int(state.get("slow_ptr") or 0)
+            U = torch.stack(
+                [
+                    self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
+                    for t in range(T)
+                ],
+                dim=1,
+            )
+            # segment write at end of chunk
+            if write_slow and T > 0 and ab.use_fast_memory:
+                seg_pos = int(state.get("seg_pos") or 0) + T
+                if seg_pos >= self._segment_len or T > 1:
+                    w = S[:, -1].detach().clamp(0.5, 2.0)
                     slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
                         slow_slots, slow_ptr, slow_filled, M, weight=w
                     )
                     seg_pos = 0
             else:
-                write_norms.append(torch.tensor(0.0, device=device))
-                mem_norms.append(M.detach().norm())
-                r = torch.zeros(B, self.cfg.d_v, device=device)
-
-            if ab.use_slow_memory:
-                u = self.slow_mem.read(d_t, slots=slow_slots, filled=slow_filled)
-            else:
-                u = torch.zeros(B, self.cfg.d_v, device=device)
-
-            # Output — memory path scaled so it can dominate
-            if parallel:
-                # readout never feeds back into the recurrence => batch it after the loop
-                o_list.append(o_t)
-                r_list.append(r)
-                u_list.append(u)
-            else:
-                combined = self.out_norm(
-                    o_t + self.mem_scale * self.P_f(r) + self.P_s(u)
-                )
-                logits_t = self.head(combined)
-                logits_list.append(logits_t)
-
-            d_prev = d_t
-
-        if parallel:
-            O, R, U = torch.stack(o_list, 1), torch.stack(r_list, 1), torch.stack(u_list, 1)
-            logits = self.head(self.out_norm(O + self.mem_scale * self.P_f(R) + self.P_s(U)))  # one big GEMM
-            x_hist = Xp[:, T:]
+                seg_pos = int(state.get("seg_pos") or 0)
         else:
-            logits = torch.stack(logits_list, dim=1)
+            U = torch.zeros(B, T, self.cfg.d_v, device=device, dtype=X.dtype)
+            slow_slots = state.get("slow_slots")
+            slow_filled = state.get("slow_filled")
+            slow_ptr = int(state.get("slow_ptr") or 0)
+            seg_pos = int(state.get("seg_pos") or 0)
+
+        logits = self.head(
+            self.out_norm(O + self.mem_scale * self.P_f(R) + self.P_s(U))
+        )
 
         loss = None
-        metrics: dict[str, float] = {}
+        metrics: dict[str, float] = {"path": "parallel", "k_depth": float(k_depth)}
         if targets is not None:
             ce = F.cross_entropy(
                 logits.reshape(-1, self.cfg.vocab_size),
                 targets.reshape(-1),
                 ignore_index=-100,
             )
-            total = (
+            loss = (
                 ce
-                + lambda_err * (err_energy / max(1, T - 1))
-                + lambda_bal * (bal_loss / T)
+                + lambda_err * (err_energy / max(1, k_depth))
+                + lambda_bal * (bal_loss / max(1, T * k_depth))
             )
-            loss = total
-            # Per-sequence mean surprise for paper-faithful slow replay
-            if all_S:
-                stacked = torch.stack(all_S, dim=0)  # (T', B)
-                seq_surprise = stacked.mean(0)  # (B,)
-            else:
-                seq_surprise = torch.ones(B, device=device)
-            metrics = {
-                "ce": float(ce.detach().item()),
-                "err_energy": float((err_energy / max(1, T - 1)).detach().item()),
-                "bal": float((bal_loss / T).detach().item()),
-                "gate_mean": _mean_t(gates),
-                "mem_norm": _mean_t(mem_norms),
-                "k_mean": sum(ks) / max(1, len(ks)),
-                "router_ent": _mean_t(router_ents),
-                "mean_S": float(seq_surprise.detach().mean().item()),
-            }
-            # Stash for trainer replay (not serialized as metric float only)
-            metrics["_seq_surprise"] = seq_surprise.detach()
-
-        new_state = {
-            "h": h.detach(),
-            "M": M.detach(),
-            "error": error.detach(),
-            "r": r.detach(),
-            "d_prev": d_prev.detach(),
-            "x_hist": x_hist.detach(),
-            "pending_pred": pending_pred.detach() if pending_pred is not None else None,
-            "bar_S": bar_S.detach() if isinstance(bar_S, Tensor) else bar_S,
-            "last_router_ent": last_router_ent.detach() if isinstance(last_router_ent, Tensor) else last_router_ent,
-            "slow_slots": slow_slots.detach() if isinstance(slow_slots, Tensor) else slow_slots,
-            "slow_ptr": slow_ptr,
-            "slow_filled": slow_filled.detach() if isinstance(slow_filled, Tensor) else slow_filled,
-            "seg_pos": seg_pos,
-        }
+            metrics.update(
+                {
+                    "ce": float(ce.detach().item()),
+                    "err_energy": float((err_energy / max(1, k_depth)).detach().item()),
+                }
+            )
 
         audit = None
-        if return_audit or self.safety.enable_audit:
+        if return_audit:
             audit = {
-                "gates": _tolist_t(gates),
-                "write_norms": _tolist_t(write_norms),
-                "mem_norms": _tolist_t(mem_norms),
-                "ks": ks,
-                "router_entropy": _tolist_t(router_ents),
-                "surprises": _tolist_t([s.mean() for s in all_S]),
-                "final_mem_norm": float(M.detach().norm()),
+                "path": "parallel",
+                "gates": [float(g) for g in gates_audit[-T:]] if gates_audit else [],
+                "write_norms": [float(x) for x in write_norms[-T:]] if write_norms else [],
+                "mem_norms": [float(x) for x in mem_norms[-T:]] if mem_norms else [],
             }
 
+        new_state = {
+            **state,
+            "h": H[:, -1].detach() if T else state.get("h"),
+            "M": M.detach() if isinstance(M, Tensor) else state.get("M"),
+            "r": R[:, -1].detach() if T else state.get("r"),
+            "error": E[:, -1].detach() if T else state.get("error"),
+            "x_hist": Xp[:, T:].detach(),
+            "d_prev": D[:, -1].detach() if T else state.get("d_prev"),
+            "pending_pred": None,
+            "slow_slots": slow_slots,
+            "slow_filled": slow_filled,
+            "slow_ptr": slow_ptr,
+            "seg_pos": seg_pos,
+            "memory_frozen": frozen,
+        }
         return ModelOutput(
-            logits=logits,
-            loss=loss,
-            metrics=metrics,
-            audit=audit,
-            state=new_state,
+            logits=logits, loss=loss, metrics=metrics, audit=audit, state=new_state
         )
 
     def replay_slow(self, M: Tensor, surprises: Tensor, eta: float) -> None:
