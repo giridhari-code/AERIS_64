@@ -18,6 +18,8 @@ from neurofield.model import NeuroField
 from neurofield.tokenizer.bpe import BPETokenizer
 from neurofield.tokenizer.char import CharTokenizer
 from neurofield.utils.split import split_blocks
+from neurofield.training.gpu import configure_accelerator, maybe_compile, autocast_ctx
+from neurofield.training.paper_step import maybe_replay
 
 
 def main() -> None:
@@ -35,9 +37,12 @@ def main() -> None:
     ap.add_argument("--warmup", type=int, default=50, help="LR warmup steps")
     ap.add_argument("--cosine", action="store_true", help="Cosine LR decay after warmup")
     ap.add_argument("--weight-decay", type=float, default=0.01)
-    ap.add_argument("--bf16", action="store_true", help="Autocast bfloat16 if CUDA")
+    ap.add_argument("--bf16", action="store_true", help="Force bf16 autocast (default: auto on CUDA)")
+    ap.add_argument("--no-bf16", action="store_true", help="Disable bf16 even on CUDA")
+    ap.add_argument("--compile", action="store_true", help="torch.compile model (PyTorch 2+)")
+    ap.add_argument("--no-tf32", action="store_true", help="Disable TF32 on CUDA")
     ap.add_argument("--out", default="docs/neurofield_company")
-    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--device", default="auto", help="cpu | cuda | cuda:0 | auto")
     ap.add_argument("--resume", default="", help="Continue training from checkpoint folder")
     ap.add_argument("--val-frac", type=float, default=0.1, help="held-out fraction (de-duplicated, never trained on)")
     ap.add_argument("--product", default="", help="product/model name stored in meta (default: output folder name)")
@@ -83,7 +88,13 @@ def main() -> None:
     ids = torch.tensor(encode(text), dtype=torch.long)
     print(f"tokens={len(ids)}")
 
-    device = torch.device(args.device if args.device != "cuda" or torch.cuda.is_available() else "cpu")
+    accel = configure_accelerator(
+        args.device,
+        bf16=False if args.no_bf16 else (True if args.bf16 else None),
+        compile_model=args.compile,
+        tf32=not args.no_tf32,
+    )
+    device = accel.device
     from neurofield.config import model_preset
     preset_cfg = model_preset(args.preset)
     d_model = args.d_model if args.d_model and args.d_model > 0 else preset_cfg.d_model
@@ -104,6 +115,7 @@ def main() -> None:
     )
     print(f"preset={args.preset} d_model={d_model} seq_len={seq_len} max_seq_len={cfg.max_seq_len}")
     model = NeuroField(cfg, SafetyConfig(enable_audit=False, max_memory_norm=40.0)).to(device)
+    model = maybe_compile(model, accel.use_compile)
     if args.resume:
         from neurofield.checkpoint import load_checkpoint
         try:
@@ -124,13 +136,14 @@ def main() -> None:
         y = torch.stack([ids[i + 1 : i + seq + 1] for i in ix]).to(device)
         return x, y
 
-    use_bf16 = bool(args.bf16) and device.type == "cuda" and torch.cuda.is_bf16_supported()
+    use_bf16 = accel.use_bf16
     # Paper v3: surprise-weighted replay into W_s every `replay_every` steps
     replay_every = 50
     replay_eta = 0.02
     print(
         f"Training steps={args.steps} device={device} accum={args.grad_accum} "
-        f"cosine={args.cosine} bf16={use_bf16} replay_every={replay_every}"
+        f"cosine={args.cosine} bf16={use_bf16} compile={accel.use_compile} "
+        f"tf32={accel.tf32} replay_every={replay_every}"
     )
     t0 = time.time()
     model.train()
@@ -150,10 +163,7 @@ def main() -> None:
             g["lr"] = args.lr * lr_scale
 
         x, y = batch()
-        if use_bf16:
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                out = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005)
-        else:
+        with autocast_ctx(accel):
             out = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005)
         loss = out.loss
         (loss / max(1, args.grad_accum)).backward()
