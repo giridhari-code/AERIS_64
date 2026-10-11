@@ -84,3 +84,15 @@ def test_inference_fast_writes_are_not_frozen():
         out = m(x)
     assert out.state is not None and "M" in out.state
     assert float(out.state["M"].abs().sum()) > 0.0
+
+
+def test_slow_replay_moves_global_prior():
+    """Paper Appendix A: W_s updated by surprise-weighted average of M."""
+    torch.manual_seed(5)
+    m = _model()
+    before = m.slow_mem.M_s.detach().clone()
+    M = torch.randn(2, 16, 16)
+    S = torch.tensor([1.0, 3.0])
+    m.replay_slow(M, S, eta=0.5)
+    after = m.slow_mem.M_s.detach()
+    assert not torch.allclose(before, after), "replay must change M_s"
