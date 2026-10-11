@@ -1,6 +1,6 @@
 """NeuroField / AESC v2: Two-Speed Memory Architecture (AERIS_64).
 
-Sequential ``forward()`` is the production default.
+Parallel Form is the production ``forward()`` (depth passes over the sequence).
 Distributed: ``torchrun`` + ``neurofield.training.distributed``.
 """
 
