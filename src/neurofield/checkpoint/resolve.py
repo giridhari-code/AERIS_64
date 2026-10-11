@@ -96,6 +96,8 @@ def load_model_from_checkpoint(
     # (e.g. slow_mem.log_temp added for context-window slot attention temperature)
     _COMPAT_MISSING_PREFIXES = (
         "slow_mem.log_temp",
+        "field.R.weight",
+        "field.R.bias",
     )
     hard_missing = [
         k for k in missing

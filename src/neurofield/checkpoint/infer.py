@@ -52,11 +52,28 @@ LEGACY_KEY_MAP = {"slow_mem.W_s": "slow_mem.M_s"}
 
 
 def remap_legacy_keys(state: dict) -> tuple[dict, list[str]]:
-    """Return (new_state, renamed_keys). Only renames when the new name is absent."""
+    """Return (new_state, renamed_keys). Only renames when the new name is absent.
+
+    Also drops tensors that cannot load into the current architecture (shape
+    break across versions) so callers can keep paper-correct init values.
+    """
     out = dict(state)
     renamed: list[str] = []
     for old, new in LEGACY_KEY_MAP.items():
         if old in out and new not in out:
             out[new] = out.pop(old)
             renamed.append(f"{old} -> {new}")
+
+    # v3 fix: NeuralField.R is Conv1d(1,1,3) over neurons. Older checkpoints used
+    # Conv1d(d,d,3) on a length-1 axis — incompatible; drop and re-init.
+    for key in ("field.R.weight", "field.R.bias"):
+        if key not in out:
+            continue
+        shp = _shape(out[key])
+        if key.endswith("weight") and shp != (1, 1, 3):
+            del out[key]
+            renamed.append(f"{key} dropped (legacy shape {shp} -> reinit 1x1x3)")
+        elif key.endswith("bias") and shp != (1,):
+            del out[key]
+            renamed.append(f"{key} dropped (legacy shape {shp})")
     return out, renamed
