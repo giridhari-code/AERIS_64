@@ -1,4 +1,4 @@
-"""NeuroField v2 core model – production implementation matching Appendix A."""
+"""NeuroField / AESC v2 core model (Appendix A + Parallel Form + §7 freeze)."""
 
 from __future__ import annotations
 

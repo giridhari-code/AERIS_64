@@ -1,8 +1,29 @@
-"""NeuroField v2: Two-Speed Memory Architecture."""
+"""NeuroField / AESC v2: Two-Speed Memory Architecture (AERIS_64).
 
-from .config import NeuroFieldConfig, load_config
-from .model import NeuroField
+Sequential ``forward()`` is the production default.
+Optional Parallel Form: ``model(..., parallel=True)`` / ``forward_parallel``.
+Distributed: ``torchrun`` + ``neurofield.training.distributed``.
+"""
+
+from .config import (
+    AblationConfig,
+    ModelConfig,
+    NeuroFieldConfig,
+    SafetyConfig,
+    load_config,
+)
+from .model import ModelOutput, NeuroField
 from .training import Trainer
 
-__version__ = "2.3.1"
-__all__ = ["NeuroField", "NeuroFieldConfig", "load_config", "Trainer"]
+__version__ = "2.4.0"
+__all__ = [
+    "NeuroField",
+    "ModelOutput",
+    "NeuroFieldConfig",
+    "ModelConfig",
+    "SafetyConfig",
+    "AblationConfig",
+    "load_config",
+    "Trainer",
+    "__version__",
+]
