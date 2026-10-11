@@ -1,4 +1,4 @@
-"""NeuroField / AESC v2 core model (Appendix A + Parallel Form + §7 freeze)."""
+"""NeuroField / AESC v2 core model (Appendix A sequential path + §7 freeze)."""
 
 from __future__ import annotations
 
@@ -213,18 +213,7 @@ class NeuroField(nn.Module):
         lambda_err: float = 0.1,
         lambda_bal: float = 0.01,
         write_slow: bool = True,         # False: replay text (e.g. old chat turns) without writing the slow ring
-        parallel: bool = False,          # True → Parallel Form (depth passes; sequential path unchanged)
     ) -> ModelOutput:
-        if parallel:
-            return self.forward_parallel(
-                input_ids,
-                targets=targets,
-                state=state,
-                return_audit=return_audit,
-                lambda_err=lambda_err,
-                lambda_bal=lambda_bal,
-                write_slow=write_slow,
-            )
         B, T = input_ids.shape
         device = input_ids.device
 
@@ -491,158 +480,8 @@ class NeuroField(nn.Module):
     def reset_meta(self) -> None:
         self.meta.reset()
 
-
-
-    def forward_parallel(
-        self,
-        input_ids: Tensor,
-        targets: Optional[Tensor] = None,
-        state: Optional[dict] = None,
-        return_audit: bool = False,
-        lambda_err: float = 0.1,
-        lambda_bal: float = 0.01,
-        write_slow: bool = True,
-        k_depth: Optional[int] = None,
-    ) -> ModelOutput:
-        """
-        Parallel / depth-pass form (AESC paper Section 3).
-
-        Whole sequence at once, k depth passes. Fast memory = existing delta-rule
-        (loop over T). Error is one-step delayed. Colab prototype reached 1.0 on
-        4-pair associative recall and passes leakage when M is fresh each depth.
-
-        Sequential ``forward()`` is the production default; use
-        ``parallel=True`` or ``forward_parallel(...)`` for this path.
-        """
-        B, T = input_ids.shape
-        device = input_ids.device
-        ab = self.ablation
-        k_depth = int(k_depth or max(1, getattr(self.cfg, "k_max", 4) // 2) or 2)
-        if not ab.use_metacognition:
-            k_depth = max(1, int(ab.fixed_k))
-
-        X = self.drop(self.embed(input_ids))  # (B, T, D)
-
-        pad = torch.zeros(
-            B, self.cfg.dendrite_window, self.cfg.d_model,
-            device=device, dtype=X.dtype,
-        )
-        Xp = torch.cat([pad, X], dim=1)
-        D_win = self.dendrite.window_features(Xp, T)  # (B, T, D)
-
-        H = D_win.clone()
-        R = torch.zeros(B, T, self.cfg.d_v, device=device)
-        err_energy = X.new_zeros(())
-        bal_loss = X.new_zeros(())
-        last_gates: list[Tensor] = []
-
-        def _shift(x: Tensor) -> Tensor:
-            return torch.cat([x.new_zeros(x[:, :1].shape), x[:, :-1]], dim=1)
-
-        for _j in range(k_depth):
-            # Predictor on all positions (module is (B,D)->(B,D); support batched)
-            if H.dim() == 3:
-                X_hat = self.predictor(H.reshape(B * T, -1)).view(B, T, -1)
-            else:
-                X_hat = self.predictor(H)
-            X_hat_shift = _shift(X_hat)
-            # one-step late error; detach target so embeddings are not shrunk away
-            E = X.detach() - X_hat_shift
-            S = E.abs().mean(dim=-1)  # (B, T)
-            err_energy = err_energy + E.pow(2).mean()
-
-            # Gate without full-sequence re-normalization (leakage-safe)
-            if ab.use_neuromodulator:
-                activity = H.abs().mean(dim=-1)
-                logit = (
-                    self.neuromod.a_s * (S - 0.5)
-                    + self.neuromod.a_c * activity
-                    + self.neuromod.bias
-                )
-                G = torch.sigmoid(logit).unsqueeze(-1).clamp(max=self.safety.gate_cap)
-            else:
-                G = torch.full(
-                    (B, T, 1), float(ab.fixed_gate), device=device, dtype=X.dtype
-                ).clamp(max=self.safety.gate_cap)
-
-            if state is not None and state.get("memory_frozen"):
-                G = torch.zeros_like(G)
-
-            D = D_win + self.dendrite.gamma * E
-
-            o_list = []
-            for t in range(T):
-                o_t, pi_t, _w = self.router(H[:, t])
-                o_list.append(o_t)
-                bal_loss = bal_loss + (pi_t.mean(0) - 1.0 / max(1, self.cfg.n_skills)).pow(2).sum()
-            O = torch.stack(o_list, dim=1)
-
-            if ab.use_fast_memory:
-                # Fresh M each depth (paper: per-pass memory) — prevents depth>1 leakage
-                M = torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device, dtype=X.dtype)
-                reads = []
-                for t in range(T):
-                    d_prev = D[:, t - 1] if t > 0 else torch.zeros_like(D[:, 0])
-                    M = self.fast_mem.write(M, d_prev, O[:, t], G[:, t])
-                    if self.safety.max_memory_norm > 0:
-                        mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                        M = M * (self.safety.max_memory_norm / mn).clamp(max=1.0)
-                    reads.append(self.fast_mem.read(M, D[:, t]))
-                    last_gates.append(G[:, t].detach().mean())
-                R = torch.stack(reads, dim=1)
-            else:
-                R = torch.zeros(B, T, self.cfg.d_v, device=device, dtype=X.dtype)
-
-            R_shift = _shift(R)
-            H = torch.stack(
-                [self.field.single_step(H[:, t], D[:, t], R_shift[:, t]) for t in range(T)],
-                dim=1,
-            )
-
-        o_list = []
-        for t in range(T):
-            o_t, _pi, _w = self.router(H[:, t])
-            o_list.append(o_t)
-        O = torch.stack(o_list, dim=1)
-
-        combined = self.out_norm(O + self.mem_scale * self.P_f(R))
-        logits = self.head(combined)
-
-        loss = None
-        metrics: dict[str, float] = {"path": "parallel", "k_depth": float(k_depth)}
-        if targets is not None:
-            # next-token CE (aligned with shifted targets)
-            ce = F.cross_entropy(
-                logits[:, :-1].reshape(-1, logits.size(-1)),
-                targets[:, 1:].reshape(-1),
-                ignore_index=-100,
-            )
-            loss = (
-                ce
-                + lambda_err * (err_energy / max(1, k_depth))
-                + lambda_bal * (bal_loss / max(1, T * k_depth))
-            )
-            metrics.update(
-                {
-                    "ce": float(ce.detach().item()),
-                    "err_energy": float((err_energy / max(1, k_depth)).detach().item()),
-                    "bal": float((bal_loss / max(1, T * k_depth)).detach().item()),
-                }
-            )
-
-        audit = None
-        if return_audit:
-            audit = {
-                "path": "parallel",
-                "k_depth": k_depth,
-                "gates": [float(g) for g in last_gates[-T:]] if last_gates else [],
-            }
-
-        return ModelOutput(
-            logits=logits, loss=loss, metrics=metrics, audit=audit, state=None
-        )
-
     def freeze_writes(self) -> None:
+        """Legacy hard freeze of neuromodulator (prefer state memory_frozen → g=0)."""
         for p in self.neuromod.parameters():
             p.requires_grad_(False)
         self.neuromod.a_s.data.zero_()
@@ -668,3 +507,6 @@ class NeuroField(nn.Module):
             sum(p.numel() for p in m.parameters()) for _, m in self.named_children()
         )
         return report
+
+
+
