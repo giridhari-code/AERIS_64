@@ -206,6 +206,7 @@ class NeuroField(nn.Module):
         ks: list[int] = []
         router_ents: list[Tensor] = []
 
+        self.meta.training = self.training  # global baselines are train-only (see Metacognition._use_global)
         for t in range(T):
             x_t = self.drop(self.embed(input_ids[:, t]))
 

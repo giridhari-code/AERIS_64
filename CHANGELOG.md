@@ -21,7 +21,15 @@
   write a slot each (train/serve mismatch). Slot weight = per-sequence relative surprise (no batch-mean norm).
   Behaviour change: re-validate / re-train checkpoints trained with the old rule.
 
+### Model (paper Appendix B checks)
+- Metacognition's module-level running baselines (`track_global`) now apply in **training only**. In `eval()` the same
+  input used to give different logits on a second call (max diff ~4.9 on a tiny model) because `bar_S`/entropy baselines
+  carried over between calls and between sessions; only the server disabled this manually.
+- New `tests/test_paper_checklist.py`: leakage/causality test (checklist item 8 / Proposition 7 had no test; it passes:
+  future tokens change past logits by exactly 0), targets-don't-affect-logits, and per-call isolation.
+
 ### Repo
+- Original v2 report PDF archived unmodified in `docs/paper/archive/` (contains H1; see its README).
 - Added `SECURITY.md`, `.dockerignore`, a demo-checkpoint smoke test (`tests/test_example_checkpoint.py`) and an advisory `pip-audit` CI job.
 - Technical report PDF regenerated from `scripts/docs/make_tech_report_pdf.py` (H1 removed; edit text there, not in the PDF).
 - Removed the H1 ("10M AESC ≈ 100M Transformer") hypothesis from README, technical report (.md), research note and audit docs. The PDF copy of the report still contains it until regenerated.

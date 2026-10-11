@@ -64,6 +64,7 @@ class Metacognition:
         self.k_max = max(1, int(k_max))
         self.momentum = float(momentum)
         self.track_global = bool(track_global)
+        self.training = True  # mirrored from the owning model's train()/eval() on every forward
         self.replay_surprise_budget = float(replay_surprise_budget)
         self.replay_min_tokens = int(replay_min_tokens)
         self._bar_floor = float(bar_floor)
@@ -115,14 +116,14 @@ class Metacognition:
         B = S.shape[0]
 
         mean_S = S.mean()
-        if bar_S is None and self.track_global:
+        if bar_S is None and self._use_global:
             bar_S = self.bar_S
         if bar_S is None:
             new_bar = mean_S.clamp(min=self._bar_floor)
         else:
             new_bar = self.momentum * bar_S + (1.0 - self.momentum) * mean_S
             new_bar = new_bar.clamp(min=self._bar_floor)
-        if self.track_global:
+        if self._use_global:
             self.bar_S = new_bar
 
         rel_S = S / (new_bar + 1e-8)
@@ -142,7 +143,7 @@ class Metacognition:
                     conflict = conflict.mean().expand(B)
                 ent_mean = conflict.mean()
             # running entropy baseline (session-local unless track_global)
-            if self.track_global:
+            if self._use_global:
                 if self.bar_ent is None:
                     self.bar_ent = ent_mean
                 else:
@@ -167,7 +168,7 @@ class Metacognition:
         gate_bias = self._encoding_bias(rel_S, conf, conflict)
 
         # Consolidation request (offline replay analogue)
-        if self.track_global:
+        if self._use_global:
             self.tokens_seen += 1
             self.cum_surprise += float(mean_S.item())
             want_replay = self._should_consolidate()
@@ -204,6 +205,16 @@ class Metacognition:
         )
 
     # ------------------------------------------------------------------ control
+    @property
+    def _use_global(self) -> bool:
+        """Module-level running baselines are a TRAINING convenience only.
+
+        In eval()/inference they would make the output depend on earlier calls (and on other
+        users' sessions), so they are ignored there: same input => same logits, and nothing
+        leaks between sessions even if the caller forgot ``track_global = False``.
+        """
+        return self.track_global and getattr(self, "training", True)
+
     def _allocate_k(self, rel_S: Tensor, conflict: Optional[Tensor]) -> int:
         """
         More computation when surprised or conflicted — like re-checking under uncertainty.
