@@ -22,7 +22,9 @@ class FastMemory(nn.Module):
 
         k_t = normalize(W_k d_{t-1})
         v_t = W_v o_t
-        M_t = Λ M_{t-1} + g_t * k_t (v_t - M_{t-1}^T k_t)^T
+        # Paper Appendix A.2 Change 5 — decay-consistent delta rule:
+        #   M^Λ = Λ M_{t-1}
+        #   M_t = M^Λ + g_t k_t (v_t - (M^Λ)^T k_t)^T
 
     Read:
         q_t = normalize(W_q d_t)
@@ -64,11 +66,13 @@ class FastMemory(nn.Module):
         k = self.W_k(d_prev)
         k = k / (k.norm(dim=-1, keepdim=True) + 1e-8)
         v = self.W_v(o_t)
-        pred = torch.einsum("bkd,bk->bd", M, k)
-        delta = v - pred
+        # Change 5: residual against *decayed* memory (not raw M)
         lam = self.lambda_diag.view(1, -1, 1)
+        M_decay = lam * M
+        pred = torch.einsum("bkd,bk->bd", M_decay, k)
+        delta = v - pred
         update = g_eff.unsqueeze(-1) * torch.einsum("bk,bd->bkd", k, delta)
-        return lam * M + update
+        return M_decay + update
 
     def read(self, M: Tensor, d_t: Tensor) -> Tensor:
         q = self.W_q(d_t)
