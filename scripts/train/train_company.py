@@ -9,6 +9,13 @@ import time
 from pathlib import Path
 
 import torch
+
+from neurofield.training.distributed import (
+    init_distributed_if_needed,
+    is_main,
+    cleanup as dist_cleanup,
+    world_info,
+)
 from torch.optim import AdamW
 
 from neurofield.checkpoint import save_checkpoint
@@ -23,6 +30,8 @@ from neurofield.training.paper_step import maybe_replay
 
 
 def main() -> None:
+    init_distributed_if_needed()
+    rank, world, local = world_info()
     ap = argparse.ArgumentParser(description="Train AERIS_64 (NeuroField architecture)")
     ap.add_argument("--data", nargs="+", default=["data/company_corpus.txt", "data/code_corpus.txt", "data/india_multilang.txt", "data/skills_real.txt"])
     ap.add_argument("--tokenizer", choices=["char", "bpe"], default="bpe")
@@ -114,6 +123,10 @@ def main() -> None:
         tf32=not args.no_tf32,
     )
     device = accel.device
+    # torchrun: pin this process to its LOCAL_RANK GPU
+    if world > 1 and torch.cuda.is_available() and str(device).startswith("cuda"):
+        device = torch.device("cuda", int(local))
+        torch.cuda.set_device(device)
     from neurofield.config import model_preset
     preset_cfg = model_preset(args.preset)
     d_model = args.d_model if args.d_model and args.d_model > 0 else preset_cfg.d_model
@@ -134,6 +147,16 @@ def main() -> None:
     )
     print(f"preset={args.preset} d_model={d_model} seq_len={seq_len} max_seq_len={cfg.max_seq_len}")
     model = NeuroField(cfg, SafetyConfig(enable_audit=False, max_memory_norm=40.0)).to(device)
+    raw_model = model
+    if world > 1:
+        from torch.nn.parallel import DistributedDataParallel as DDP
+        model = DDP(
+            model,
+            device_ids=[device.index] if device.type == "cuda" else None,
+            find_unused_parameters=True,
+        )
+        if is_main():
+            print(f"[distributed] DDP on {world} ranks")
     model = maybe_compile(model, accel.use_compile)
     if args.resume:
         from neurofield.checkpoint import load_checkpoint
@@ -174,7 +197,7 @@ def main() -> None:
     replay_every = 50
     replay_eta = 0.02
     print(
-        f"Training steps={args.steps} device={device} accum={args.grad_accum} "
+        f"Training steps={args.steps} device={device} accum={args.grad_accum} world={world} "
         f"cosine={args.cosine} bf16={use_bf16} compile={accel.use_compile} "
         f"tf32={accel.tf32} replay_every={replay_every}"
     )
@@ -249,9 +272,14 @@ def main() -> None:
         meta_tok = tok.to_vocab_dict()
         stoi, itos = None, None
 
+    # DDP: save the unwrapped module; rank 0 only
+    to_save = raw_model if world > 1 else model
+    if not is_main():
+        dist_cleanup()
+        return
     out = save_checkpoint(
         args.out,
-        model,
+        to_save,
         config=config_dict,
         stoi=stoi,
         itos=itos,
@@ -274,7 +302,7 @@ def main() -> None:
 
     product = args.product or Path(args.out).name
     report = run_eval_suite(
-        model, encode, decode, text=train_text, val_text=val_text, device=str(device),
+        to_save, encode, decode, text=train_text, val_text=val_text, device=str(device),
         identity_marker=args.identity_marker or product,
     )
     report["split"] = split_stats
@@ -282,6 +310,7 @@ def main() -> None:
     print("held-out val_nll", report.get("val_nll"), "| train_nll", report.get("train_nll"),
           "| identity_hit", report.get("identity_hit"), "| warnings", report.get("warnings"))
     print("Saved", out)
+    dist_cleanup()
 
 
 if __name__ == "__main__":
