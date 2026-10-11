@@ -52,7 +52,8 @@ def test_slow_ring_and_replay():
     slots, ptr, filled = sm.init_slots(1, torch.device("cpu"))
     for _ in range(5):
         slots, ptr, filled = sm.write_slot(slots, ptr, filled, torch.randn(1, 16, 16))
-    assert float(filled.sum()) == 4.0
+    # ring full: oldest slot is folded into its neighbour, not erased (count-weighted), so all 5 writes are kept
+    assert float((filled > 0).sum()) == 4.0 and float(filled.sum()) == 5.0
     before = sm.M_s.detach().clone()
     sm.replay(torch.randn(2, 16, 16), torch.tensor([1.0, 2.0]), 0.5)
     assert not torch.allclose(before, sm.M_s)
