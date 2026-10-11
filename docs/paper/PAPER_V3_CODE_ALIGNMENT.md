@@ -36,7 +36,7 @@ Repo HEAD at alignment: see `git log -1`.
 
 1. Leakage **unit test** (Appendix B) automated in CI  
 2. C2 ablations on tasks built for each block  
-3. Full safety observability design as specified in report  
+3. ~~Full safety observability~~ **DONE**: anomaly → state memory_frozen → g=0 (§7)  
 4. Multi-seed / baseline comparisons  
 
 *This file tracks alignment; it does not claim the architecture is proven end-to-end.*

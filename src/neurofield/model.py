@@ -321,6 +321,9 @@ class NeuroField(nn.Module):
             else:
                 g = torch.full((B, 1), float(ab.fixed_gate), device=device)
                 g = g.clamp(max=self.safety.gate_cap)
+            # Paper §7: anomaly freeze → g=0 so fast memory only decays (no write)
+            if state is not None and state.get("memory_frozen"):
+                g = torch.zeros_like(g)
             gates.append(g.detach().mean())
 
             # Fast write (truncated BPTT) — paper: key=d_{t-1}, value=W_v o_t

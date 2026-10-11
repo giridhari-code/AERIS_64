@@ -67,7 +67,7 @@ class SafetyConfig:
     max_memory_norm: float = 50.0
     gate_cap: float = 1.0
     anomaly_z_threshold: float = 4.0
-    freeze_on_anomaly: bool = False
+    freeze_on_anomaly: bool = True  # paper §7: anomaly → g=0 (serve path)
     per_session_state: bool = True
     truncate_write_window: int = 32
 
