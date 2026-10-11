@@ -28,6 +28,7 @@ from tqdm import tqdm
 from neurofield.checkpoint.io import _torch_load, save_checkpoint
 from neurofield.config import NeuroFieldConfig, save_config
 from neurofield.model import NeuroField
+from neurofield.training.distributed import is_distributed, is_main
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +80,23 @@ class Trainer:
         self.extra_files = extra_files or {}  # name -> source path copied next to exports
 
         tc = cfg.training
-        from neurofield.training.gpu import configure_accelerator
-        _acc = configure_accelerator(
-            tc.device if tc.device != "cpu" else ("cuda" if torch.cuda.is_available() else "cpu"),
-            bf16=True if getattr(tc, "precision", "fp32") == "bf16" else False,
-            compile_model=bool(getattr(tc, "compile", False)),
-            tf32=True,
-        )
-        self.device = _acc.device
+        self.dist = is_distributed()
+        self.rank = torch.distributed.get_rank() if self.dist else 0
+        self.world = torch.distributed.get_world_size() if self.dist else 1
+        self.is_main = self.rank == 0
+        if self.dist and torch.cuda.is_available():
+            # one GPU per rank (torchrun sets LOCAL_RANK)
+            self.device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", "0")))
+        else:
+            from neurofield.training.gpu import configure_accelerator
+
+            _acc = configure_accelerator(
+                tc.device if tc.device != "cpu" else ("cuda" if torch.cuda.is_available() else "cpu"),
+                bf16=True if getattr(tc, "precision", "fp32") == "bf16" else False,
+                compile_model=bool(getattr(tc, "compile", False)),
+                tf32=True,  # also sets TF32 + matmul precision on CUDA
+            )
+            self.device = _acc.device
         self.model.to(self.device)
         # honour the config instead of the model's hardcoded default
         self.model._truncate_window = max(1, int(tc.truncate_write_window))
@@ -96,20 +106,34 @@ class Trainer:
         self.use_bf16 = tc.precision == "bf16"
         self.accum = max(1, int(tc.grad_accum_steps))
 
-        self.optimizer = AdamW(
-            _decay_groups(self.model, tc.weight_decay),
-            lr=tc.lr,
-            betas=(0.9, 0.95),
-        )
+        adamw_kw: dict[str, Any] = {"lr": tc.lr, "betas": (0.9, 0.95)}
+        if self.device.type == "cuda":
+            adamw_kw["fused"] = True  # one fused kernel for the whole update
+        self.optimizer = AdamW(_decay_groups(self.model, tc.weight_decay), **adamw_kw)
         self.scheduler = get_cosine_schedule_with_warmup(
             self.optimizer,
             num_warmup_steps=tc.warmup_steps,
             num_training_steps=tc.max_steps,
         )
 
+        # Data parallel: wrap AFTER the optimizer is built from the plain module's parameters.
+        # `self.model` stays the plain module (meta, replay, export); `self._fwd` is what we call.
+        self._fwd: torch.nn.Module = self.model
+        if self.dist:
+            from torch.nn.parallel import DistributedDataParallel as DDP
+
+            self._fwd = DDP(
+                self.model,
+                device_ids=[self.device.index] if self.device.type == "cuda" else None,
+                find_unused_parameters=True,  # router/skills and ablations can leave params unused
+            )
+            torch.manual_seed(tc.seed + 1000 * self.rank)  # params were broadcast; dropout/data differ per rank
+
         self.output_dir = Path(tc.output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        save_config(cfg, self.output_dir / "config.yaml")
+        if self.is_main:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            save_config(cfg, self.output_dir / "config.yaml")
+        self._epoch = 0
 
         self.global_step = 0
         self.best_val = float("inf")
@@ -180,8 +204,15 @@ class Trainer:
         try:
             return next(it), it
         except StopIteration:
+            self._epoch += 1
+            sampler = getattr(self.train_loader, "sampler", None)
+            if hasattr(sampler, "set_epoch"):
+                sampler.set_epoch(self._epoch)  # DistributedSampler: new shuffle, still disjoint per rank
             it = iter(self.train_loader)
             return next(it), it
+
+    def _embed_norm(self) -> float:
+        return float(self.model.embed.weight.detach().float().norm(dim=-1).mean())
 
     def _prep(self, batch):
         input_ids = batch["input_ids"].to(self.device, non_blocking=True)
@@ -194,25 +225,36 @@ class Trainer:
         tc = self.cfg.training
         self.model.train()
         data_iter = iter(self.train_loader)
-        pbar = tqdm(total=tc.max_steps, initial=self.global_step, desc="train")
+        pbar = tqdm(total=tc.max_steps, initial=self.global_step, desc="train", disable=not self.is_main)
         t0 = time.time()
         tokens_seen = 0
+        embed0 = self._embed_norm()  # Appendix B item 14: watch for collapse caused by the error loss
 
         while self.global_step < tc.max_steps:
             self.optimizer.zero_grad(set_to_none=True)
             loss_acc, last_out, last_ids = 0.0, None, None
 
-            for _ in range(self.accum):
+            warm = int(getattr(tc, "lambda_err_warmup_steps", 0) or 0)
+            lam_err = tc.lambda_err * (min(1.0, (self.global_step + 1) / warm) if warm > 0 else 1.0)
+
+            for micro in range(self.accum):
                 batch, data_iter = self._next_batch(data_iter)
                 input_ids, targets = self._prep(batch)
-                with self._amp():
-                    out = self.model(
-                        input_ids,
-                        targets=targets,
-                        lambda_err=tc.lambda_err,
-                        lambda_bal=tc.lambda_bal,
-                    )
-                (out.loss / self.accum).backward()
+                # DDP: only the last micro-batch all-reduces gradients
+                sync_ctx = (
+                    self._fwd.no_sync()
+                    if (self.dist and micro < self.accum - 1)
+                    else contextlib.nullcontext()
+                )
+                with sync_ctx:
+                    with self._amp():
+                        out = self._fwd(
+                            input_ids,
+                            targets=targets,
+                            lambda_err=lam_err,
+                            lambda_bal=tc.lambda_bal,
+                        )
+                    (out.loss / self.accum).backward()
                 loss_acc += float(out.loss.detach()) / self.accum
                 tokens_seen += input_ids.numel()
                 last_out, last_ids = out, input_ids
@@ -233,8 +275,14 @@ class Trainer:
                 loss=f"{loss_acc:.4f}", ce=f"{m.get('ce', 0):.3f}", gate=f"{m.get('gate_mean', 0):.3f}"
             )
 
-            # Slow-memory replay (paper: surprise-weighted, per-sequence)
-            if self.model.meta.should_replay(self.global_step, tc.replay_every):
+            # Slow-memory replay (paper: surprise-weighted, per-sequence).
+            # Data-parallel: the decision must be identical on every rank (replay all-reduces), so use the
+            # fixed step schedule only; the surprise-budget trigger is rank-local.
+            if self.dist:
+                do_replay = tc.replay_every > 0 and self.global_step > 0 and self.global_step % tc.replay_every == 0
+            else:
+                do_replay = self.model.meta.should_replay(self.global_step, tc.replay_every)
+            if do_replay:
                 if last_out.state is not None and "M" in last_out.state:
                     S = m.get("_seq_surprise")
                     if S is None or not torch.is_tensor(S):
@@ -245,19 +293,25 @@ class Trainer:
                         )
                     self.model.replay_slow(last_out.state["M"], S, tc.replay_eta)
 
-            if self.global_step % tc.log_every == 0:
+            if self.is_main and self.global_step % tc.log_every == 0:
                 dt = max(1e-9, time.time() - t0)
+                en = self._embed_norm()
                 logger.info(
-                    "step %d loss=%.4f lr=%.2e grad_norm=%.3f tok/s=%.0f metrics=%s",
+                    "step %d loss=%.4f lr=%.2e grad_norm=%.3f tok/s=%.0f (x%d ranks) embed_norm=%.3f metrics=%s",
                     self.global_step,
                     loss_acc,
                     self.scheduler.get_last_lr()[0],
                     float(grad_norm),
-                    tokens_seen / dt,
+                    tokens_seen * self.world / dt,
+                    self.world,
+                    en,
                     {k: v for k, v in m.items() if not k.startswith("_")},
                 )
+                if embed0 > 0 and en < 0.3 * embed0:
+                    logger.warning("embedding norm fell to %.0f%% of its start: possible collapse from the error loss", 100 * en / embed0)
 
-            if self.val_loader is not None and self.global_step % tc.eval_every == 0:
+            # checkpoint / eval run on rank 0 only (plain module: no collectives, other ranks wait in all-reduce)
+            if self.is_main and self.val_loader is not None and self.global_step % tc.eval_every == 0:
                 val_loss = self.evaluate()
                 if val_loss < self.best_val:
                     self.best_val = val_loss
@@ -265,13 +319,16 @@ class Trainer:
                     self.export_safetensors("best")
                 self.model.train()
 
-            if self.global_step % tc.checkpoint_every == 0:
+            if self.is_main and self.global_step % tc.checkpoint_every == 0:
                 self._save_checkpoint("latest")
 
         pbar.close()
-        self._save_checkpoint("final")
-        self.export_safetensors("final")
-        logger.info("Training finished at step %d", self.global_step)
+        if self.is_main:
+            self._save_checkpoint("final")
+            self.export_safetensors("final")
+            logger.info("Training finished at step %d", self.global_step)
+        if self.dist:
+            torch.distributed.barrier()
 
     @torch.no_grad()
     def evaluate(self, max_batches: int = 50) -> float:

@@ -86,6 +86,11 @@ class SlowMemory(nn.Module):
         slots[ptr] ← snapshot(fast M)
         ptr ← (ptr + 1) % n_slots
 
+    When the ring is full (``compact_overflow``) the oldest slot is NOT erased: it is folded into
+    its neighbour as a count-weighted mean, so old context is diluted, never dropped. ``filled``
+    then holds how many snapshots each slot represents (>= 1; masking still uses ``> 0``), and
+    ``filled.sum()`` always equals the total number of writes.
+
     Read (every token):
         query all filled slots with q = normalize(W_q d_t)
         softmax over slot scores → weighted mix of slot reads
@@ -95,8 +100,9 @@ class SlowMemory(nn.Module):
     current short segment.
     """
 
-    def __init__(self, d_model: int, d_k: int, d_v: int, n_slots: int = 8):
+    def __init__(self, d_model: int, d_k: int, d_v: int, n_slots: int = 8, compact_overflow: bool = True):
         super().__init__()
+        self.compact_overflow = bool(compact_overflow)
         self.d_k = d_k
         self.d_v = d_v
         self.n_slots = max(1, int(n_slots))
@@ -133,6 +139,17 @@ class SlowMemory(nn.Module):
             snap = M.detach()
         new_slots = slots.clone()
         new_filled = filled.clone()
+        if self.compact_overflow and S > 1:
+            full = filled[:, ptr] > 0  # (B,) this slot still holds context => it is the oldest, about to be reused
+            if bool(full.any()):
+                nxt = (ptr + 1) % S
+                c_old, c_nxt = filled[:, ptr], filled[:, nxt]
+                tot = (c_old + c_nxt).clamp(min=1e-8)
+                merged = (
+                    c_old.view(B, 1, 1) * slots[:, ptr] + c_nxt.view(B, 1, 1) * slots[:, nxt]
+                ) / tot.view(B, 1, 1)
+                new_slots[:, nxt] = torch.where(full.view(B, 1, 1), merged, slots[:, nxt])
+                new_filled[:, nxt] = torch.where(full, c_old + c_nxt, c_nxt)
         new_slots[:, ptr] = snap
         new_filled[:, ptr] = 1.0
         new_ptr = (ptr + 1) % S
@@ -183,8 +200,13 @@ class SlowMemory(nn.Module):
         s = surprises.detach().reshape(-1).clamp(min=0.0)
         if s.numel() != B:
             s = s.mean().expand(B)
-        w = s / (s.sum() + 1e-8)
-        avg = (w.view(B, 1, 1) * M.detach()).sum(0)
+        num = (s.view(B, 1, 1) * M.detach()).sum(0)
+        den = s.sum()
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            # data-parallel: every rank must apply the SAME update or M_s (not a DDP-synced grad) diverges
+            torch.distributed.all_reduce(num)
+            torch.distributed.all_reduce(den)
+        avg = num / (den + 1e-8)
         self.M_s.data.mul_(1.0 - eta).add_(eta * avg)
 
     def tie_query_to(self, W_k: nn.Linear) -> None:

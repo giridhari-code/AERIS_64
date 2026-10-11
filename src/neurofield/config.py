@@ -22,6 +22,7 @@ class ModelConfig:
     vocab_size: int = 32000
     max_seq_len: int = 2048
     context_slots: int = 0  # 0 => auto max_seq_len // truncate_window; slow mem ring size
+    slow_compact: bool = True  # ring full => fold the OLDEST slot into its neighbour instead of erasing it
     tie_embeddings: bool = True
     dropout: float = 0.0
 
@@ -38,6 +39,7 @@ class TrainingConfig:
     max_steps: int = 100_000
     grad_clip: float = 1.0
     lambda_err: float = 0.1
+    lambda_err_warmup_steps: int = 0  # v3 audit proposal: ramp lambda_err 0 -> value (0 = off, untested)
     lambda_bal: float = 0.01
     replay_every: int = 75
     replay_eta: float = 0.02

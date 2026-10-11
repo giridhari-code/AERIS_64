@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -110,8 +112,14 @@ class NeuroField(nn.Module):
         n_slots = int(getattr(cfg, "context_slots", 0) or 0)
         if n_slots <= 0:
             n_slots = max(4, (cfg.max_seq_len + segment - 1) // segment)
-        self.slow_mem = SlowMemory(cfg.d_model, cfg.d_k, cfg.d_v, n_slots=n_slots)
+        self.slow_mem = SlowMemory(
+            cfg.d_model, cfg.d_k, cfg.d_v, n_slots=n_slots,
+            compact_overflow=bool(getattr(cfg, "slow_compact", True)),
+        )
         self._segment_len = segment
+        # Token-parallel fast path (embedding, dendrite window, readout+logits batched over T).
+        # Mathematically identical to the per-token path; NEUROFIELD_PARALLEL_OPS=0 disables it.
+        self.parallel_ops = os.environ.get("NEUROFIELD_PARALLEL_OPS", "1") != "0"
 
         self.P_f = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
         self.P_s = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
@@ -140,6 +148,39 @@ class NeuroField(nn.Module):
     def set_ablation(self, ablation: AblationConfig) -> None:
         """Hot-swap ablation flags without rebuilding parameters (eval / contrib runs)."""
         self.ablation = ablation
+
+    # ------------------------------------------------------------------
+    # Per-user slow memory (the part of the state that may outlive a session)
+    # ------------------------------------------------------------------
+    def export_slow_state(self, state: Optional[dict]) -> Optional[dict[str, Tensor]]:
+        """Slow ring of batch element 0 as plain CPU tensors (fast M / h / history are NOT included)."""
+        if not state or state.get("slow_slots") is None:
+            return None
+        return {
+            "slow_slots": state["slow_slots"][0].detach().float().cpu().contiguous(),
+            "slow_filled": state["slow_filled"][0].detach().float().cpu().contiguous(),
+            "slow_ptr": torch.tensor([int(state.get("slow_ptr") or 0)], dtype=torch.int64),
+        }
+
+    def new_state(self, batch: int, device: torch.device, slow: Optional[dict[str, Tensor]] = None) -> dict:
+        """Fresh FAST state (M, h, dendrite history = zeros) optionally seeded with a saved slow ring.
+
+        A saved ring whose shape does not match this model (different checkpoint) is ignored.
+        """
+        st = self._init_state(batch, device)
+        if not slow:
+            return st
+        try:
+            slots, filled = slow["slow_slots"], slow["slow_filled"]
+            S, dk, dv = self.slow_mem.n_slots, self.cfg.d_k, self.cfg.d_v
+            if tuple(slots.shape) != (S, dk, dv) or tuple(filled.shape) != (S,):
+                return st
+            st["slow_slots"] = slots.to(device).unsqueeze(0).repeat(batch, 1, 1, 1)
+            st["slow_filled"] = filled.to(device).unsqueeze(0).repeat(batch, 1)
+            st["slow_ptr"] = int(slow["slow_ptr"].reshape(-1)[0].item()) % S
+        except (KeyError, RuntimeError, ValueError):
+            return self._init_state(batch, device)
+        return st
 
     def _init_state(self, batch: int, device: torch.device) -> dict[str, Tensor]:
         return {
@@ -171,6 +212,7 @@ class NeuroField(nn.Module):
         return_audit: bool = False,
         lambda_err: float = 0.1,
         lambda_bal: float = 0.01,
+        write_slow: bool = True,         # False: replay text (e.g. old chat turns) without writing the slow ring
     ) -> ModelOutput:
         B, T = input_ids.shape
         device = input_ids.device
@@ -208,21 +250,23 @@ class NeuroField(nn.Module):
 
         self.meta.training = self.training  # global baselines are train-only (see Metacognition._use_global)
 
-        # ---- Parallel embed over time (one matmul for all tokens) ----
-        # State/memory/field remain sequential (causal). Embed + window prep are parallel.
-        x_emb = self.drop(self.embed(input_ids))  # (B, T, D)
-        W = self.cfg.dendrite_window
-        if W > 1:
-            pad = x_emb.new_zeros(B, W - 1, self.cfg.d_model)
-            x_pad = torch.cat([pad, x_emb], dim=1)  # (B, T+W-1, D)
-            # (B, T, W, D) causal windows ending at each t
-            windows = x_pad.unfold(1, W, 1).permute(0, 1, 3, 2).contiguous()
-        else:
-            windows = x_emb.unsqueeze(2)  # (B, T, 1, D)
+        # ---- token-parallel work: depends only on the input tokens, so do it for all T at once ----
+        parallel = self.parallel_ops
+        o_list: list[Tensor] = []
+        r_list: list[Tensor] = []
+        u_list: list[Tensor] = []
+        if parallel:
+            X = self.drop(self.embed(input_ids))                    # (B, T, D) one lookup
+            Xp = torch.cat([x_hist, X], dim=1)                      # (B, W+T, D)
+            base_all = self.dendrite.window_features(Xp, T)         # (B, T, D)
 
         for t in range(T):
-            x_t = x_emb[:, t]
-            x_hist = windows[:, t]  # (B, W, D)
+            if parallel:
+                x_t = X[:, t]
+            else:
+                x_t = self.drop(self.embed(input_ids[:, t]))
+                # Shift causal history
+                x_hist = torch.cat([x_hist[:, 1:], x_t.unsqueeze(1)], dim=1)
 
             # Delayed error arrives now (from previous prediction)
             if pending_pred is not None:
@@ -233,7 +277,11 @@ class NeuroField(nn.Module):
                 S = torch.ones(B, device=device)
 
             # Dendrite: local window + delayed error → d_t (fresh every token)
-            d_t = self.dendrite(x_hist, error)
+            d_t = (
+                self.dendrite.with_error(base_all[:, t], error)
+                if parallel
+                else self.dendrite(x_hist, error)
+            )
 
             # Metacognition: monitor (surprise, conflict) → control (k, gate_bias)
             ab = self.ablation
@@ -310,9 +358,10 @@ class NeuroField(nn.Module):
                 # A multi-token call (training / prompt prefill) also snapshots at its
                 # last token; a 1-token decode step never does (it used to, which
                 # flooded the ring and evicted real context within ~n_slots tokens).
-                seg_pos += 1
-                at_segment = seg_pos >= self._segment_len
-                at_chunk_end = (t == T - 1) and T > 1 and seg_pos > 0
+                if write_slow:
+                    seg_pos += 1
+                at_segment = write_slow and seg_pos >= self._segment_len
+                at_chunk_end = write_slow and (t == T - 1) and T > 1 and seg_pos > 0
                 if at_segment or at_chunk_end:
                     # Per-sequence weight (B,): surprise relative to the session baseline.
                     # No batch-mean normalisation => identical at B=1 (serving) and B>1.
@@ -332,15 +381,26 @@ class NeuroField(nn.Module):
                 u = torch.zeros(B, self.cfg.d_v, device=device)
 
             # Output — memory path scaled so it can dominate
-            combined = self.out_norm(
-                o_t + self.mem_scale * self.P_f(r) + self.P_s(u)
-            )
-            logits_t = self.head(combined)
-            logits_list.append(logits_t)
+            if parallel:
+                # readout never feeds back into the recurrence => batch it after the loop
+                o_list.append(o_t)
+                r_list.append(r)
+                u_list.append(u)
+            else:
+                combined = self.out_norm(
+                    o_t + self.mem_scale * self.P_f(r) + self.P_s(u)
+                )
+                logits_t = self.head(combined)
+                logits_list.append(logits_t)
 
             d_prev = d_t
 
-        logits = torch.stack(logits_list, dim=1)
+        if parallel:
+            O, R, U = torch.stack(o_list, 1), torch.stack(r_list, 1), torch.stack(u_list, 1)
+            logits = self.head(self.out_norm(O + self.mem_scale * self.P_f(R) + self.P_s(U)))  # one big GEMM
+            x_hist = Xp[:, T:]
+        else:
+            logits = torch.stack(logits_list, dim=1)
 
         loss = None
         metrics: dict[str, float] = {}

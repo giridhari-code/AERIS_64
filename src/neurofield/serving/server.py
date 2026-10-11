@@ -52,11 +52,21 @@ from neurofield.safety import SafetyMonitor
 from neurofield.serving.adaptive_length import adaptive_sampling, should_stop_generation
 from neurofield.serving.auth import (
     client_ip,
+    get_api_keys,
     rate_limit_from_env,
     require_api_key,
     require_api_key_strict,
 )
-from neurofield.serving.chat_history import append_turn, build_prompt, reset_history, set_use_specials
+from neurofield.serving.chat_history import (
+    append_turn,
+    build_prompt,
+    build_user_part,
+    history_len,
+    reset_history,
+    restore_turns,
+    set_use_specials,
+)
+from neurofield.serving.user_memory import UserMemoryStore, cap_slow_norm
 from neurofield.tools.orchestrate import enrich_prompt_with_tools
 from neurofield.tools.catalog import list_mcp_tools
 from neurofield.tools.weather import weather_report
@@ -139,6 +149,11 @@ class ChatRequest(BaseModel):
     )
     session_id: Optional[str] = None
     stream: bool = False
+    user_id: Optional[str] = Field(
+        None, max_length=64, pattern=r"^[A-Za-z0-9_.@-]+$",
+        description="Owner of the persistent slow memory + chat transcripts (needs NEUROFIELD_MEMORY_DIR).",
+    )
+    remember: bool = Field(True, description="False: do not store this turn or update the user's slow memory.")
 
 
 # Sandbox request bodies live at MODULE level on purpose. With
@@ -296,6 +311,8 @@ def _token_stream(
     owner: Optional[str],
     reset: bool,
     want_audit: bool = False,
+    slow_seed: Optional[dict] = None,
+    replay_len: int = 0,
 ) -> Iterator[tuple[int, Optional[dict]]]:
     """Yield (next_id, audit) while holding the model lock. Persists session state at the end."""
     if _model is None:
@@ -305,7 +322,11 @@ def _token_stream(
         sess = _claim_session_locked(sid, owner)
         if reset:
             sess["state"] = None
+        sess["anomaly"] = False
         state = sess["state"]
+        if state is None and slow_seed is not None:
+            # fast memory/h start from zero; ONLY the user's slow ring is restored
+            state = _model.new_state(1, _device, slow=slow_seed)
         cur = torch.tensor([input_ids], dtype=torch.long, device=_device)
         generated = list(input_ids)
         prompt_len = len(input_ids)
@@ -316,12 +337,18 @@ def _token_stream(
                 else contextlib.nullcontext()
             )
             with torch.no_grad(), amp_ctx:
+                if 0 < replay_len < cur.size(1):
+                    # re-fed history: rebuilds the fast context but must NOT be written into the slow ring again
+                    state = _model(cur[:, :replay_len], state=state, write_slow=False).state
+                    cur = cur[:, replay_len:]
                 for _ in range(max_new):
                     out = _model(cur, state=state, return_audit=True)
                     state = out.state
                     audit = out.audit
                     if _monitor is not None and audit:
                         alarms = _monitor.update(audit)
+                        if alarms:
+                            sess["anomaly"] = True  # never persist this turn into a user's slow memory
                         if (
                             alarms
                             and _cfg is not None
@@ -348,11 +375,15 @@ def _generate(
     owner: Optional[str],
     reset: bool,
     want_audit: bool = False,
+    slow_seed: Optional[dict] = None,
+    replay_len: int = 0,
 ) -> tuple[list[int], float, Optional[dict]]:
     start = time.perf_counter()
     new_ids: list[int] = []
     audit = None
-    for nid, a in _token_stream(input_ids, max_new, temperature, sid, owner, reset, want_audit):
+    for nid, a in _token_stream(
+        input_ids, max_new, temperature, sid, owner, reset, want_audit, slow_seed, replay_len
+    ):
         new_ids.append(nid)
         audit = a or audit
     lat = (time.perf_counter() - start) * 1000
@@ -379,6 +410,7 @@ def _postprocess(prompt: str, raw: str, enabled: bool) -> str:
 from neurofield.sandbox import SandboxConfig, SandboxRegistry
 
 _sandbox_registry: SandboxRegistry | None = None
+_memory: Optional[UserMemoryStore] = None  # per-user slow memory + transcripts (opt-in)
 
 
 def _sandbox_id(sid: str, api_key: Optional[str]) -> str:
@@ -424,6 +456,18 @@ def create_app(
     static_dir = Path(__file__).parent / "static"
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    global _memory
+    _memory = None
+    mem_dir = _env("MEMORY_DIR")
+    if mem_dir:
+        if get_api_keys() or _env("MEMORY_ALLOW_OPEN", "0") == "1":
+            _memory = UserMemoryStore(mem_dir, max_chat_mb=float(_env("MEMORY_MAX_CHAT_MB", "10") or 10))
+        else:
+            logger.warning(
+                "NEUROFIELD_MEMORY_DIR is set but NEUROFIELD_API_KEYS is empty: persistent memory stays OFF "
+                "(transcripts are personal data). Set API keys, or NEUROFIELD_MEMORY_ALLOW_OPEN=1 for local dev."
+            )
 
     if checkpoint:
         load_model(checkpoint, config_path, device)
@@ -530,18 +574,57 @@ def create_app(
             logger.exception("completions failed")
             raise HTTPException(status_code=500, detail="internal error") from e
 
-    def _prepare_chat(req: ChatRequest, sid: str) -> tuple[str, list[int], int, float]:
+    def _uid(req: ChatRequest) -> str:
+        return req.user_id or "default"
+
+    def _prepare_chat(
+        req: ChatRequest, sid: str, owner: Optional[str] = None
+    ) -> tuple[str, list[int], int, float, int, Optional[dict]]:
         prompt = normalize_prompt(req.prompt)
+        slow_seed = None
+        if _memory is not None and req.remember:
+            uid = _uid(req)
+            if history_len(sid) == 0:  # new process / TTL eviction: the chat window is NOT lost
+                restore_turns(sid, _memory.recent_turns(owner, uid, sid, n=12))
+            slow_seed = _memory.load_slow(owner, uid)
         # Real-world facts (weather / web) injected when tools enabled
         enriched, _tool_note = enrich_prompt_with_tools(prompt)
         input_ids = _encode(build_prompt(sid, enriched)) or _encode(enriched) or [0]
+        n_user = len(_encode(build_user_part(enriched)) or [])
+        replay_len = max(0, len(input_ids) - n_user) if slow_seed is not None else 0
         max_new, temperature = adaptive_sampling(
             prompt,
             user_max=req.max_new_tokens,
             user_temp=req.temperature,
             auto=req.auto_length,
         )
-        return prompt, input_ids, max_new, temperature
+        return prompt, input_ids, max_new, temperature, replay_len, slow_seed
+
+    def _persist(sid: str, owner: Optional[str], req: ChatRequest, prompt: str, text: str) -> None:
+        """Lossless transcript + the user's slow ring (after norm cap + audit), never from a flagged turn."""
+        if _memory is None or not req.remember:
+            return
+        uid = _uid(req)
+        _memory.append_turn(owner, uid, sid, "user", prompt)
+        _memory.append_turn(owner, uid, sid, "assistant", text)
+        with _lock:
+            sess = _sessions.get(sid)
+            state = sess["state"] if sess else None
+            anomaly = bool(sess and sess.get("anomaly"))
+        slow = _model.export_slow_state(state) if (_model is not None and state is not None) else None
+        if slow is None:
+            return
+        if anomaly:
+            _memory.append_audit(owner, uid, {"event": "slow_memory_not_saved", "reason": "anomaly flagged", "session": sid})
+            return
+        cap = float(getattr(getattr(_cfg, "safety", None), "max_memory_norm", 0.0) or 0.0)
+        slow, capped, biggest = cap_slow_norm(slow, cap)
+        _memory.save_slow(owner, uid, slow)
+        _memory.append_audit(owner, uid, {
+            "event": "slow_memory_saved", "session": sid,
+            "slots_used": int((slow["slow_filled"] > 0).sum()), "writes_represented": float(slow["slow_filled"].sum()),
+            "largest_slot_norm": round(biggest, 4), "slots_capped": capped,
+        })
 
     @app.post("/v1/chat", response_model=ChatResponse)
     def chat(
@@ -554,15 +637,20 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         try:
-            prompt, input_ids, max_new, temperature = _prepare_chat(req, sid)
-            # History is re-fed as text every turn, so start from a fresh recurrent
-            # state (reset=True); otherwise earlier turns would be seen twice.
+            prompt, input_ids, max_new, temperature, replay_len, slow_seed = _prepare_chat(
+                req, sid, _owner(api_key)
+            )
+            # History is re-fed as text every turn, so start from a fresh FAST state (reset=True);
+            # only the user's persistent SLOW ring (if any) is restored, and the re-fed history is
+            # replayed without writing the ring again (replay_len).
             new_ids, lat, _ = _generate(
-                input_ids, max_new, temperature, sid, _owner(api_key), reset=True
+                input_ids, max_new, temperature, sid, _owner(api_key), reset=True,
+                slow_seed=slow_seed, replay_len=replay_len,
             )
             text = _postprocess(prompt, _decode(new_ids), req.postprocess)
             append_turn(sid, "user", prompt)
             append_turn(sid, "assistant", text)
+            _persist(sid, _owner(api_key), req, prompt, text)
             return ChatResponse(text=text, session_id=sid, latency_ms=lat, model=_model_id)
         except HTTPException:
             raise
@@ -581,15 +669,18 @@ def create_app(
         _need_model()
         _bump("requests")
         sid = _valid_session_id(req.session_id)
-        prompt, input_ids, max_new, temperature = _prepare_chat(req, sid)
         owner = _owner(api_key)
+        prompt, input_ids, max_new, temperature, replay_len, slow_seed = _prepare_chat(req, sid, owner)
 
         def event_gen() -> Iterator[str]:
             start = time.perf_counter()
             new_ids: list[int] = []
             yield f"data: {json.dumps({'session_id': sid, 'event': 'start'})}\n\n"
             try:
-                for nid, _ in _token_stream(input_ids, max_new, temperature, sid, owner, reset=True):
+                for nid, _ in _token_stream(
+                    input_ids, max_new, temperature, sid, owner, reset=True,
+                    slow_seed=slow_seed, replay_len=replay_len,
+                ):
                     new_ids.append(nid)
                     yield f"data: {json.dumps({'token': _decode([nid]), 'id': nid})}\n\n"
             except HTTPException as e:
@@ -607,10 +698,39 @@ def create_app(
             text = _postprocess(prompt, _decode(new_ids), req.postprocess)
             append_turn(sid, "user", prompt)
             append_turn(sid, "assistant", text)
+            _persist(sid, owner, req, prompt, text)
             yield f"data: {json.dumps({'event': 'done', 'latency_ms': lat, 'text': text})}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+    # ------------------------------------------------------------------
+    # Per-user persistent memory (opt-in: NEUROFIELD_MEMORY_DIR). Always needs an API key.
+    # ------------------------------------------------------------------
+    def _need_memory() -> UserMemoryStore:
+        if _memory is None:
+            raise HTTPException(status_code=404, detail="persistent memory is disabled (set NEUROFIELD_MEMORY_DIR and API keys)")
+        return _memory
+
+    @app.get("/v1/memory")
+    def memory_info(user_id: str = "default", api_key: str = Depends(require_api_key_strict)):
+        return _need_memory().info(api_key or None, user_id)
+
+    @app.get("/v1/memory/transcript")
+    def memory_transcript(
+        session_id: str, user_id: str = "default", limit: int = 100,
+        api_key: str = Depends(require_api_key_strict),
+    ):
+        if not _SESSION_ID_RE.match(session_id):
+            raise HTTPException(status_code=422, detail="invalid session_id")
+        turns = _need_memory().transcript(api_key or None, user_id, session_id, limit=max(1, min(limit, 1000)))
+        return {"user_id": user_id, "session_id": session_id, "turns": turns}
+
+    @app.delete("/v1/memory")
+    def memory_delete(user_id: str = "default", api_key: str = Depends(require_api_key_strict)):
+        existed = _need_memory().delete_user(api_key or None, user_id)
+        reset_history()  # drop in-process windows too: nothing of the user may linger
+        return {"status": "deleted" if existed else "nothing stored", "user_id": user_id}
 
     @app.post("/v1/reset")
     def reset_session(session_id: str, api_key: Optional[str] = Depends(require_api_key)):

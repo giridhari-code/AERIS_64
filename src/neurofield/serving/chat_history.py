@@ -21,6 +21,23 @@ def reset_history(session_id: str | None = None) -> None:
         _HISTORY.pop(session_id, None)
 
 
+def restore_turns(session_id: str, turns: list[tuple[str, str]]) -> None:
+    """Rebuild the in-process window from the persistent transcript (restart / TTL eviction)."""
+    if _HISTORY.get(session_id):
+        return
+    h = _HISTORY.setdefault(session_id, [])
+    for role, text in turns[-_MAX_TURNS * 2 :]:
+        t = (text or "").strip()
+        if t:
+            h.append((role, t[:500]))
+
+
+def build_user_part(user_prompt: str) -> str:
+    """Just the new user turn (what build_prompt appends after the history)."""
+    p = user_prompt.strip()
+    return f"{USER}{p}{END}{ASSISTANT}" if _USE_SPECIALS else f"User: {p}\nAssistant:"
+
+
 def history_len(session_id: str) -> int:
     return len(_HISTORY.get(session_id, []))
 
