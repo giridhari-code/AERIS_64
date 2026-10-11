@@ -1,0 +1,14 @@
+.git
+.github
+.ruff_cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+*.pt
+checkpoints/local_run/
+artifacts/
+docs/
+tests/
