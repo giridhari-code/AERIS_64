@@ -29,3 +29,14 @@ Slow memory, neuromodulator, metacognition, router, predictor **contribution** o
 ## Future work (not implemented)
 
 Per-user `C_u` (Section 11) — proposal only; session `M` + slow ring partially cover short context, not durable cross-session private memory.
+
+## Training entry (v3 fix)
+
+`scripts/train/train_company.py` now runs paper slow-memory replay every 50 steps:
+
+```
+W_s ← (1-η) W_s + η Σ_b (S^b / Σ S) M^b
+```
+
+Previously only `Trainer` in `training/trainer.py` did this; the company script omitted it.
+

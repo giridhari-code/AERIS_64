@@ -125,7 +125,13 @@ def main() -> None:
         return x, y
 
     use_bf16 = bool(args.bf16) and device.type == "cuda" and torch.cuda.is_bf16_supported()
-    print(f"Training steps={args.steps} device={device} accum={args.grad_accum} cosine={args.cosine} bf16={use_bf16}")
+    # Paper v3: surprise-weighted replay into W_s every `replay_every` steps
+    replay_every = 50
+    replay_eta = 0.02
+    print(
+        f"Training steps={args.steps} device={device} accum={args.grad_accum} "
+        f"cosine={args.cosine} bf16={use_bf16} replay_every={replay_every}"
+    )
     t0 = time.time()
     model.train()
     last_loss = 0.0
@@ -146,17 +152,30 @@ def main() -> None:
         x, y = batch()
         if use_bf16:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                loss = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005).loss
+                out = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005)
         else:
-            loss = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005).loss
+            out = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005)
+        loss = out.loss
         (loss / max(1, args.grad_accum)).backward()
         if step % max(1, args.grad_accum) == 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             opt.zero_grad(set_to_none=True)
+
+        # Paper Appendix A: W_s ← (1-η)W_s + η Σ_b (S^b / Σ S) M^b
+        if step % replay_every == 0 and out.state is not None and "M" in out.state:
+            S = out.metrics.get("_seq_surprise") if out.metrics else None
+            if S is None or not torch.is_tensor(S):
+                S = torch.ones(x.size(0), device=device)
+            model.replay_slow(out.state["M"], S, replay_eta)
+
         last_loss = float(loss.item())
         if step % 100 == 0 or step == 1:
-            print(f"  step {step:5d} | loss={last_loss:.3f} | lr={args.lr * lr_scale:.2e}")
+            gate = (out.metrics or {}).get("gate_mean", 0.0)
+            print(
+                f"  step {step:5d} | loss={last_loss:.3f} | "
+                f"lr={args.lr * lr_scale:.2e} | gate={gate:.3f}"
+            )
     if any(p.grad is not None for p in model.parameters() if p.requires_grad):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
