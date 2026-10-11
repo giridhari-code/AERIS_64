@@ -77,6 +77,10 @@ class StreamingTokenDataset(IterableDataset):
             yield {"input_ids": x, "targets": y}
 
 
+def _dist_on() -> bool:
+    return torch.distributed.is_available() and torch.distributed.is_initialized()
+
+
 def build_dataloader(
     path: Optional[str],
     seq_len: int,
@@ -84,17 +88,25 @@ def build_dataloader(
     streaming: bool = False,
     num_workers: int = 0,
     dtype: str = "uint16",
+    shuffle_train: bool = True,
 ) -> Optional[DataLoader]:
     if path is None:
         return None
     if streaming:
-        ds = StreamingTokenDataset(path, seq_len, dtype=dtype)
+        rank = torch.distributed.get_rank() if _dist_on() else 0
+        ds = StreamingTokenDataset(path, seq_len, dtype=dtype, seed=42 + 100_003 * rank)  # distinct stream per rank
         return DataLoader(ds, batch_size=batch_size, num_workers=num_workers)
     ds = TokenDataset(path, seq_len, dtype=dtype)
+    sampler = None
+    if _dist_on() and shuffle_train:
+        from torch.utils.data.distributed import DistributedSampler  # each rank sees a disjoint shard
+
+        sampler = DistributedSampler(ds, shuffle=True, drop_last=True)
     return DataLoader(
         ds,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=sampler is None and shuffle_train,
+        sampler=sampler,
         num_workers=num_workers,
         drop_last=True,
         pin_memory=torch.cuda.is_available(),

@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased — security + train/serve consistency patch
+## Unreleased — per-user memory, parallel training, paper v3
+
+### Per-user memory (paper v3 Section 11, ring variant)
+- `serving/user_memory.py`: lossless per-chat transcripts + persisted slow ring (safetensors, atomic), per API key / `user_id`.
+  Fast memory is never persisted. Chat rehydrates its window from the transcript; re-fed history is replayed with
+  `write_slow=False` so the ring is not flooded; ring overflow now **compacts** (count-weighted fold) instead of overwriting
+  (`slow_compact`, default on; `filled` holds counts, `filled.sum()` = total writes). Norm cap, audit log, anomaly gating,
+  `GET/DELETE /v1/memory`, `GET /v1/memory/transcript`, `remember=false`.
+- `NeuroField.new_state(..., slow=)`, `export_slow_state()`, `forward(write_slow=)`.
+
+### Parallel training
+- Token-parallel forward (embedding, dendrite window, readout + head batched over T): exact same outputs, 1.3-1.5x faster
+  fwd+bwd on CPU in `scripts/bench/bench_parallel_ops.py`.
+- DDP (`torchrun`): rank-sharded data, no-sync accumulation, rank-consistent replay with all-reduced slow update, rank-0 I/O,
+  fused AdamW, TF32. Tested with a 2-process gloo run (ranks stay bit-close; test fails if the replay all-reduce is removed).
+- `lambda_err_warmup_steps` (paper v3 proposal, default off), embedding-norm logging with collapse warning.
+
+### Paper
+- v3 report added at `docs/paper/AESC_v2_Technical_Report_v3.pdf` (README now links it).
+
+## Earlier — security + train/serve consistency patch
 
 ### Security
 - Sandbox: commands are parsed with `shlex` and run **without a shell** (`echo hi; id` is now literal text);

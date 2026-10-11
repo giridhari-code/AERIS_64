@@ -23,7 +23,8 @@ def test_ring_write_and_read():
         M = torch.randn(B, 8, 8)
         M[:, i % 8, :] = float(i + 1)  # distinctive
         slots, ptr, filled = sm.write_slot(slots, ptr, filled, M)
-    assert filled.sum() == B * 4  # all slots filled after wrap
+    assert (filled > 0).sum() == B * 4  # all 4 slots hold context after the wrap
+    assert filled.sum() == B * 5        # ...and none of the 5 writes was dropped (counts conserved)
     assert ptr == 1  # 5 writes → ptr 5 % 4 = 1
 
     d = torch.randn(B, 16)
@@ -84,3 +85,48 @@ def test_slot_weight_is_batch_independent():
     s2, _, f2 = sm.write_slot(*sm.init_slots(2, torch.device("cpu")), M, weight=w)
     s1, _, f1 = sm.write_slot(*sm.init_slots(1, torch.device("cpu")), M[:1], weight=w[:1])
     assert torch.allclose(s2[0, 0], s1[0, 0])  # same sequence => same slot, whatever the batch
+
+
+def test_overflow_compacts_instead_of_erasing():
+    """Ring full => oldest slot is folded into its neighbour; the count-weighted sum is conserved."""
+    sm = SlowMemory(d_model=16, d_k=8, d_v=8, n_slots=4, compact_overflow=True)
+    B = 2
+    slots, ptr, filled = sm.init_slots(B, torch.device("cpu"))
+    total = torch.zeros(B, 8, 8)
+    for i in range(23):  # many wraps
+        M = torch.randn(B, 8, 8)
+        total += M
+        slots, ptr, filled = sm.write_slot(slots, ptr, filled, M)
+    assert filled.sum() == B * 23
+    # sum_s count_s * slot_s == sum of every snapshot ever written => nothing was lost
+    assert torch.allclose((filled.view(B, 4, 1, 1) * slots).sum(1), total, atol=1e-4)
+
+
+def test_overflow_without_compaction_overwrites_oldest():
+    sm = SlowMemory(d_model=16, d_k=8, d_v=8, n_slots=4, compact_overflow=False)
+    slots, ptr, filled = sm.init_slots(1, torch.device("cpu"))
+    for _ in range(9):
+        slots, ptr, filled = sm.write_slot(slots, ptr, filled, torch.randn(1, 8, 8))
+    assert filled.sum() == 4  # legacy behaviour: capped at the ring size
+
+
+def test_write_slow_false_replays_without_touching_the_ring():
+    m = _small_model(window=8)
+    x = torch.randint(0, 30, (1, 24))
+    with torch.no_grad():
+        out = m(x, write_slow=False)
+    assert float(out.state["slow_filled"].sum()) == 0 and out.state["seg_pos"] == 0
+
+
+def test_slow_state_export_import_roundtrip_and_fast_state_is_fresh():
+    m = _small_model(window=8)
+    with torch.no_grad():
+        out = m(torch.randint(0, 30, (1, 24)))
+    slow = m.export_slow_state(out.state)
+    assert slow["slow_slots"].shape == (m.slow_mem.n_slots, m.cfg.d_k, m.cfg.d_v)
+    st = m.new_state(1, torch.device("cpu"), slow=slow)
+    assert torch.equal(st["slow_slots"][0], slow["slow_slots"])
+    assert torch.equal(st["slow_filled"][0], slow["slow_filled"])
+    assert float(st["M"].abs().sum()) == 0 and float(st["h"].abs().sum()) == 0  # fast memory NOT carried over
+    bad = dict(slow, slow_slots=slow["slow_slots"][:-1])  # wrong shape (other checkpoint) => ignored
+    assert float(m.new_state(1, torch.device("cpu"), slow=bad)["slow_filled"].sum()) == 0

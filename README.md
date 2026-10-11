@@ -6,7 +6,7 @@ Research code · production-oriented layout · not a finished frontier product
 | | |
 |---|---|
 | **Author** | Giridhari Karmakar · giriisdev@gmail.com |
-| **Paper** | [docs/paper/AESC_v2_3_Technical_Report.pdf](docs/paper/AESC_v2_3_Technical_Report.pdf) |
+| **Paper (v3, current)** | [docs/paper/AESC_v2_Technical_Report_v3.pdf](docs/paper/AESC_v2_Technical_Report_v3.pdf) · code-level report: [v2.3](docs/paper/AESC_v2_3_Technical_Report.pdf) |
 | **License** | See [LICENSE](LICENSE), [NOTICE](NOTICE), [DATA_POLICY.md](DATA_POLICY.md) |
 
 ---
@@ -99,6 +99,34 @@ PYTHONPATH=src python scripts/research/contribution_ablation.py \
 ```
 
 ---
+
+## Per-user memory (fast = the model's own, slow = the user's)
+
+* **Fast memory** (`M`, field state, dendrite history) is the model's working memory. It is never written to disk and starts
+  from zero every turn.
+* **Slow memory** is the user's. With `NEUROFIELD_MEMORY_DIR` + `NEUROFIELD_API_KEYS` set, `/v1/chat` (and `/v1/chat/stream`)
+  with a `user_id`:
+  * stores **every turn verbatim** (append-only `chats/<session>.jsonl`, rotated by size, never truncated) and rebuilds the chat
+    window from it after a restart / TTL eviction;
+  * persists the user's slow ring (`slow.safetensors`, shared by all that user's chat windows). When the ring is full the oldest
+    slot is **folded into its neighbour (count-weighted)** instead of being erased, so old context is diluted, not dropped;
+  * caps slot norms and writes an `audit.jsonl` line per consolidation; a turn flagged by the anomaly monitor is **not** persisted;
+  * is isolated per API key and `user_id`; `GET /v1/memory`, `GET /v1/memory/transcript`, `DELETE /v1/memory?user_id=` let the
+    user inspect and erase it. `remember=false` skips storing a turn.
+
+  This is the ring-based variant of the paper's proposed per-user context memory `C_u` (v3, Section 11). Whether it improves
+  answers has **not** been measured; the tests cover the mechanics (nothing lost, isolation, restart, deletion).
+
+## Parallel / faster training
+
+* **Token-parallel forward** (on by default, `NEUROFIELD_PARALLEL_OPS=0` to disable): embedding, the dendrite window and the whole
+  readout + vocabulary head are computed for all `T` tokens at once; only the genuinely sequential recurrence stays in the loop.
+  Verified identical to the per-token path (logits/loss equal, grads within 2e-6). `python scripts/bench/bench_parallel_ops.py`.
+* **Data parallel (DDP)**: `torchrun --nproc_per_node=N -m neurofield.cli train ...` shards the data per rank, all-reduces
+  gradients (only on the last micro-batch of an accumulation), and all-reduces the slow-memory replay so ranks cannot drift.
+  Also: gradient accumulation, bf16, fused AdamW and TF32 on CUDA, optional `lambda_err_warmup_steps` (paper v3 proposal, off by
+  default), and embedding-norm logging (Appendix B item 14).
+* The recurrence itself is still sequential in time (the paper's stated limitation); this removes everything around it.
 
 ## Important
 

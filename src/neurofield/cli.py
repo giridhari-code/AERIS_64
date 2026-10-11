@@ -57,6 +57,9 @@ def train_main(argv: list[str] | None = None) -> None:
         cfg.training.seed = args.seed
 
     setup_logging(cfg.logging.level)
+    from neurofield.training.distributed import cleanup, init_distributed_if_needed
+
+    init_distributed_if_needed()  # torchrun => data-parallel, plain `python` => unchanged
     torch.manual_seed(cfg.training.seed)
 
     if cfg.data.train_path is None:
@@ -95,6 +98,7 @@ def train_main(argv: list[str] | None = None) -> None:
     if args.resume:
         logging.info("resume: %s", "found checkpoint" if trainer.resume() else "no checkpoint, starting fresh")
     trainer.train()
+    cleanup()
 
 
 def eval_main(argv: list[str] | None = None) -> None:
