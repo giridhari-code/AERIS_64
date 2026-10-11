@@ -54,3 +54,33 @@ def test_eval_is_deterministic_and_isolated_between_calls_by_default():
         m(torch.randint(0, V, (1, 20)))  # "another user"
         b = m(x).logits
     assert torch.equal(a, b)
+
+
+def test_neuromodulator_and_gate_receive_gradient_from_next_token_loss():
+    """Checklist 6: after CE on next-token loss alone, gate-path grad norm > 0."""
+    torch.manual_seed(3)
+    m = _model()
+    m.train()
+    x = torch.randint(0, V, (2, 12))
+    y = torch.randint(0, V, (2, 12))
+    out = m(x, targets=y)
+    assert out.loss is not None
+    out.loss.backward()
+    g_norm = 0.0
+    for name, p in m.named_parameters():
+        if p.grad is None:
+            continue
+        if "neuromod" in name or "fast_mem.W_" in name or "fast_mem.log_lambda" in name:
+            g_norm += float(p.grad.detach().norm())
+    assert g_norm > 0.0, "expected nonzero grad into neuromod / fast-write path"
+
+
+def test_inference_fast_writes_are_not_frozen():
+    """Failure mode 2: gated writes allowed at inference (session-scoped)."""
+    torch.manual_seed(4)
+    m = _model().eval()
+    x = torch.randint(0, V, (1, 16))
+    with torch.no_grad():
+        out = m(x)
+    assert out.state is not None and "M" in out.state
+    assert float(out.state["M"].abs().sum()) > 0.0
