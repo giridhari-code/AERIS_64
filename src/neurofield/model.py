@@ -402,20 +402,8 @@ class NeuroField(nn.Module):
             slow_slots = state.get("slow_slots")
             slow_filled = state.get("slow_filled")
             slow_ptr = int(state.get("slow_ptr") or 0)
-            if self.parallel_ops and T > 1 and slow_slots is not None and slow_filled is not None:
-                # Expand ring state across T (same slots for all positions in the call)
-                Slt = slow_slots.size(1)
-                slots_bt = (
-                    slow_slots.unsqueeze(1)
-                    .expand(B, T, Slt, self.cfg.d_k, self.cfg.d_v)
-                    .reshape(B * T, Slt, self.cfg.d_k, self.cfg.d_v)
-                )
-                filled_bt = (
-                    slow_filled.unsqueeze(1).expand(B, T, Slt).reshape(B * T, Slt)
-                )
-                U = self.slow_mem.read(
-                    D.reshape(B * T, -1), slots=slots_bt, filled=filled_bt
-                ).view(B, T, -1)
+            if self.parallel_ops and T > 1:
+                U = self.slow_mem.read_seq(D, slow_slots, slow_filled)
             else:
                 U = torch.stack(
                     [

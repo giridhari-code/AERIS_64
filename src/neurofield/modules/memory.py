@@ -196,6 +196,32 @@ class SlowMemory(nn.Module):
         # Prefer context ring when slots exist; keep a small prior residual
         return any_fill * (0.9 * u_ctx + 0.1 * u_prior) + (1.0 - any_fill) * u_prior
 
+    def read_seq(
+        self,
+        D: Tensor,  # (B, T, d_model)
+        slots: Tensor | None = None,  # (B, S, d_k, d_v)
+        filled: Tensor | None = None,  # (B, S)
+    ) -> Tensor:
+        """Token-parallel read: same ring for all t, no B*T slot expand."""
+        B, T, _ = D.shape
+        q = F.normalize(self.W_q(D), dim=-1, eps=1e-8)  # (B, T, d_k)
+        u_prior = torch.einsum("btk,kd->btd", q, self.M_s)
+
+        if slots is None or filled is None:
+            return u_prior
+
+        # (B, T, S, d_v)
+        r = torch.einsum("bskd,btk->btsd", slots, q)
+        k_slot = self._slot_keys(slots)  # (B, S, d_k)
+        scores = torch.einsum("btk,bsk->bts", q, k_slot)
+        temp = self.log_temp.exp().clamp(min=0.1, max=10.0)
+        scores = scores / temp
+        scores = scores.masked_fill((filled <= 0).unsqueeze(1), -1e9)
+        any_fill = (filled.sum(dim=-1) > 0).float().view(B, 1, 1)
+        alpha = torch.softmax(scores, dim=-1) * any_fill
+        u_ctx = torch.einsum("bts,btsd->btd", alpha, r)
+        return any_fill * (0.9 * u_ctx + 0.1 * u_prior) + (1.0 - any_fill) * u_prior
+
     def replay(self, M: Tensor, surprises: Tensor, eta: float) -> None:
         """Legacy global prior update (batch-level consolidation)."""
         if M.dim() != 3:
