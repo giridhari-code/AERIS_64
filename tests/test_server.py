@@ -51,9 +51,17 @@ def test_empty_config_is_recovered_from_weights(client):
 
 
 def test_greedy_chat_is_deterministic_and_fresh_state(client):
-    a = client.post("/v1/chat", json={"prompt": "hello", "temperature": 0, "max_new_tokens": 12}).json()
-    b = client.post("/v1/chat", json={"prompt": "hello", "temperature": 0, "max_new_tokens": 12}).json()
-    assert a["text"] == b["text"]
+    chat_history.reset_history()
+    payload = {
+        "prompt": "hello",
+        "temperature": 0.0,
+        "max_new_tokens": 12,
+        "postprocess": False,
+        "auto_length": False,
+    }
+    a = client.post("/v1/chat", json=payload).json()
+    b = client.post("/v1/chat", json=payload).json()
+    assert a["text"] == b["text"], (a["text"], b["text"])
     assert a["session_id"] != b["session_id"]
 
 
