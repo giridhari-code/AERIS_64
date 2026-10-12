@@ -336,6 +336,9 @@ class NeuroField(nn.Module):
                     else:
                         d_prev = torch.zeros_like(D[:, 0])
                     M_before = M
+                    # Paper truncated BPTT: cut graph at segment boundaries
+                    if t > 0 and (t % max(1, self._truncate_window) == 0):
+                        M = M.detach()
                     M = self.fast_mem.write(M, d_prev, O[:, t], G[:, t])
                     if self.safety.max_memory_norm > 0:
                         mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
