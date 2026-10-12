@@ -1,6 +1,7 @@
-"""AERIS_64 — product shell with decoder-only Transformer backbone (default).
+"""NeuroField / AESC v2: Two-Speed Memory Architecture (AERIS_64).
 
-Legacy AESC/NeuroField modules remain importable under neurofield.modules.
+Parallel Form is the production ``forward()`` (depth passes over the sequence).
+Distributed: ``torchrun`` + ``neurofield.training.distributed``.
 """
 
 from .config import (
@@ -13,7 +14,7 @@ from .config import (
 from .model import ModelOutput, NeuroField
 from .training import Trainer
 
-__version__ = "3.0.0"
+__version__ = "2.4.0"
 __all__ = [
     "NeuroField",
     "ModelOutput",
