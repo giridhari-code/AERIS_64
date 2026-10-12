@@ -92,13 +92,14 @@ class FastMemory(nn.Module):
         seg_cnt0: int = 0,
         surprises: Tensor | None = None,  # (B, T) optional for ring snaps
     ) -> tuple[Tensor, Tensor, list, int]:
-        """Sequential delta-rule scan with *parallel* projections.
+        """Delta-rule scan — looped-transformer time step inside a depth pass.
 
-        All W_k / W_v / W_q matmuls run over T at once. Only the rank-1
-        M update stays a Python loop (true recurrence).
+        Like a looped Transformer block applied over depth, each pass shares
+        W_k/W_v/W_q. Projections are batched over T; the rank-1 memory update
+        is a causal scan chunked by ``truncate_window`` (same role as a
+        recurrent state in looped / recurrent Transformers).
 
-        Returns (M_final, R, snaps, seg_cnt) where snaps are
-        (M_snapshot, S_t) at every segment_len boundary (for slow ring).
+        Returns (M_final, R, snaps, seg_cnt).
         """
         B, T, _ = D.shape
         if T == 0:
@@ -118,29 +119,38 @@ class FastMemory(nn.Module):
         g_eff = G * (prev_norm > 1e-4).float()
         lam = self.lambda_diag.view(1, -1, 1)
 
+        # Looped-transformer style: depth shares weights; time is a scan over
+        # precomputed (k,v,q). Chunk at truncate_window (BPTT boundary).
         reads: list[Tensor] = []
         snaps: list[tuple[Tensor, Tensor]] = []
-        tw = max(0, int(truncate_window))
+        tw = max(1, int(truncate_window)) if truncate_window else T
         seg_len = max(0, int(segment_len))
         seg_cnt = int(seg_cnt0)
-        for t in range(T):
-            if tw > 0 and t > 0 and (t % tw == 0):
-                M = M.detach()
-            M_decay = lam * M
-            pred = torch.einsum("bkd,bk->bd", M_decay, k[:, t])
-            delta = v[:, t] - pred
-            update = g_eff[:, t].unsqueeze(-1) * torch.einsum("bk,bd->bkd", k[:, t], delta)
-            M = M_decay + update
-            if max_memory_norm > 0:
-                mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                M = M * (max_memory_norm / mn).clamp(max=1.0)
-            reads.append(torch.einsum("bkd,bk->bd", M, q[:, t]))
-            if seg_len > 0:
-                seg_cnt += 1
-                if seg_cnt >= seg_len:
-                    s_t = surprises[:, t].detach() if surprises is not None else M.new_ones(B)
-                    snaps.append((M.detach(), s_t))
-                    seg_cnt = 0
+        max_n = float(max_memory_norm or 0.0)
+
+        t = 0
+        while t < T:
+            t_end = min(T, t + tw)
+            # one BPTT chunk — sequential rank-1 updates only (linear recurrence)
+            for ti in range(t, t_end):
+                kt = k[:, ti]
+                M_decay = lam * M
+                pred = torch.einsum("bkd,bk->bd", M_decay, kt)
+                delta = v[:, ti] - pred
+                M = M_decay + g_eff[:, ti].unsqueeze(-1) * torch.einsum("bk,bd->bkd", kt, delta)
+                if max_n > 0:
+                    mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                    M = M * (max_n / mn).clamp(max=1.0)
+                reads.append(torch.einsum("bkd,bk->bd", M, q[:, ti]))
+                if seg_len > 0:
+                    seg_cnt += 1
+                    if seg_cnt >= seg_len:
+                        s_t = surprises[:, ti].detach() if surprises is not None else M.new_ones(B)
+                        snaps.append((M.detach(), s_t))
+                        seg_cnt = 0
+            t = t_end
+            if t < T:
+                M = M.detach()  # truncate BPTT between chunks
         return M, torch.stack(reads, dim=1), snaps, seg_cnt
 
 
