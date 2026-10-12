@@ -125,7 +125,7 @@ class Trainer:
             self._fwd = DDP(
                 self.model,
                 device_ids=[self.device.index] if self.device.type == "cuda" else None,
-                find_unused_parameters=True,  # router/skills and ablations can leave params unused
+                find_unused_parameters=False  # set True only if an ablation leaves params unused,  # router/skills and ablations can leave params unused
             )
             torch.manual_seed(tc.seed + 1000 * self.rank)  # params were broadcast; dropout/data differ per rank
 

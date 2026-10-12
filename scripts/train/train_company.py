@@ -153,7 +153,7 @@ def main() -> None:
         model = DDP(
             model,
             device_ids=[device.index] if device.type == "cuda" else None,
-            find_unused_parameters=True,
+            find_unused_parameters=False  # set True only if an ablation leaves params unused,
         )
         if is_main():
             print(f"[distributed] DDP on {world} ranks")
