@@ -347,7 +347,7 @@ class NeuroField(nn.Module):
                 d_prev0 = D_prev_pass[_j] if D_prev_pass[_j] is not None else None
                 if self.parallel_ops:
                     # Parallel W_k/W_v/W_q; only rank-1 M update is sequential
-                    M, R, more_snaps, seg_cnt = self.fast_mem.write_seq(
+                    M, R, more_snaps, seg_cnt, w_n, m_n = self.fast_mem.write_seq(
                         M, D, O, G,
                         d_prev0=d_prev0,
                         truncate_window=self._truncate_window,
@@ -355,11 +355,13 @@ class NeuroField(nn.Module):
                         segment_len=self._segment_len if (will_write_slow and _j == k_depth - 1) else 0,
                         seg_cnt0=seg_cnt,
                         surprises=S if (will_write_slow and _j == k_depth - 1) else None,
+                        collect_stats=collect,
                     )
                     snaps.extend(more_snaps)
                     if collect:
                         gates_audit.extend([G[:, t].detach().mean() for t in range(T)])
-                        mem_norms.append(M.detach().norm())
+                        write_norms.extend(w_n)
+                        mem_norms.extend(m_n)
                 else:
                     reads = []
                     for t in range(T):

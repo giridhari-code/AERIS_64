@@ -91,7 +91,8 @@ class FastMemory(nn.Module):
         segment_len: int = 0,
         seg_cnt0: int = 0,
         surprises: Tensor | None = None,  # (B, T) optional for ring snaps
-    ) -> tuple[Tensor, Tensor, list, int]:
+        collect_stats: bool = False,
+    ) -> tuple[Tensor, Tensor, list, int, list, list]:
         """Delta-rule scan — looped-transformer time step inside a depth pass.
 
         Like a looped Transformer block applied over depth, each pass shares
@@ -103,7 +104,7 @@ class FastMemory(nn.Module):
         """
         B, T, _ = D.shape
         if T == 0:
-            return M, D.new_zeros(B, 0, self.d_v), [], int(seg_cnt0)
+            return M, D.new_zeros(B, 0, self.d_v), [], int(seg_cnt0), [], []
 
         if d_prev0 is None:
             d_prev0 = D.new_zeros(B, D.size(-1))
@@ -123,6 +124,8 @@ class FastMemory(nn.Module):
         # precomputed (k,v,q). Chunk at truncate_window (BPTT boundary).
         reads: list[Tensor] = []
         snaps: list[tuple[Tensor, Tensor]] = []
+        w_norms: list[Tensor] = []
+        m_norms: list[Tensor] = []
         tw = max(1, int(truncate_window)) if truncate_window else T
         seg_len = max(0, int(segment_len))
         seg_cnt = int(seg_cnt0)
@@ -131,8 +134,8 @@ class FastMemory(nn.Module):
         t = 0
         while t < T:
             t_end = min(T, t + tw)
-            # one BPTT chunk — sequential rank-1 updates only (linear recurrence)
             for ti in range(t, t_end):
+                M_before = M
                 kt = k[:, ti]
                 M_decay = lam * M
                 pred = torch.einsum("bkd,bk->bd", M_decay, kt)
@@ -142,6 +145,9 @@ class FastMemory(nn.Module):
                     mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
                     M = M * (max_n / mn).clamp(max=1.0)
                 reads.append(torch.einsum("bkd,bk->bd", M, q[:, ti]))
+                if collect_stats:
+                    w_norms.append((M - M_before).detach().norm())
+                    m_norms.append(M.detach().norm())
                 if seg_len > 0:
                     seg_cnt += 1
                     if seg_cnt >= seg_len:
@@ -150,8 +156,8 @@ class FastMemory(nn.Module):
                         seg_cnt = 0
             t = t_end
             if t < T:
-                M = M.detach()  # truncate BPTT between chunks
-        return M, torch.stack(reads, dim=1), snaps, seg_cnt
+                M = M.detach()
+        return M, torch.stack(reads, dim=1), snaps, seg_cnt, w_norms, m_norms
 
 
 class SlowMemory(nn.Module):

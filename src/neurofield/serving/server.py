@@ -227,6 +227,7 @@ def load_model(checkpoint: str, config_path: Optional[str], device: str) -> None
         _model = model
         _cfg = full_cfg
         _sessions.clear()
+        reset_history()  # no cross-test / cross-reload transcript leak
         _monitor = SafetyMonitor(z_threshold=full_cfg.safety.anomaly_z_threshold, log_path=None)
         _model_id = str(meta.get("model_id") or meta.get("name") or Path(checkpoint).stem or "model")
         _max_context = int(_env("MAX_CONTEXT", str(full_cfg.model.max_seq_len)) or full_cfg.model.max_seq_len)
@@ -363,7 +364,10 @@ def _token_stream(
                     state = _model(cur[:, :replay_len], state=state, write_slow=False).state
                     cur = cur[:, replay_len:]
                 for _ in range(max_new):
-                    out = _model(cur, state=state, return_audit=True)
+                    # Audit only when the client asked or the safety monitor is on —
+                    # avoids extra collect_stats work on the hot path.
+                    need_audit = bool(want_audit) or (_monitor is not None)
+                    out = _model(cur, state=state, return_audit=need_audit, collect_stats=need_audit)
                     state = out.state
                     audit = out.audit
                     if _monitor is not None and audit:
