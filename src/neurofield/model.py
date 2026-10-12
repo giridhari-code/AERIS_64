@@ -218,7 +218,8 @@ class NeuroField(nn.Module):
         write_slow: bool = True,
         k_depth: Optional[int] = None,
         collect_stats: bool = True,
-    ) -> ModelOutput:
+    
+        label_smoothing: float = 0.0,) -> ModelOutput:
         """
         Looped / Parallel Form (main path).
 
@@ -508,6 +509,7 @@ class NeuroField(nn.Module):
                 logits.reshape(-1, self.cfg.vocab_size),
                 targets.reshape(-1),
                 ignore_index=-100,
+                label_smoothing=float(max(0.0, min(0.5, label_smoothing))),
             )
             loss = (
                 ce
