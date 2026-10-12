@@ -12,6 +12,8 @@ Research code · production-oriented layout · not a finished frontier product
 
 ---
 
+**Handoff:** [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md) · **Full paper:** [docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf](docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf)
+
 ## What this is
 
 NeuroField (AESC) is a recurrent LM with:
