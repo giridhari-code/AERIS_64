@@ -317,7 +317,7 @@ class NeuroField(nn.Module):
                 O = o_flat.view(B, T, -1)
                 pi = pi_flat.view(B, T, -1)
                 ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
-                bal_loss = bal_loss + (pi.mean(dim=(0, 1)) - 1.0 / max(1, self.cfg.n_skills)).pow(2).sum()
+                bal_loss = bal_loss + (pi.mean(0) - 1.0 / max(1, self.cfg.n_skills)).pow(2).sum()  # mean over B → (T, n_skills); same as per-t loop
             else:
                 o_list = []
                 ent_list = []
