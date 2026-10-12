@@ -1,45 +1,30 @@
-# Final project audit — AERIS_64 / NeuroField (2026-10-12)
+# Final project audit — AERIS_64 (2026-10-12)
 
-**Author:** Giridhari Karmakar · giriisdev@gmail.com  
-**Verdict:** Architecture design is **coherent and operational**. Remaining gaps are mostly **data, speed, and engineering polish**, not a broken core idea.
+**Author:** Giridhari Karmakar · giriisdev@gmail.com
 
-## Architecture (OK)
+## Architecture: OK
 
-| Block | Status |
-|-------|--------|
-| Embed | OK |
-| Dendrite (causal window + error) | OK |
-| Predictor / surprise | OK |
-| Neuromodulator gate | OK (watch collapse) |
-| Skill router | OK |
-| Fast memory delta-rule (Change 5) | OK |
-| Neural field | OK |
-| Slow ring | OK |
-| Parallel/looped forward | **Main path** |
-| Safety freeze g=0 | OK |
-| DDP | Optional, OK |
+NeuroField parallel/looped path is the main forward. Components present: embed, dendrite, predictor, neuromod, router, fast_mem, field, slow_mem, readout. Smoke test: `path=parallel`, forward+loss OK.
 
-## Removed / avoided as “faltu”
+## Removed earlier as non-identity
 
-- Transformer default backbone (reverted; not the project identity)
-- Transient transformer module/tests/docs from the brief switch
-- Do not treat empty-data train runs as model quality evidence
+- Temporary Transformer-default backbone (reverted)
+- Transient transformer module/tests
 
-## Keep
+## Kept (not faltu)
 
-- `src/neurofield/**` core
-- `scripts/train/train_company.py`, serve, checkpoint
-- Tests: delta rule, safety freeze, parallel/main path, decode parity where present
-- Paper PDF: `docs/paper/AESC_NeuroField_Research_Paper_Giridhari_Karmakar.pdf`
+- Core `src/neurofield`
+- Train/serve/scripts
+- Papers + figures (canonical = Full Research Paper PDF)
+- Guides, security, data policy
+- Sample align data under `data/align/`
 
-## Known gaps (future, when time allows)
+## Weights policy
 
-1. Large clean SFT / pretrain data  
-2. Training throughput (GPU, batch, k, DDP)  
-3. Gate schedule stability  
-4. Multi-seed hard tasks vs Transformer baseline  
-5. Stronger safety policy / red-team  
+`*.safetensors` / `*.pt` not committed; train locally.
 
-## One line
+## Gaps (not architecture redesign)
 
-**Design OK · code runs · quality = data + compute + listed gaps.**
+Data, speed, gate collapse, parity discipline, benchmarks.
+
+See also: `docs/PROJECT_HANDOFF.md`
