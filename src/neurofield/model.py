@@ -285,7 +285,7 @@ class NeuroField(nn.Module):
 
         # slow-ring write cadence must match decoding: one snapshot per `segment_len` tokens (counted across calls)
         seg_cnt = int(state.get("seg_pos") or 0)
-        snaps: list[tuple[Tensor, Tensor]] = []
+        snaps: list[tuple] = []  # (ti, M, S)
         will_write_slow = bool(write_slow and ab.use_slow_memory and ab.use_fast_memory)
 
         for _j in range(k_depth):
@@ -386,7 +386,7 @@ class NeuroField(nn.Module):
                         if will_write_slow and _j == k_depth - 1:
                             seg_cnt += 1
                             if seg_cnt >= self._segment_len:
-                                snaps.append((M.detach(), S[:, t].detach()))
+                                snaps.append((t, M.detach(), S[:, t].detach()))
                                 seg_cnt = 0
                     R = torch.stack(reads, dim=1)
             else:
@@ -429,31 +429,48 @@ class NeuroField(nn.Module):
             slow_slots = state.get("slow_slots")
             slow_filled = state.get("slow_filled")
             slow_ptr = int(state.get("slow_ptr") or 0)
-            if self.parallel_ops:
-                U = self.slow_mem.read_seq(D, slow_slots, slow_filled)
-            else:
-                U = torch.stack(
-                    [
-                        self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
-                        for t in range(T)
-                    ],
-                    dim=1,
-                )
-            # Ring writes: a snapshot every `segment_len` tokens (same cadence whether the tokens arrive in one
-            # training call or one per decode call) + one at the end of a multi-token call.
-            if will_write_slow and T > 0:
-                for M_snap, s_snap in snaps:
-                    slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
-                        slow_slots, slow_ptr, slow_filled, M_snap, weight=s_snap.clamp(0.5, 2.0)
-                    )
-                if T > 1 and seg_cnt > 0:
-                    slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
-                        slow_slots, slow_ptr, slow_filled, M, weight=S[:, -1].detach().clamp(0.5, 2.0)
-                    )
-                    seg_cnt = 0
+            # Causal slow read + ring writes (must match token-by-token decode).
+            # U[t] only sees segment snapshots completed at positions < t.
+            # No end-of-call flush when T>1 (that broke prefix ↔ decode parity).
+            if will_write_slow and T > 0 and snaps:
+                U_parts: list[Tensor] = []
+                snap_i = 0
+                for t in range(T):
+                    if self.parallel_ops:
+                        # single-position read (same as loop)
+                        U_parts.append(
+                            self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
+                        )
+                    else:
+                        U_parts.append(
+                            self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
+                        )
+                    # apply any snapshot that closed on this position (visible from t+1)
+                    while snap_i < len(snaps) and snaps[snap_i][0] == t:
+                        _ti, M_snap, s_snap = snaps[snap_i]
+                        slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
+                            slow_slots, slow_ptr, slow_filled, M_snap,
+                            weight=s_snap.clamp(0.5, 2.0),
+                        )
+                        snap_i += 1
+                U = torch.stack(U_parts, dim=1)
                 seg_pos = seg_cnt
             else:
-                seg_pos = int(state.get("seg_pos") or 0)
+                if self.parallel_ops:
+                    U = self.slow_mem.read_seq(D, slow_slots, slow_filled)
+                else:
+                    U = torch.stack(
+                        [
+                            self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
+                            for t in range(T)
+                        ],
+                        dim=1,
+                    )
+                if will_write_slow and T > 0:
+                    # no snaps this call; just carry segment counter
+                    seg_pos = seg_cnt
+                else:
+                    seg_pos = int(state.get("seg_pos") or 0)
         else:
             U = torch.zeros(B, T, self.cfg.d_v, device=device, dtype=X.dtype)
             slow_slots = state.get("slow_slots")
