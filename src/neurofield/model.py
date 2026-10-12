@@ -331,40 +331,55 @@ class NeuroField(nn.Module):
                 O = torch.stack(o_list, dim=1)
 
             if ab.use_fast_memory:
-                # Every depth pass owns its fast memory. It starts from zero at a sequence start and from the
-                # pass's own carried M afterwards (decode steps must accumulate in EVERY pass, not only pass 0).
+                # Every depth pass owns its fast memory. Carry across decode calls.
                 M = (
                     M_prev[_j]
                     if M_prev[_j] is not None
                     else torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device, dtype=X.dtype)
                 )
-                reads = []
-                for t in range(T):
-                    if t > 0:
-                        d_prev = D[:, t - 1]
-                    elif D_prev_pass[_j] is not None:
-                        d_prev = D_prev_pass[_j]  # key from the previous call's last position (same pass)
-                    else:
-                        d_prev = torch.zeros_like(D[:, 0])
-                    M_before = M
-                    # Paper truncated BPTT: cut graph at segment boundaries
-                    if t > 0 and (t % max(1, self._truncate_window) == 0):
-                        M = M.detach()
-                    M = self.fast_mem.write(M, d_prev, O[:, t], G[:, t])
-                    if self.safety.max_memory_norm > 0:
-                        mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                        M = M * (self.safety.max_memory_norm / mn).clamp(max=1.0)
+                d_prev0 = D_prev_pass[_j] if D_prev_pass[_j] is not None else None
+                if self.parallel_ops:
+                    # Parallel W_k/W_v/W_q; only rank-1 M update is sequential
+                    M, R, more_snaps, seg_cnt = self.fast_mem.write_seq(
+                        M, D, O, G,
+                        d_prev0=d_prev0,
+                        truncate_window=self._truncate_window,
+                        max_memory_norm=float(self.safety.max_memory_norm or 0),
+                        segment_len=self._segment_len if (will_write_slow and _j == k_depth - 1) else 0,
+                        seg_cnt0=seg_cnt,
+                        surprises=S if (will_write_slow and _j == k_depth - 1) else None,
+                    )
+                    snaps.extend(more_snaps)
                     if collect:
-                        write_norms.append((M - M_before).detach().norm())
+                        gates_audit.extend([G[:, t].detach().mean() for t in range(T)])
                         mem_norms.append(M.detach().norm())
-                        gates_audit.append(G[:, t].detach().mean())
-                    reads.append(self.fast_mem.read(M, D[:, t]))
-                    if will_write_slow and _j == k_depth - 1:
-                        seg_cnt += 1
-                        if seg_cnt >= self._segment_len:
-                            snaps.append((M.detach(), S[:, t].detach()))
-                            seg_cnt = 0
-                R = torch.stack(reads, dim=1)
+                else:
+                    reads = []
+                    for t in range(T):
+                        if t > 0:
+                            d_prev = D[:, t - 1]
+                        elif d_prev0 is not None:
+                            d_prev = d_prev0
+                        else:
+                            d_prev = torch.zeros_like(D[:, 0])
+                        M_before = M
+                        if t > 0 and (t % max(1, self._truncate_window) == 0):
+                            M = M.detach()
+                        M = self.fast_mem.write(M, d_prev, O[:, t], G[:, t])
+                        if self.safety.max_memory_norm > 0:
+                            mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                            M = M * (self.safety.max_memory_norm / mn).clamp(max=1.0)
+                        if collect:
+                            write_norms.append((M - M_before).detach().norm())
+                            mem_norms.append(M.detach().norm())
+                            gates_audit.append(G[:, t].detach().mean())
+                        reads.append(self.fast_mem.read(M, D[:, t]))
+                        if will_write_slow and _j == k_depth - 1:
+                            seg_cnt += 1
+                            if seg_cnt >= self._segment_len:
+                                snaps.append((M.detach(), S[:, t].detach()))
+                                seg_cnt = 0
+                    R = torch.stack(reads, dim=1)
             else:
                 M = state.get("M")
                 if M is None:
