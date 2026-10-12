@@ -45,6 +45,12 @@ def main() -> None:
     ap.add_argument("--grad-accum", type=int, default=1, help="Gradient accumulation steps")
     ap.add_argument("--warmup", type=int, default=50, help="LR warmup steps")
     ap.add_argument("--cosine", action="store_true", help="Cosine LR decay after warmup")
+    ap.add_argument("--lr-schedule", choices=["constant", "cosine", "noam"], default="constant",
+                    help="LR schedule: constant | cosine | noam (Transformer paper)")
+    ap.add_argument("--label-smoothing", type=float, default=0.1,
+                    help="CE label smoothing (Transformer paper uses 0.1; 0=off)")
+    ap.add_argument("--dropout", type=float, default=0.1,
+                    help="Residual/embed dropout rate during train (paper 0.1)")
     ap.add_argument("--weight-decay", type=float, default=0.01)
     ap.add_argument("--bf16", action="store_true", help="Force bf16 autocast (default: auto on CUDA)")
     ap.add_argument("--no-bf16", action="store_true", help="Disable bf16 even on CUDA")
@@ -143,7 +149,7 @@ def main() -> None:
         vocab_size=vocab_size,
         max_seq_len=preset_cfg.max_seq_len,
         tie_embeddings=True,
-        dropout=preset_cfg.dropout,
+        dropout=float(args.dropout) if args.dropout is not None else preset_cfg.dropout,
     )
     print(f"preset={args.preset} d_model={d_model} seq_len={seq_len} max_seq_len={cfg.max_seq_len}")
     model = NeuroField(cfg, SafetyConfig(enable_audit=False, max_memory_norm=40.0)).to(device)
@@ -212,7 +218,7 @@ def main() -> None:
     replay_eta = 0.02
     print(
         f"Training steps={args.steps} device={device} accum={args.grad_accum} world={world} "
-        f"cosine={args.cosine} bf16={use_bf16} compile={accel.use_compile} "
+        f"schedule={getattr(args, "lr_schedule", "constant")} cosine={args.cosine} smooth={getattr(args, "label_smoothing", 0)} drop={getattr(args, "dropout", 0)} bf16={use_bf16} compile={accel.use_compile} "
         f"tf32={accel.tf32} replay_every={replay_every}"
     )
     t0 = time.time()
@@ -221,21 +227,40 @@ def main() -> None:
     opt.zero_grad(set_to_none=True)
     for step in range(1, args.steps + 1):
         # LR schedule: linear warmup + optional cosine
-        if args.warmup > 0 and step <= args.warmup:
-            lr_scale = step / max(1, args.warmup)
-        elif args.cosine:
-            import math
-            progress = (step - args.warmup) / max(1, args.steps - args.warmup)
-            lr_scale = 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * min(1.0, progress)))
+        import math
+        schedule = getattr(args, "lr_schedule", "constant")
+        if args.cosine:
+            schedule = "cosine"
+        if schedule == "noam":
+            # Attention Is All You Need §5.3: d^{-0.5} * min(step^{-0.5}, step * warmup^{-1.5})
+            # args.lr acts as an extra scale (default ~1.0 for pure formula; often use 1.0)
+            warm = max(1, args.warmup if args.warmup > 0 else 4000)
+            step_f = float(step)
+            inv_sqrt_d = (float(d_model) ** -0.5)
+            lr_now = inv_sqrt_d * min(step_f ** -0.5, step_f * (warm ** -1.5))
+            lr_now = lr_now * float(args.lr)
+        elif schedule == "cosine":
+            if args.warmup > 0 and step <= args.warmup:
+                lr_scale = step / max(1, args.warmup)
+            else:
+                progress = (step - args.warmup) / max(1, args.steps - args.warmup)
+                lr_scale = 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * min(1.0, progress)))
+            lr_now = args.lr * lr_scale
         else:
-            lr_scale = 1.0
+            # constant + optional linear warmup
+            if args.warmup > 0 and step <= args.warmup:
+                lr_scale = step / max(1, args.warmup)
+            else:
+                lr_scale = 1.0
+            lr_now = args.lr * lr_scale
         for g in opt.param_groups:
-            g["lr"] = args.lr * lr_scale
+            g["lr"] = lr_now
 
         x, y = batch()
         with autocast_ctx(accel):
             out = model(
                 x, targets=y, lambda_err=0.03, lambda_bal=0.005,
+                label_smoothing=float(getattr(args, "label_smoothing", 0.0) or 0.0),
                 collect_stats=(step % 100 == 0 or step == 1),
             )
         loss = out.loss
@@ -260,7 +285,7 @@ def main() -> None:
             tok_s = tokens_done / elapsed
             print(
                 f"  step {step:5d} | loss={last_loss:.3f} | "
-                f"lr={args.lr * lr_scale:.2e} | gate={gate:.3f} | "
+                f"lr={lr_now:.2e} | gate={gate:.3f} | "
                 f"{tok_s:.0f} tok/s | seq={args.seq_len} bs={args.batch_size}"
             )
     if any(p.grad is not None for p in model.parameters() if p.requires_grad):
