@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased — train == generate (decode parity) fix
+
+### Fixed (H1: decode and training were different functions)
+- **Error term at decode.** `E = X - shift(X_hat)` shifted inside ONE call, so a 1-token decode step had `shift(X_hat) = 0` and
+  `E = X` (the whole embedding) instead of `E_t = X_t - f_p(H_{t-1})`. The previous position's prediction is now recomputed from the
+  per-pass `Hin` carried in the state.
+- **Fast memory in depth passes >= 1.** Only pass 0 was warm-started from the old `M` (and only when `T == 1`); every other pass
+  restarted from zero at each decode step, so memory never accumulated across decode steps for `k_depth > 1`. Every pass now carries
+  its own `M_pass[j]`, plus `D_pass[j]` (next write key) and `R_pass[j]` (field input `r_{t-1}`).
+- Result: one whole-sequence call == chunked calls == token-by-token decode (max logit diff 0.0 for `k_depth` 1..3; before the fix
+  0.50 at `k_depth=1` and 11.03 at `k_depth=3`). Training-form outputs on a fresh sequence are bit-identical to before.
+- Slow-ring writes again use one snapshot per `segment_len` tokens (counted across calls) + one at the end of a multi-token call, so
+  a training call and decoding write the same slots.
+- The audit again carries `router_entropy`, `surprises`, `ks`, `final_mem_norm` (the safety monitor's z-score on router entropy had
+  silently lost its input).
+- New `tests/test_decode_parity.py` (19 tests, incl. "greedy generation == teacher-forced training forward").
+
+### Known remaining difference (not changed)
+- Slow ring READ: a decode step reads snapshots written earlier in the same session; a single training call reads the ring as it
+  stood at the start of the call. With the ring on, one-shot vs decode differ (logit diff ~2.7 in a 30-token check). Fix options:
+  train with state-carrying windows, or freeze the ring read at call start when serving.
+
 ## Unreleased — per-user memory, parallel training, paper v3
 
 ### Per-user memory (paper v3 Section 11, ring variant)

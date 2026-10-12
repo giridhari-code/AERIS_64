@@ -192,7 +192,9 @@ class NeuroField(nn.Module):
             "x_hist": torch.zeros(
                 batch, self.cfg.dendrite_window, self.cfg.d_model, device=device
             ),
-            "pending_pred": None,  # prediction made at t for x_{t+1}
+            "pending_pred": None,  # (legacy, unused: the prediction is recomputed from per-pass Hin)
+            "k_depth": None,       # per-pass carry below is filled by forward()
+            "Hin": None, "M_pass": None, "D_pass": None, "R_pass": None,
             "bar_S": None,  # per-session running surprise (isolation)
             "last_router_ent": None,  # prior-step conflict for metacognition
             # Context window ring in slow memory
@@ -253,9 +255,39 @@ class NeuroField(nn.Module):
 
         frozen = bool(state.get("memory_frozen"))
 
+        # ---- per-depth-pass state carried ACROSS calls -------------------------------------------------
+        # Training runs the whole sequence in one call; the server decodes ONE token per call with `state`.
+        # For both to be the same function, every pass j must carry what position t-1 of that pass produced:
+        #   Hin[j]  : the field state H that pass j READ at the last position  -> X_hat_{t-1} = f_p(Hin[j])
+        #   M_pass  : the fast memory of pass j (each pass has its own M; it must keep accumulating)
+        #   D_pass  : D of pass j at the last position  -> key of the next write
+        #   R_pass  : read r of pass j at the last position -> field input at the next position
+        # A state from another k_depth (or a fresh one) starts every pass from zero.
+        carried = state.get("k_depth") == k_depth and state.get("M_pass") is not None
+        Hin_prev = state["Hin"] if carried else [None] * k_depth
+        M_prev = state["M_pass"] if carried else [None] * k_depth
+        D_prev_pass = state["D_pass"] if carried else [None] * k_depth
+        R_prev_pass = state["R_pass"] if carried else [None] * k_depth
+        Hin_new: list[Tensor] = []
+        M_new: list[Tensor] = []
+        D_new: list[Tensor] = []
+        R_new: list[Tensor] = []
+
+        # slow-ring write cadence must match decoding: one snapshot per `segment_len` tokens (counted across calls)
+        seg_cnt = int(state.get("seg_pos") or 0)
+        snaps: list[tuple[Tensor, Tensor]] = []
+        will_write_slow = bool(write_slow and ab.use_slow_memory and ab.use_fast_memory)
+
         for _j in range(k_depth):
+            Hin_new.append(H[:, -1].detach())
             X_hat = self.predictor(H.reshape(B * T, -1)).view(B, T, -1)
-            E = X.detach() - _shift(X_hat)
+            # prediction made at the PREVIOUS position: inside the call it is X_hat[:, t-1]; for the first
+            # position it comes from the previous call's last position (zeros only at a sequence start).
+            X_hat_first = (
+                self.predictor(Hin_prev[_j]) if Hin_prev[_j] is not None else X_hat.new_zeros(B, X_hat.size(-1))
+            )
+            X_hat_shift = torch.cat([X_hat_first.unsqueeze(1), X_hat[:, :-1]], dim=1)
+            E = X.detach() - X_hat_shift
             err_energy = err_energy + E.pow(2).mean()
             S = E.abs().mean(dim=-1)  # (B, T)
 
@@ -277,32 +309,31 @@ class NeuroField(nn.Module):
             D = D_win + self.dendrite.gamma * E
 
             o_list = []
+            ent_list: list[Tensor] = []
             for t in range(T):
                 o_t, pi_t, _w = self.router(H[:, t])
                 o_list.append(o_t)
+                ent_list.append(-(pi_t * pi_t.clamp_min(1e-12).log()).sum(-1).mean().detach())
                 bal_loss = bal_loss + (
                     pi_t.mean(0) - 1.0 / max(1, self.cfg.n_skills)
                 ).pow(2).sum()
             O = torch.stack(o_list, dim=1)
 
             if ab.use_fast_memory:
-                # Fresh M each depth (leakage-safe across positions)
-                M = torch.zeros(
-                    B, self.cfg.d_k, self.cfg.d_v, device=device, dtype=X.dtype
+                # Every depth pass owns its fast memory. It starts from zero at a sequence start and from the
+                # pass's own carried M afterwards (decode steps must accumulate in EVERY pass, not only pass 0).
+                M = (
+                    M_prev[_j]
+                    if M_prev[_j] is not None
+                    else torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device, dtype=X.dtype)
                 )
-                # Optional: warm-start depth0 from session state for T=1 serve continuity
-                if _j == 0 and state.get("M") is not None and T == 1:
-                    M = state["M"]
                 reads = []
                 for t in range(T):
-                    d_prev = D[:, t - 1] if t > 0 else (
-                        state.get("d_prev")
-                        if state.get("d_prev") is not None
-                        else torch.zeros_like(D[:, 0])
-                    )
-                    if t == 0 and state.get("d_prev") is not None and d_prev.shape == D[:, 0].shape:
-                        d_prev = state["d_prev"]
-                    elif t == 0:
+                    if t > 0:
+                        d_prev = D[:, t - 1]
+                    elif D_prev_pass[_j] is not None:
+                        d_prev = D_prev_pass[_j]  # key from the previous call's last position (same pass)
+                    else:
                         d_prev = torch.zeros_like(D[:, 0])
                     M_before = M
                     M = self.fast_mem.write(M, d_prev, O[:, t], G[:, t])
@@ -313,6 +344,11 @@ class NeuroField(nn.Module):
                     mem_norms.append(M.detach().norm())
                     reads.append(self.fast_mem.read(M, D[:, t]))
                     gates_audit.append(G[:, t].detach().mean())
+                    if will_write_slow and _j == k_depth - 1:
+                        seg_cnt += 1
+                        if seg_cnt >= self._segment_len:
+                            snaps.append((M.detach(), S[:, t].detach()))
+                            seg_cnt = 0
                 R = torch.stack(reads, dim=1)
             else:
                 M = state.get("M")
@@ -320,7 +356,11 @@ class NeuroField(nn.Module):
                     M = torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device)
                 R = torch.zeros(B, T, self.cfg.d_v, device=device, dtype=X.dtype)
 
-            R_shift = _shift(R)
+            R_first = R_prev_pass[_j] if R_prev_pass[_j] is not None else R.new_zeros(B, R.size(-1))
+            R_shift = torch.cat([R_first.unsqueeze(1), R[:, :-1]], dim=1)
+            M_new.append(M.detach())
+            D_new.append(D[:, -1].detach())
+            R_new.append(R[:, -1].detach())
             H = torch.stack(
                 [
                     self.field.single_step(H[:, t], D[:, t], R_shift[:, t])
@@ -346,15 +386,19 @@ class NeuroField(nn.Module):
                 ],
                 dim=1,
             )
-            # segment write at end of chunk
-            if write_slow and T > 0 and ab.use_fast_memory:
-                seg_pos = int(state.get("seg_pos") or 0) + T
-                if seg_pos >= self._segment_len or T > 1:
-                    w = S[:, -1].detach().clamp(0.5, 2.0)
+            # Ring writes: a snapshot every `segment_len` tokens (same cadence whether the tokens arrive in one
+            # training call or one per decode call) + one at the end of a multi-token call.
+            if will_write_slow and T > 0:
+                for M_snap, s_snap in snaps:
                     slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
-                        slow_slots, slow_ptr, slow_filled, M, weight=w
+                        slow_slots, slow_ptr, slow_filled, M_snap, weight=s_snap.clamp(0.5, 2.0)
                     )
-                    seg_pos = 0
+                if T > 1 and seg_cnt > 0:
+                    slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
+                        slow_slots, slow_ptr, slow_filled, M, weight=S[:, -1].detach().clamp(0.5, 2.0)
+                    )
+                    seg_cnt = 0
+                seg_pos = seg_cnt
             else:
                 seg_pos = int(state.get("seg_pos") or 0)
         else:
@@ -395,6 +439,10 @@ class NeuroField(nn.Module):
                 "gates": [float(g) for g in gates_audit[-T:]] if gates_audit else [],
                 "write_norms": [float(x) for x in write_norms[-T:]] if write_norms else [],
                 "mem_norms": [float(x) for x in mem_norms[-T:]] if mem_norms else [],
+                "ks": [float(k_depth)] * T,
+                "router_entropy": [float(e) for e in ent_list],  # last pass, one per position
+                "surprises": [float(s) for s in S.detach().mean(0)],
+                "final_mem_norm": float(M.detach().norm()) if isinstance(M, Tensor) else 0.0,
             }
 
         new_state = {
@@ -406,6 +454,12 @@ class NeuroField(nn.Module):
             "x_hist": Xp[:, T:].detach(),
             "d_prev": D[:, -1].detach() if T else state.get("d_prev"),
             "pending_pred": None,
+            # per-pass carry (see above): makes one-call == chunked == token-by-token decode
+            "k_depth": k_depth,
+            "Hin": Hin_new,
+            "M_pass": M_new,
+            "D_pass": D_new,
+            "R_pass": R_new,
             "slow_slots": slow_slots,
             "slow_filled": slow_filled,
             "slow_ptr": slow_ptr,
