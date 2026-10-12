@@ -61,6 +61,28 @@ def test_parallel_ops_chunked_state_continuation_matches_per_token_path():
         assert torch.allclose(a, b, atol=1e-5)
 
 
+
+
+def test_read_seq_matches_per_token_read():
+    torch.manual_seed(2)
+    m = NeuroField(_cfg(), SafetyConfig(enable_audit=False)).eval()
+    sm = m.slow_mem
+    B, T = 3, 9
+    D = torch.randn(B, T, m.cfg.d_model)
+    slots = torch.randn(B, sm.n_slots, m.cfg.d_k, m.cfg.d_v)
+    filled = torch.zeros(B, sm.n_slots)
+    filled[:, :2] = 1.0
+    filled[2] = 0.0
+    sm.M_s.data.normal_()
+    with torch.no_grad():
+        ref = torch.stack([sm.read(D[:, t], slots=slots, filled=filled) for t in range(T)], dim=1)
+        got = sm.read_seq(D, slots=slots, filled=filled)
+        ref0 = torch.stack([sm.read(D[:, t]) for t in range(T)], dim=1)
+        got0 = sm.read_seq(D)
+    assert torch.allclose(ref, got, atol=1e-5)
+    assert torch.allclose(ref0, got0, atol=1e-5)
+
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

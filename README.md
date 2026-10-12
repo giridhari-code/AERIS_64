@@ -119,9 +119,11 @@ PYTHONPATH=src python scripts/research/contribution_ablation.py \
 
 ## Parallel / faster training
 
-* **Token-parallel forward** (on by default, `NEUROFIELD_PARALLEL_OPS=0` to disable): embedding, the dendrite window and the whole
-  readout + vocabulary head are computed for all `T` tokens at once; only the genuinely sequential recurrence stays in the loop.
-  Verified identical to the per-token path (logits/loss equal, grads within 2e-6). `python scripts/bench/bench_parallel_ops.py`.
+* **Token-parallel forward** (on by default, `NEUROFIELD_PARALLEL_OPS=0` falls back to the per-token loops): embedding, the dendrite
+  window, the skill router, the neural-field step, the slow-memory read and the whole readout + vocabulary head are computed for
+  all `T` tokens at once; only the genuinely sequential fast-memory delta-rule recurrence stays in a loop. Per-token gate/memory
+  norms are only collected on logged steps (`collect_stats`). `tests/test_parallel_training.py` compares both paths;
+  `python scripts/bench/bench_parallel_ops.py` measures the speed-up.
 * **Data parallel (DDP)**: `torchrun --nproc_per_node=N -m neurofield.cli train ...` shards the data per rank, all-reduces
   gradients (only on the last micro-batch of an accumulation), and all-reduces the slow-memory replay so ranks cannot drift.
   Also: gradient accumulation, bf16, fused AdamW and TF32 on CUDA, optional `lambda_err_warmup_steps` (paper v3 proposal, off by
