@@ -253,6 +253,7 @@ class Trainer:
                             targets=targets,
                             lambda_err=lam_err,
                             lambda_bal=tc.lambda_bal,
+                            collect_stats=((self.global_step + 1) % max(1, tc.log_every) == 0),
                         )
                     (out.loss / self.accum).backward()
                 loss_acc += float(out.loss.detach()) / self.accum

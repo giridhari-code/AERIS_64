@@ -217,6 +217,7 @@ class NeuroField(nn.Module):
         lambda_bal: float = 0.01,
         write_slow: bool = True,
         k_depth: Optional[int] = None,
+        collect_stats: bool = True,
     ) -> ModelOutput:
         """
         Parallel Form (main path): whole sequence + k depth passes.
@@ -227,6 +228,8 @@ class NeuroField(nn.Module):
         B, T = input_ids.shape
         device = input_ids.device
         ab = self.ablation
+        # per-position gate/memory norms cost O(T*k) tiny kernels; only when needed
+        collect = bool(collect_stats or return_audit)
         if state is None:
             state = self._init_state(B, device)
 
@@ -309,7 +312,7 @@ class NeuroField(nn.Module):
             D = D_win + self.dendrite.gamma * E
 
             # Token-parallel router (positions independent given H)
-            if self.parallel_ops and T > 1:
+            if self.parallel_ops:
                 o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1))
                 O = o_flat.view(B, T, -1)
                 pi = pi_flat.view(B, T, -1)
@@ -351,7 +354,7 @@ class NeuroField(nn.Module):
                     if self.safety.max_memory_norm > 0:
                         mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
                         M = M * (self.safety.max_memory_norm / mn).clamp(max=1.0)
-                    if return_audit:
+                    if collect:
                         write_norms.append((M - M_before).detach().norm())
                         mem_norms.append(M.detach().norm())
                         gates_audit.append(G[:, t].detach().mean())
@@ -373,7 +376,7 @@ class NeuroField(nn.Module):
             M_new.append(M.detach())
             D_new.append(D[:, -1].detach())
             R_new.append(R[:, -1].detach())
-            if self.parallel_ops and T > 1:
+            if self.parallel_ops:
                 H = self.field.single_step(
                     H.reshape(B * T, -1),
                     D.reshape(B * T, -1),
@@ -388,7 +391,7 @@ class NeuroField(nn.Module):
                     dim=1,
                 )
 
-        if self.parallel_ops and T > 1:
+        if self.parallel_ops:
             o_flat, _pi, _w = self.router(H.reshape(B * T, -1))
             O = o_flat.view(B, T, -1)
         else:
@@ -402,7 +405,7 @@ class NeuroField(nn.Module):
             slow_slots = state.get("slow_slots")
             slow_filled = state.get("slow_filled")
             slow_ptr = int(state.get("slow_ptr") or 0)
-            if self.parallel_ops and T > 1:
+            if self.parallel_ops:
                 U = self.slow_mem.read_seq(D, slow_slots, slow_filled)
             else:
                 U = torch.stack(
