@@ -24,13 +24,26 @@ class CharTokenizer:
             self.stoi = {c: i for i, c in self.itos.items()}
 
     @classmethod
-    def from_text(cls, text: str, with_specials: bool = True) -> "CharTokenizer":
+    def from_text(cls, text: str, with_specials: bool | None = None) -> "CharTokenizer":
+        """Build vocab from text.
+
+        with_specials:
+          None  → auto: only if text already contains <|user|> / <|assistant|> / ...
+          True  → always inject chat specials
+          False → never inject (plain User:/Assistant: char training)
+        """
         chars = sorted(set(text))
         stoi = {c: i for i, c in enumerate(chars)}
         itos = {i: c for c, i in stoi.items()}
+        if with_specials is None:
+            with_specials = any(s in text for s in ALL)
         if with_specials:
             stoi, itos = ensure_specials_in_stoi(stoi, itos)
         return cls(stoi, itos)
+
+    @property
+    def uses_specials(self) -> bool:
+        return any(s in self.stoi for s in ALL)
 
     @property
     def vocab_size(self) -> int:

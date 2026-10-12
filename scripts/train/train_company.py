@@ -301,6 +301,8 @@ def main() -> None:
         stoi=stoi,
         itos=itos,
         meta={
+            "uses_specials": bool(getattr(tok, "uses_specials", False)),
+
             "steps": args.steps,
             "final_loss": last_loss,
             "tokenizer": args.tokenizer,

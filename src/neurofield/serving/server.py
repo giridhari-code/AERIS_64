@@ -211,7 +211,19 @@ def load_model(checkpoint: str, config_path: Optional[str], device: str) -> None
         _amp_dtype = amp[dtype_name]
         _encode, _decode = tok.encode, tok.decode
         _stop_token_ids = set(getattr(tok, "stop_ids", set()) or set())
-        set_use_specials(bool(_stop_token_ids))
+        # Chat specials only when the checkpoint was trained with them.
+        # Orphan specials in char vocab (never seen in data) make prompts like
+        # <|user|>... and the model emits garbage — fall back to "User:"/"Assistant:".
+        uses = meta.get("uses_specials")
+        if uses is None:
+            uses = bool(getattr(tok, "uses_specials", False)) and bool(_stop_token_ids)
+            # If specials exist in vocab but meta never set the flag, prefer legacy
+            # text roles for char tokenizers (User:/Assistant: training style).
+            if getattr(tok, "uses_specials", False) and meta.get("tokenizer") == "char":
+                uses = False
+        set_use_specials(bool(uses))
+        if not uses:
+            _stop_token_ids = set()  # text heuristics for stop
         _model = model
         _cfg = full_cfg
         _sessions.clear()
