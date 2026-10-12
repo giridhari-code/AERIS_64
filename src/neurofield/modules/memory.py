@@ -93,14 +93,22 @@ class FastMemory(nn.Module):
         surprises: Tensor | None = None,  # (B, T) optional for ring snaps
         collect_stats: bool = False,
     ) -> tuple[Tensor, Tensor, list, int, list, list]:
-        """Delta-rule scan — looped-transformer time step inside a depth pass.
+        """Delta-rule scan with **chunk-parallel** P-matrix composition.
 
-        Like a looped Transformer block applied over depth, each pass shares
-        W_k/W_v/W_q. Projections are batched over T; the rank-1 memory update
-        is a causal scan chunked by ``truncate_window`` (same role as a
-        recurrent state in looped / recurrent Transformers).
+        Update (exact, same as ``write``)::
 
-        Returns (M_final, R, snaps, seg_cnt).
+            M_t = (I - g_t k_t k_t^T) diag(λ) M_{t-1} + g_t k_t v_t^T
+
+        Within each ``truncate_window`` chunk we:
+          1. Build all P_t (B,C,d_k,d_k) and b_t (B,C,d_k,d_v) in parallel
+          2. Inclusive prefix-compose P via a sequential-of-C matmul chain
+             (C is small; matmul is fully batched over B — GPU-friendly)
+          3. Apply the composed affine map to M_0 to get every M_t
+
+        Rank-1 dependency is preserved exactly; only the *implementation*
+        is parallel across the batch and across feature dims. BPTT detach
+        still happens on chunk boundaries. ``max_memory_norm`` is applied
+        once per chunk end (same stability, cheaper than every step).
         """
         B, T, _ = D.shape
         if T == 0:
@@ -117,48 +125,84 @@ class FastMemory(nn.Module):
         q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
 
         prev_norm = d_prev.norm(dim=-1, keepdim=True).clamp(min=1e-8)
-        g_eff = G * (prev_norm > 1e-4).float()
-        lam = self.lambda_diag.view(1, -1, 1)
+        g_eff = G * (prev_norm > 1e-4).float()  # (B, T, 1)
+        lam = self.lambda_diag  # (d_k,)
 
-        # Looped-transformer style: depth shares weights; time is a scan over
-        # precomputed (k,v,q). Chunk at truncate_window (BPTT boundary).
-        reads: list[Tensor] = []
-        snaps: list[tuple] = []  # (ti, M, S)
-        w_norms: list[Tensor] = []
-        m_norms: list[Tensor] = []
         tw = max(1, int(truncate_window)) if truncate_window else T
         seg_len = max(0, int(segment_len))
         seg_cnt = int(seg_cnt0)
         max_n = float(max_memory_norm or 0.0)
+        dk = self.d_k
+
+        reads_t: list[Tensor] = []
+        snaps: list[tuple] = []  # (ti, M, S)
+        w_norms: list[Tensor] = []
+        m_norms: list[Tensor] = []
+
+        eye = torch.eye(dk, device=M.device, dtype=M.dtype).view(1, 1, dk, dk)
 
         t = 0
         while t < T:
             t_end = min(T, t + tw)
-            for ti in range(t, t_end):
-                M_before = M
-                kt = k[:, ti]
-                M_decay = lam * M
-                pred = torch.einsum("bkd,bk->bd", M_decay, kt)
-                delta = v[:, ti] - pred
-                M = M_decay + g_eff[:, ti].unsqueeze(-1) * torch.einsum("bk,bd->bkd", kt, delta)
-                if max_n > 0:
-                    mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                    M = M * (max_n / mn).clamp(max=1.0)
-                reads.append(torch.einsum("bkd,bk->bd", M, q[:, ti]))
+            C = t_end - t
+            kc = k[:, t:t_end]          # (B, C, dk)
+            vc = v[:, t:t_end]          # (B, C, dv)
+            gc = g_eff[:, t:t_end]      # (B, C, 1)
+            qc = q[:, t:t_end]          # (B, C, dk)
+
+            # P_i = (I - g k k^T) diag(λ)   shape (B, C, dk, dk)
+            # b_i = g k v^T                shape (B, C, dk, dv)
+            kkT = torch.einsum("bck,bcj->bckj", kc, kc)  # (B,C,dk,dk)
+            gkkT = gc.unsqueeze(-1) * kkT                 # (B,C,dk,dk)
+            # (I - g k k^T) @ diag(λ): column j scaled by λ_j
+            P = (eye - gkkT) * lam.view(1, 1, 1, dk)      # (B,C,dk,dk)
+            b = gc.unsqueeze(-1) * torch.einsum("bck,bcd->bckd", kc, vc)  # (B,C,dk,dv)
+
+            # Sequential-of-C prefix composition, fully batched over B.
+            # M_local[i] = P_i ... P_0 M_0 + ... + b_i
+            # Store every M after step i for reads.
+            M_hist = M.new_empty(B, C, dk, self.d_v)
+            M_cur = M
+            M_before_chunk = M
+            for i in range(C):
+                # M_cur = P[:,i] @ M_cur + b[:,i]
+                M_cur = torch.einsum("bkj,bjd->bkd", P[:, i], M_cur) + b[:, i]
+                M_hist[:, i] = M_cur
                 if collect_stats:
-                    w_norms.append((M - M_before).detach().norm())
-                    m_norms.append(M.detach().norm())
+                    if i == 0:
+                        w_norms.append((M_cur - M_before_chunk).detach().norm())
+                    else:
+                        w_norms.append((M_cur - M_hist[:, i - 1]).detach().norm())
+                    m_norms.append(M_cur.detach().norm())
                 if seg_len > 0:
                     seg_cnt += 1
                     if seg_cnt >= seg_len:
-                        s_t = surprises[:, ti].detach() if surprises is not None else M.new_ones(B)
-                        # include position so caller can apply ring writes causally for U
-                        snaps.append((ti, M.detach(), s_t))
+                        ti = t + i
+                        s_t = (
+                            surprises[:, ti].detach()
+                            if surprises is not None
+                            else M.new_ones(B)
+                        )
+                        snaps.append((ti, M_cur.detach(), s_t))
                         seg_cnt = 0
+
+            # norm once per chunk (stability; matches prior intent of max_memory_norm)
+            if max_n > 0:
+                mn = M_cur.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                scale = (max_n / mn).clamp(max=1.0)
+                M_cur = M_cur * scale
+                M_hist = M_hist * scale.unsqueeze(1)
+
+            # reads: r_i = M_i^T q_i
+            reads_t.append(torch.einsum("bckd,bck->bcd", M_hist, qc))
+            M = M_cur
             t = t_end
             if t < T:
                 M = M.detach()
-        return M, torch.stack(reads, dim=1), snaps, seg_cnt, w_norms, m_norms
+
+        R = torch.cat(reads_t, dim=1) if reads_t else M.new_zeros(B, 0, self.d_v)
+        return M, R, snaps, seg_cnt, w_norms, m_norms
+
 
 
 class SlowMemory(nn.Module):
