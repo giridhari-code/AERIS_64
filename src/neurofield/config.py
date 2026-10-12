@@ -12,7 +12,12 @@ import yaml
 
 @dataclass
 class ModelConfig:
+    # architecture: "transformer" (default) | "neurofield" (legacy modules still in tree)
+    architecture: str = "transformer"
     d_model: int = 256
+    n_layers: int = 4
+    n_heads: int = 4
+    ffn_mult: int = 4
     d_k: int = 64
     d_v: int = 64
     n_skills: int = 8

@@ -7,6 +7,10 @@ from .predictor import Predictor
 from .metacognition import Metacognition
 
 __all__ = [
+    "TransformerStack",
+    "TransformerBlock",
+    "CausalSelfAttention",
+
     "Dendrite",
     "NeuralField",
     "Neuromodulator",
@@ -16,3 +20,4 @@ __all__ = [
     "Predictor",
     "Metacognition",
 ]
+from .transformer import TransformerStack, TransformerBlock, CausalSelfAttention
