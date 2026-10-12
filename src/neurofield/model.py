@@ -416,7 +416,24 @@ class NeuroField(nn.Module):
         )
 
         loss = None
-        metrics: dict[str, float] = {"path": "parallel", "k_depth": float(k_depth)}
+        # Always report gate/mem so train logs are not stuck at gate=0.000
+        _gate_mean = (
+            float(torch.stack([g.detach().float().reshape(()) for g in gates_audit]).mean().item())
+            if gates_audit
+            else 0.0
+        )
+        _mem_mean = (
+            float(torch.stack([x.detach().float().reshape(()) for x in mem_norms]).mean().item())
+            if mem_norms
+            else 0.0
+        )
+        metrics: dict[str, float] = {
+            "path": "parallel",
+            "k_depth": float(k_depth),
+            "gate_mean": _gate_mean,
+            "mem_norm": _mem_mean,
+            "mean_S": float(S.detach().mean().item()) if T > 0 else 0.0,
+        }
         if targets is not None:
             ce = F.cross_entropy(
                 logits.reshape(-1, self.cfg.vocab_size),

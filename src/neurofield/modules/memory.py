@@ -144,16 +144,16 @@ class SlowMemory(nn.Module):
         new_slots = slots.clone()
         new_filled = filled.clone()
         if self.compact_overflow and S > 1:
-            full = filled[:, ptr] > 0  # (B,) this slot still holds context => it is the oldest, about to be reused
-            if bool(full.any()):
-                nxt = (ptr + 1) % S
-                c_old, c_nxt = filled[:, ptr], filled[:, nxt]
-                tot = (c_old + c_nxt).clamp(min=1e-8)
-                merged = (
-                    c_old.view(B, 1, 1) * slots[:, ptr] + c_nxt.view(B, 1, 1) * slots[:, nxt]
-                ) / tot.view(B, 1, 1)
-                new_slots[:, nxt] = torch.where(full.view(B, 1, 1), merged, slots[:, nxt])
-                new_filled[:, nxt] = torch.where(full, c_old + c_nxt, c_nxt)
+            # Tensor-only path (no bool(...any()) — avoids torch.compile graph breaks)
+            full = filled[:, ptr] > 0  # (B,)
+            nxt = (ptr + 1) % S
+            c_old, c_nxt = filled[:, ptr], filled[:, nxt]
+            tot = (c_old + c_nxt).clamp(min=1e-8)
+            merged = (
+                c_old.view(B, 1, 1) * slots[:, ptr] + c_nxt.view(B, 1, 1) * slots[:, nxt]
+            ) / tot.view(B, 1, 1)
+            new_slots[:, nxt] = torch.where(full.view(B, 1, 1), merged, slots[:, nxt])
+            new_filled[:, nxt] = torch.where(full, c_old + c_nxt, c_nxt)
         new_slots[:, ptr] = snap
         new_filled[:, ptr] = 1.0
         new_ptr = (ptr + 1) % S
