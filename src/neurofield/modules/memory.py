@@ -79,6 +79,70 @@ class FastMemory(nn.Module):
         q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
         return torch.einsum("bkd,bk->bd", M, q)
 
+    def write_seq(
+        self,
+        M: Tensor,              # (B, d_k, d_v) initial
+        D: Tensor,              # (B, T, d_model) dendrite keys at each t
+        O: Tensor,              # (B, T, d_model) skill values
+        G: Tensor,              # (B, T, 1) gates
+        d_prev0: Tensor | None = None,  # (B, d_model) key before first token (carry)
+        truncate_window: int = 0,
+        max_memory_norm: float = 0.0,
+        segment_len: int = 0,
+        seg_cnt0: int = 0,
+        surprises: Tensor | None = None,  # (B, T) optional for ring snaps
+    ) -> tuple[Tensor, Tensor, list, int]:
+        """Sequential delta-rule scan with *parallel* projections.
+
+        All W_k / W_v / W_q matmuls run over T at once. Only the rank-1
+        M update stays a Python loop (true recurrence).
+
+        Returns (M_final, R, snaps, seg_cnt) where snaps are
+        (M_snapshot, S_t) at every segment_len boundary (for slow ring).
+        """
+        B, T, _ = D.shape
+        if T == 0:
+            return M, D.new_zeros(B, 0, self.d_v), [], int(seg_cnt0)
+
+        if d_prev0 is None:
+            d_prev0 = D.new_zeros(B, D.size(-1))
+        d_prev = torch.cat([d_prev0.unsqueeze(1), D[:, :-1]], dim=1)
+
+        k = self.W_k(d_prev)
+        k = k / (k.norm(dim=-1, keepdim=True) + 1e-8)
+        v = self.W_v(O)
+        q = self.W_q(D)
+        q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
+
+        prev_norm = d_prev.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+        g_eff = G * (prev_norm > 1e-4).float()
+        lam = self.lambda_diag.view(1, -1, 1)
+
+        reads: list[Tensor] = []
+        snaps: list[tuple[Tensor, Tensor]] = []
+        tw = max(0, int(truncate_window))
+        seg_len = max(0, int(segment_len))
+        seg_cnt = int(seg_cnt0)
+        for t in range(T):
+            if tw > 0 and t > 0 and (t % tw == 0):
+                M = M.detach()
+            M_decay = lam * M
+            pred = torch.einsum("bkd,bk->bd", M_decay, k[:, t])
+            delta = v[:, t] - pred
+            update = g_eff[:, t].unsqueeze(-1) * torch.einsum("bk,bd->bkd", k[:, t], delta)
+            M = M_decay + update
+            if max_memory_norm > 0:
+                mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                M = M * (max_memory_norm / mn).clamp(max=1.0)
+            reads.append(torch.einsum("bkd,bk->bd", M, q[:, t]))
+            if seg_len > 0:
+                seg_cnt += 1
+                if seg_cnt >= seg_len:
+                    s_t = surprises[:, t].detach() if surprises is not None else M.new_ones(B)
+                    snaps.append((M.detach(), s_t))
+                    seg_cnt = 0
+        return M, torch.stack(reads, dim=1), snaps, seg_cnt
+
 
 class SlowMemory(nn.Module):
     """
