@@ -139,10 +139,6 @@ def main() -> None:
     seq_len = args.seq_len if getattr(args, "seq_len", 0) and args.seq_len > 0 else max(32, min(256, preset_cfg.max_seq_len // 2))
     args.seq_len = seq_len  # for batch()
     cfg = ModelConfig(
-        architecture="transformer",
-        n_layers=4 if d_model <= 128 else (6 if d_model <= 256 else 8),
-        n_heads=max(2, d_model // 32),
-        ffn_mult=4,
 
         d_model=d_model,
         d_k=max(8, d_model // 2),
