@@ -117,8 +117,8 @@ class NeuroField(nn.Module):
             compact_overflow=bool(getattr(cfg, "slow_compact", True)),
         )
         self._segment_len = segment
-        # Token-parallel fast path (embedding, dendrite window, readout+logits batched over T).
-        # Mathematically identical to the per-token path; NEUROFIELD_PARALLEL_OPS=0 disables it.
+        # Token-parallel ops: embed/windows always; router+field+slow-read batched over T
+        # when enabled. Delta-rule memory stays sequential. NEUROFIELD_PARALLEL_OPS=0 disables.
         self.parallel_ops = os.environ.get("NEUROFIELD_PARALLEL_OPS", "1") != "0"
 
         self.P_f = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
@@ -308,16 +308,24 @@ class NeuroField(nn.Module):
 
             D = D_win + self.dendrite.gamma * E
 
-            o_list = []
-            ent_list: list[Tensor] = []
-            for t in range(T):
-                o_t, pi_t, _w = self.router(H[:, t])
-                o_list.append(o_t)
-                ent_list.append(-(pi_t * pi_t.clamp_min(1e-12).log()).sum(-1).mean().detach())
-                bal_loss = bal_loss + (
-                    pi_t.mean(0) - 1.0 / max(1, self.cfg.n_skills)
-                ).pow(2).sum()
-            O = torch.stack(o_list, dim=1)
+            # Token-parallel router (positions independent given H)
+            if self.parallel_ops and T > 1:
+                o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1))
+                O = o_flat.view(B, T, -1)
+                pi = pi_flat.view(B, T, -1)
+                ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
+                bal_loss = bal_loss + (pi.mean(dim=(0, 1)) - 1.0 / max(1, self.cfg.n_skills)).pow(2).sum()
+            else:
+                o_list = []
+                ent_list = []
+                for t in range(T):
+                    o_t, pi_t, _w = self.router(H[:, t])
+                    o_list.append(o_t)
+                    ent_list.append(-(pi_t * pi_t.clamp_min(1e-12).log()).sum(-1).mean().detach())
+                    bal_loss = bal_loss + (
+                        pi_t.mean(0) - 1.0 / max(1, self.cfg.n_skills)
+                    ).pow(2).sum()
+                O = torch.stack(o_list, dim=1)
 
             if ab.use_fast_memory:
                 # Every depth pass owns its fast memory. It starts from zero at a sequence start and from the
@@ -343,10 +351,11 @@ class NeuroField(nn.Module):
                     if self.safety.max_memory_norm > 0:
                         mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
                         M = M * (self.safety.max_memory_norm / mn).clamp(max=1.0)
-                    write_norms.append((M - M_before).detach().norm())
-                    mem_norms.append(M.detach().norm())
+                    if return_audit:
+                        write_norms.append((M - M_before).detach().norm())
+                        mem_norms.append(M.detach().norm())
+                        gates_audit.append(G[:, t].detach().mean())
                     reads.append(self.fast_mem.read(M, D[:, t]))
-                    gates_audit.append(G[:, t].detach().mean())
                     if will_write_slow and _j == k_depth - 1:
                         seg_cnt += 1
                         if seg_cnt >= self._segment_len:
@@ -364,31 +373,57 @@ class NeuroField(nn.Module):
             M_new.append(M.detach())
             D_new.append(D[:, -1].detach())
             R_new.append(R[:, -1].detach())
-            H = torch.stack(
-                [
-                    self.field.single_step(H[:, t], D[:, t], R_shift[:, t])
-                    for t in range(T)
-                ],
-                dim=1,
-            )
+            if self.parallel_ops and T > 1:
+                H = self.field.single_step(
+                    H.reshape(B * T, -1),
+                    D.reshape(B * T, -1),
+                    R_shift.reshape(B * T, -1),
+                ).view(B, T, -1)
+            else:
+                H = torch.stack(
+                    [
+                        self.field.single_step(H[:, t], D[:, t], R_shift[:, t])
+                        for t in range(T)
+                    ],
+                    dim=1,
+                )
 
-        o_list = []
-        for t in range(T):
-            o_t, _pi, _w = self.router(H[:, t])
-            o_list.append(o_t)
-        O = torch.stack(o_list, dim=1)
+        if self.parallel_ops and T > 1:
+            o_flat, _pi, _w = self.router(H.reshape(B * T, -1))
+            O = o_flat.view(B, T, -1)
+        else:
+            o_list = []
+            for t in range(T):
+                o_t, _pi, _w = self.router(H[:, t])
+                o_list.append(o_t)
+            O = torch.stack(o_list, dim=1)
 
         if ab.use_slow_memory:
             slow_slots = state.get("slow_slots")
             slow_filled = state.get("slow_filled")
             slow_ptr = int(state.get("slow_ptr") or 0)
-            U = torch.stack(
-                [
-                    self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
-                    for t in range(T)
-                ],
-                dim=1,
-            )
+            if self.parallel_ops and T > 1 and slow_slots is not None and slow_filled is not None:
+                # Expand ring state across T (same slots for all positions in the call)
+                Slt = slow_slots.size(1)
+                slots_bt = (
+                    slow_slots.unsqueeze(1)
+                    .expand(B, T, Slt, self.cfg.d_k, self.cfg.d_v)
+                    .reshape(B * T, Slt, self.cfg.d_k, self.cfg.d_v)
+                )
+                filled_bt = (
+                    slow_filled.unsqueeze(1).expand(B, T, Slt).reshape(B * T, Slt)
+                )
+                U = self.slow_mem.read(
+                    D.reshape(B * T, -1), slots=slots_bt, filled=filled_bt
+                ).view(B, T, -1)
+            else:
+                U = torch.stack(
+                    [
+                        self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
+                        for t in range(T)
+                    ],
+                    dim=1,
+                )
             # Ring writes: a snapshot every `segment_len` tokens (same cadence whether the tokens arrive in one
             # training call or one per decode call) + one at the end of a multi-token call.
             if will_write_slow and T > 0:
@@ -417,16 +452,18 @@ class NeuroField(nn.Module):
 
         loss = None
         # Always report gate/mem so train logs are not stuck at gate=0.000
-        _gate_mean = (
-            float(torch.stack([g.detach().float().reshape(()) for g in gates_audit]).mean().item())
-            if gates_audit
-            else 0.0
-        )
-        _mem_mean = (
-            float(torch.stack([x.detach().float().reshape(()) for x in mem_norms]).mean().item())
-            if mem_norms
-            else 0.0
-        )
+        if gates_audit:
+            _gate_mean = float(
+                torch.stack([g.detach().float().reshape(()) for g in gates_audit]).mean().item()
+            )
+        else:
+            _gate_mean = float(G.detach().mean().item()) if T > 0 else 0.0
+        if mem_norms:
+            _mem_mean = float(
+                torch.stack([x.detach().float().reshape(()) for x in mem_norms]).mean().item()
+            )
+        else:
+            _mem_mean = float(M.detach().norm().item()) if isinstance(M, Tensor) else 0.0
         metrics: dict[str, float] = {
             "path": "parallel",
             "k_depth": float(k_depth),
