@@ -25,12 +25,18 @@ class Dendrite(nn.Module):
     def window_features(self, xp: Tensor, T: int) -> Tensor:
         """Token-parallel part: tanh(sum_j c_j * x_{t-j} + b) for ALL t at once.
 
-        ``xp`` = cat([x_hist (B, W, D), X (B, T, D)], dim=1). The window used at step t is
-        ``xp[:, t+1 : t+1+W]`` (oldest first), exactly what the per-token loop builds. Only the
-        gamma*e_t term depends on the recurrence, so only that stays inside the loop.
+        ``xp`` = cat([x_hist (B, W, D), X (B, T, D)], dim=1) so len = W+T.
+        The window at step t matches the per-token loop (oldest first).
         """
+        W = self.window
+        need = W + T
+        if xp.size(1) < need:
+            raise ValueError(
+                f"dendrite.window_features: xp length {xp.size(1)} < W+T={need} "
+                f"(pass cat([x_hist, X], dim=1))"
+            )
         acc = self.coeffs[0] * xp[:, 1 : 1 + T]
-        for j in range(1, self.window):
+        for j in range(1, W):
             acc = acc + self.coeffs[j] * xp[:, 1 + j : 1 + j + T]
         return torch.tanh(acc + self.bias)
 
