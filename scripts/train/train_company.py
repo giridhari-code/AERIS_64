@@ -153,7 +153,7 @@ def main() -> None:
         model = DDP(
             model,
             device_ids=[device.index] if device.type == "cuda" else None,
-            find_unused_parameters=False  # set True only if an ablation leaves params unused,
+            find_unused_parameters=False,  # True only if ablations leave params unused,
         )
         if is_main():
             print(f"[distributed] DDP on {world} ranks")
@@ -234,7 +234,10 @@ def main() -> None:
 
         x, y = batch()
         with autocast_ctx(accel):
-            out = model(x, targets=y, lambda_err=0.03, lambda_bal=0.005)
+            out = model(
+                x, targets=y, lambda_err=0.03, lambda_bal=0.005,
+                collect_stats=(step % 100 == 0 or step == 1),
+            )
         loss = out.loss
         (loss / max(1, args.grad_accum)).backward()
         if step % max(1, args.grad_accum) == 0:
