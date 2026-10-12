@@ -180,6 +180,11 @@ def main() -> None:
     # Keep corpus on device for faster slice assembly (batch axis = parallel sequences)
     ids = ids.to(device)
     n_tok = int(ids.numel())
+    if n_tok < 8:
+        raise SystemExit(
+            f"ERROR: only {n_tok} tokens in corpus after tokenize — "
+            "refusing to train. Provide a longer non-empty --data file."
+        )
     # Short corpus: shrink seq so windows fit (avoids CUDA index OOB)
     if n_tok < args.seq_len + 2:
         new_seq = max(8, n_tok - 2)

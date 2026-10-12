@@ -1,6 +1,8 @@
 """Smoke tests for platform pieces (tokenizers, normaliser, rate limiter, auth)."""
 
 import pytest
+import pytest
+pytest.importorskip("fastapi")
 from fastapi import HTTPException
 
 from neurofield.serving.auth import RateLimiter, _key_valid
