@@ -6,6 +6,7 @@ Research code · production-oriented layout · not a finished frontier product
 | | |
 |---|---|
 | **Author** | Giridhari Karmakar · giriisdev@gmail.com |
+| **Full research paper (publish draft)** | [docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf](docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf)
 | **Paper (final handoff)** | [docs/paper/AESC_NeuroField_Paper_v2_Giridhari_Karmakar.pdf](docs/paper/AESC_NeuroField_Paper_v2_Giridhari_Karmakar.pdf) · prior: [v3](docs/paper/AESC_v2_Technical_Report_v3.pdf) · code-level report: [v2.3](docs/paper/AESC_v2_3_Technical_Report.pdf) |
 | **License** | See [LICENSE](LICENSE), [NOTICE](NOTICE), [DATA_POLICY.md](DATA_POLICY.md) |
 
