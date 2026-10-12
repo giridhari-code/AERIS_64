@@ -123,7 +123,7 @@ class FastMemory(nn.Module):
         # Looped-transformer style: depth shares weights; time is a scan over
         # precomputed (k,v,q). Chunk at truncate_window (BPTT boundary).
         reads: list[Tensor] = []
-        snaps: list[tuple[Tensor, Tensor]] = []
+        snaps: list[tuple] = []  # (ti, M, S)
         w_norms: list[Tensor] = []
         m_norms: list[Tensor] = []
         tw = max(1, int(truncate_window)) if truncate_window else T
@@ -152,7 +152,8 @@ class FastMemory(nn.Module):
                     seg_cnt += 1
                     if seg_cnt >= seg_len:
                         s_t = surprises[:, ti].detach() if surprises is not None else M.new_ones(B)
-                        snaps.append((M.detach(), s_t))
+                        # include position so caller can apply ring writes causally for U
+                        snaps.append((ti, M.detach(), s_t))
                         seg_cnt = 0
             t = t_end
             if t < T:
