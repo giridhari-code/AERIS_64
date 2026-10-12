@@ -220,10 +220,17 @@ class NeuroField(nn.Module):
         collect_stats: bool = True,
     ) -> ModelOutput:
         """
-        Parallel Form (main path): whole sequence + k depth passes.
+        Looped / Parallel Form (main path).
 
-        Sequential per-token time loop removed. Distributed (DDP) is unchanged —
-        it only shards training across ranks; each rank still runs this forward.
+        Structure matches a *looped Transformer* (shared block × k depth):
+          1. Embed + dendrite windows over all T   (parallel)
+          2. for j in 1..k_depth:                 (shared weights, like loop layers)
+               predict / gate / router over T     (parallel)
+               fast-memory causal scan            (write_seq; rank-1 recurrence)
+               neural field over T                (parallel)
+          3. Final router + slow ring + logits    (parallel)
+
+        DDP only shards ranks; each rank runs this same forward.
         """
         B, T = input_ids.shape
         device = input_ids.device
