@@ -218,8 +218,8 @@ class NeuroField(nn.Module):
         write_slow: bool = True,
         k_depth: Optional[int] = None,
         collect_stats: bool = True,
-    
-        label_smoothing: float = 0.0,) -> ModelOutput:
+        label_smoothing: float = 0.0,
+    ) -> ModelOutput:
         """
         Looped / Parallel Form (main path).
 

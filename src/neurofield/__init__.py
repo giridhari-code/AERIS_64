@@ -14,7 +14,7 @@ from .config import (
 from .model import ModelOutput, NeuroField
 from .training import Trainer
 
-__version__ = "2.4.0"
+__version__ = "2.5.1"
 __all__ = [
     "NeuroField",
     "ModelOutput",
