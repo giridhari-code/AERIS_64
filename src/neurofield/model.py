@@ -123,25 +123,32 @@ class NeuroField(nn.Module):
 
         self.P_f = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
         self.P_s = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
-        # Learnable scale so memory path can dominate when useful
-        self.mem_scale = nn.Parameter(torch.tensor(1.5))
+        # Learnable scales so BOTH memory paths can contribute (slow was under-scaled)
+        self.mem_scale = nn.Parameter(torch.tensor(2.0))
+        self.slow_scale = nn.Parameter(torch.tensor(1.5))
         self.out_norm = nn.LayerNorm(cfg.d_model)
         self.head = nn.Linear(cfg.d_model, cfg.vocab_size, bias=False)
 
         if cfg.tie_embeddings:
             self.head.weight = self.embed.weight
 
-        # Fast path strong; slow context path also active (ring reads need P_s)
+        # Balanced init: slow ring must not be a dead path under short-seq training
         nn.init.xavier_uniform_(self.P_f.weight, gain=2.0)
-        nn.init.xavier_uniform_(self.P_s.weight, gain=1.0)
+        nn.init.xavier_uniform_(self.P_s.weight, gain=1.5)
         with torch.no_grad():
             self.mem_scale.fill_(2.0)
+            self.slow_scale.fill_(1.5)
 
         self.meta = Metacognition(k_max=cfg.k_max)
         self.drop = nn.Dropout(cfg.dropout)
-        # Segment length = truncate window (fast M lifetime; ring write boundary)
+        # BPTT truncate for fast-M scan (can be long). Slow ring writes MORE often
+        # so the context path actually fills during typical train seq lengths.
         self._truncate_window = int(getattr(self.safety, "truncate_write_window", 32) or 32)
-        self._segment_len = self._truncate_window
+        slow_seg = int(getattr(self.safety, "slow_segment_len", 0) or 0)
+        if slow_seg <= 0:
+            # default: 1/4 of truncate, at least 4, at most 16 — more ring snaps
+            slow_seg = max(4, min(16, self._truncate_window // 4 or 4))
+        self._segment_len = max(1, slow_seg)
         # Slow query basis matches fast keys so context slots retrieve what was written
         self.slow_mem.tie_query_to(self.fast_mem.W_k)
 
@@ -366,6 +373,10 @@ class NeuroField(nn.Module):
                 G = torch.full(
                     (B, T, 1), float(ab.fixed_gate), device=device, dtype=X.dtype
                 ).clamp(max=self.safety.gate_cap)
+            # Train-time floor stops gate collapse (writes stay informative)
+            g_floor = float(getattr(self.safety, "gate_floor", 0.05) or 0.0)
+            if self.training and g_floor > 0.0 and not frozen and ab.use_neuromodulator:
+                G = G * (1.0 - g_floor) + g_floor
             if frozen:
                 G = torch.zeros_like(G)
 
@@ -461,7 +472,9 @@ class NeuroField(nn.Module):
             seg_pos = int(state.get("seg_pos") or 0)
 
         logits = self.head(
-            self.out_norm(O + self.mem_scale * self.P_f(R) + self.P_s(U))
+            self.out_norm(
+                O + self.mem_scale * self.P_f(R) + self.slow_scale * self.P_s(U)
+            )
         )
 
         loss = None
@@ -486,6 +499,10 @@ class NeuroField(nn.Module):
             "mean_S": float(S.detach().mean().item()) if T > 0 else 0.0,
             "want_replay": 1.0 if want_replay else 0.0,
             "meta_active": 1.0 if (ab.use_metacognition and gate_bias_meta is not None) else 0.0,
+            "slow_filled": float(
+                slow_filled.detach().float().sum().item()
+            ) if isinstance(slow_filled, Tensor) else 0.0,
+            "segment_len": float(self._segment_len),
         }
         if gate_bias_meta is not None:
             metrics["gate_bias_mean"] = float(gate_bias_meta.detach().float().mean().item())
@@ -496,15 +513,33 @@ class NeuroField(nn.Module):
                 ignore_index=-100,
                 label_smoothing=float(max(0.0, min(0.5, label_smoothing))),
             )
+            # Keep gate and skill mix alive so memory/router actually contribute
+            g_mean = G.mean()
+            gate_target = float(getattr(self.safety, "gate_target", 0.35) or 0.35)
+            lambda_gate = float(getattr(self.safety, "lambda_gate", 0.01) or 0.01)
+            gate_reg = (g_mean - gate_target).pow(2)
+            # mild entropy floor on last-pass router (avoid single-skill collapse)
+            if isinstance(pi, Tensor):
+                ent = -(pi * pi.clamp_min(1e-12).log()).sum(-1).mean()
+                n_sk = max(2, int(self.cfg.n_skills))
+                ent_max = float(torch.log(torch.tensor(float(n_sk))))
+                ent_reg = F.relu(0.2 * ent_max - ent)  # penalize very low entropy
+            else:
+                ent_reg = g_mean.new_zeros(())
+            lambda_ent = float(getattr(self.safety, "lambda_ent", 0.005) or 0.005)
             loss = (
                 ce
                 + lambda_err * (err_energy / max(1, k_depth))
                 + lambda_bal * (bal_loss / max(1, T * k_depth))
+                + lambda_gate * gate_reg
+                + lambda_ent * ent_reg
             )
             metrics.update(
                 {
                     "ce": float(ce.detach().item()),
                     "err_energy": float((err_energy / max(1, k_depth)).detach().item()),
+                    "gate_reg": float(gate_reg.detach().item()),
+                    "ent_reg": float(ent_reg.detach().item()) if torch.is_tensor(ent_reg) else 0.0,
                 }
             )
 

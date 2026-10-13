@@ -293,7 +293,7 @@ def main() -> None:
         x, y = batch()
         with autocast_ctx(accel):
             fw_kwargs = dict(
-                lambda_err=0.03, lambda_bal=0.005,
+                lambda_err=0.03, lambda_bal=0.02,
                 label_smoothing=float(getattr(args, "label_smoothing", 0.0) or 0.0),
                 collect_stats=(step % 100 == 0 or step == 1),
             )
@@ -325,13 +325,16 @@ def main() -> None:
 
         last_loss = float(loss.item())
         if step % 100 == 0 or step == 1:
-            gate = (out.metrics or {}).get("gate_mean", 0.0)
+            met = out.metrics or {}
+            gate = met.get("gate_mean", 0.0)
+            slow_f = met.get("slow_filled", 0.0)
+            k_d = met.get("k_depth", 0.0)
             elapsed = max(1e-6, time.time() - t0)
             tokens_done = step * args.batch_size * args.seq_len
             tok_s = tokens_done / elapsed
             print(
                 f"  step {step:5d} | loss={last_loss:.3f} | "
-                f"lr={lr_now:.2e} | gate={gate:.3f} | "
+                f"lr={lr_now:.2e} | gate={gate:.3f} | slow={slow_f:.0f} | k={k_d:.0f} | "
                 f"{tok_s:.0f} tok/s | seq={args.seq_len} bs={args.batch_size}"
             )
     if any(p.grad is not None for p in model.parameters() if p.requires_grad):

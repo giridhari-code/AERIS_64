@@ -19,9 +19,10 @@ class Neuromodulator(nn.Module):
 
     def __init__(self, d_model: int):
         super().__init__()
-        self.a_s = nn.Parameter(torch.tensor(3.0))
-        self.a_c = nn.Parameter(torch.tensor(0.25))
-        self.bias = nn.Parameter(torch.tensor(1.0))
+        # Positive a_s keeps surprise → higher gate (prevents early collapse to g≈0)
+        self.a_s = nn.Parameter(torch.tensor(2.5))
+        self.a_c = nn.Parameter(torch.tensor(0.15))
+        self.bias = nn.Parameter(torch.tensor(0.5))  # σ(0.5)≈0.62 prior write rate
 
     def forward(
         self,

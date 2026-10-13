@@ -41,8 +41,9 @@ class FastMemory(nn.Module):
         self.W_q = nn.Linear(d_model, d_k, bias=False)
         self.W_v = nn.Linear(d_model, d_v, bias=False)
 
-        # Decay must survive a full segment (≈ truncate window tokens).
-        self.log_lambda = nn.Parameter(torch.linspace(3.5, 6.5, d_k))
+        # Decay survives a segment but stays plastic enough that writes matter
+        # sigmoid(2.2)≈0.90 … sigmoid(4.5)≈0.99 (was 0.97–0.998 → almost frozen)
+        self.log_lambda = nn.Parameter(torch.linspace(2.2, 4.5, d_k))
 
         nn.init.xavier_uniform_(self.W_k.weight)
         self.W_q.weight.data.copy_(self.W_k.weight.data)
