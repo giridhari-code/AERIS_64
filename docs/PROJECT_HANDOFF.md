@@ -40,3 +40,8 @@
 Embed → causal dendrite → k depth (predict/gate/router/fast-M scan/field) → slow ring → logits.
 
 **Handoff complete.** Design stands; scale is open research.
+
+
+## Paper alignment
+
+See [docs/audits/PAPER_CODE_ALIGNMENT_100.md](audits/PAPER_CODE_ALIGNMENT_100.md) and `scripts/eval/paper_alignment_smoke.py`.
