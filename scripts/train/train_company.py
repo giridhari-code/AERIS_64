@@ -309,11 +309,19 @@ def main() -> None:
             opt.zero_grad(set_to_none=True)
 
         # Paper Appendix A: W_s ← (1-η)W_s + η Σ_b (S^b / Σ S) M^b
-        if step % replay_every == 0 and out.state is not None and "M" in out.state:
+        # Also honour metacognition want_replay when the control layer requests consolidation.
+        want_replay = bool((out.state or {}).get("want_replay")) or bool(
+            (out.metrics or {}).get("want_replay")
+        )
+        if out.state is not None and "M" in out.state and (
+            step % replay_every == 0 or want_replay
+        ):
             S = out.metrics.get("_seq_surprise") if out.metrics else None
             if S is None or not torch.is_tensor(S):
                 S = torch.ones(x.size(0), device=device)
             model.replay_slow(out.state["M"], S, replay_eta)
+            if want_replay and hasattr(model, "meta") and hasattr(model.meta, "acknowledge_replay"):
+                model.meta.acknowledge_replay()
 
         last_loss = float(loss.item())
         if step % 100 == 0 or step == 1:
