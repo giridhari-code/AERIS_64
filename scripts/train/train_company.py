@@ -363,8 +363,9 @@ def main() -> None:
         meta_tok = tok.to_vocab_dict()
         stoi, itos = None, None
 
-    # DDP: save the unwrapped module; rank 0 only
-    to_save = raw_model if world > 1 else model
+    # Always save the unwrapped module (compile wraps as OptimizedModule with
+    # _orig_mod.* keys — those break server load looking for embed.weight).
+    to_save = raw_model
     if not is_main():
         dist_cleanup()
         return

@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
-from neurofield.checkpoint.infer import infer_model_dims, remap_legacy_keys
+from neurofield.checkpoint.infer import infer_model_dims, remap_legacy_keys, strip_compile_prefix
 from neurofield.checkpoint.io import load_checkpoint
 from neurofield.config import ModelConfig, NeuroFieldConfig, SafetyConfig, load_config
 from neurofield.model import NeuroField
@@ -75,6 +75,9 @@ def load_model_from_checkpoint(
 ) -> tuple[NeuroField, Any, NeuroFieldConfig, dict[str, Any]]:
     """Return (model.eval() on `device`, tokenizer, merged config, meta)."""
     ckpt = load_checkpoint(checkpoint)
+    ckpt["model"], stripped = strip_compile_prefix(ckpt["model"])
+    if stripped:
+        logger.warning("Stripped torch.compile prefix from %d keys", len(stripped))
     ckpt["model"], renamed = remap_legacy_keys(ckpt["model"])
     if renamed:
         logger.warning("Renamed legacy tensor keys: %s", renamed)

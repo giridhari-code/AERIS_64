@@ -48,6 +48,20 @@ def count_params_from_shapes(state: Mapping[str, Any], tied_head: bool = True) -
 # Old checkpoints used a different tensor name. The (d_k, d_v) matrix is the
 # same object; leaving it unmapped made servers load with a RANDOM slow memory
 # (strict=False hid it).
+def strip_compile_prefix(state: dict) -> tuple[dict, list[str]]:
+    """torch.compile saves keys as _orig_mod.X — normalize for load."""
+    out = {}
+    fixed = []
+    for k, v in state.items():
+        if k.startswith("_orig_mod."):
+            nk = k[len("_orig_mod."):]
+            out[nk] = v
+            fixed.append(f"{k} -> {nk}")
+        else:
+            out[k] = v
+    return out, fixed
+
+
 LEGACY_KEY_MAP = {"slow_mem.W_s": "slow_mem.M_s"}
 
 
