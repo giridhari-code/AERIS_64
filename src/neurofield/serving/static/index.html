@@ -264,6 +264,26 @@
     }
     .toolbar button.link:hover { color: var(--text); }
 
+
+    .bubble-actions {
+      display: flex; gap: 8px; margin-top: 8px;
+      opacity: 0.55; font-size: 0.68rem;
+    }
+    .msg-row.bot:hover .bubble-actions { opacity: 1; }
+    .bubble-actions button {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); border-radius: 6px; padding: 2px 8px;
+      cursor: pointer; font-size: 0.68rem;
+    }
+    .bubble-actions button:hover { color: var(--text); border-color: var(--accent); }
+    .banner {
+      max-width: 720px; margin: 0 auto 8px; padding: 8px 12px;
+      font-size: 0.75rem; color: var(--muted);
+      background: var(--surface2); border: 1px solid var(--border-soft);
+      border-radius: 10px; line-height: 1.4;
+    }
+    .banner strong { color: var(--accent); }
+
     @media (max-width: 480px) {
       .bubble { max-width: 95%; font-size: 0.92rem; }
       header h1 { font-size: 0.9rem; }
@@ -287,7 +307,7 @@
   <main id="chat" aria-live="polite">
     <div class="welcome" id="welcome">
       <h2>Hi — I am AERIS_64</h2>
-      <p>Helpful, direct, honest about limits. Small research checkpoint — not a frontier assistant.</p>
+      <p>Helpful, direct, honest about limits. Quality depends on your trained checkpoint and data — not a frontier assistant.</p>
       <div class="chips">
         <button type="button" class="chip" data-q="Who are you?">Who are you?</button>
         <button type="button" class="chip" data-q="Explain fast memory">Fast memory</button>
@@ -305,10 +325,10 @@
       </div>
       <div class="toolbar">
         <label title="Max new tokens">max
-          <input type="number" id="maxTok" min="8" max="2048" value="128" />
+          <input type="number" id="maxTok" min="8" max="2048" value="64" />
         </label>
         <label title="Sampling temperature">temp
-          <input type="number" id="temp" min="0" max="2" step="0.1" value="0.7" />
+          <input type="number" id="temp" min="0" max="2" step="0.1" value="0.4" />
         </label>
         <label title="Let server pick length">
           <input type="checkbox" id="autoLen" checked /> auto
@@ -328,8 +348,28 @@
     const statusText = document.getElementById("statusText");
     const latencyEl = document.getElementById("latency");
     const welcome = document.getElementById("welcome");
-    let sessionId = null;
+    let sessionId = localStorage.getItem("aeris_session") || null;
     let busy = false;
+    let modelName = "";
+
+    // restore settings
+    try {
+      const s = JSON.parse(localStorage.getItem("aeris_ui") || "{}");
+      if (s.maxTok) document.getElementById("maxTok").value = s.maxTok;
+      if (s.temp != null) document.getElementById("temp").value = s.temp;
+      if (s.autoLen != null) document.getElementById("autoLen").checked = !!s.autoLen;
+    } catch (_) {}
+
+    function saveSettings() {
+      localStorage.setItem("aeris_ui", JSON.stringify({
+        maxTok: document.getElementById("maxTok").value,
+        temp: document.getElementById("temp").value,
+        autoLen: document.getElementById("autoLen").checked,
+      }));
+    }
+    ["maxTok", "temp", "autoLen"].forEach(id => {
+      document.getElementById(id).addEventListener("change", saveSettings);
+    });
 
     function hideWelcome() {
       if (welcome) welcome.style.display = "none";
@@ -352,8 +392,27 @@
       who.textContent = role === "user" ? "You" : "AERIS_64";
       bubble.appendChild(who);
       const body = document.createElement("div");
+      body.className = "body";
       body.textContent = text;
       bubble.appendChild(body);
+      if (role === "bot" && text && !text.startsWith("Error:") && !text.startsWith("Network")) {
+        const actions = document.createElement("div");
+        actions.className = "bubble-actions";
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.textContent = "Copy";
+        copyBtn.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(text);
+            copyBtn.textContent = "Copied";
+            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1200);
+          } catch (_) {
+            copyBtn.textContent = "Fail";
+          }
+        };
+        actions.appendChild(copyBtn);
+        bubble.appendChild(actions);
+      }
       row.appendChild(bubble);
       chat.appendChild(row);
       if (meta) {
@@ -380,11 +439,21 @@
 
     async function checkHealth() {
       try {
-        const r = await fetch("/healthz");
+        let r = await fetch("/readyz");
+        if (!r.ok) r = await fetch("/healthz");
         if (r.ok) {
           statusEl.classList.add("ok");
           statusEl.classList.remove("err");
-          statusText.textContent = "online";
+          let label = "online";
+          try {
+            const j = await r.json();
+            if (j.model) {
+              modelName = j.model;
+              label = j.model;
+            } else if (j.status) label = j.status;
+          } catch (_) {}
+          statusText.textContent = label;
+          statusEl.title = modelName ? ("model: " + modelName) : "API health";
         } else throw new Error();
       } catch {
         statusEl.classList.remove("ok");
@@ -402,6 +471,7 @@
       autoGrow();
       addBubble("user", q);
       setBusy(true);
+      saveSettings();
 
       const typingRow = document.createElement("div");
       typingRow.className = "msg-row bot";
@@ -410,7 +480,7 @@
       chat.appendChild(typingRow);
       chat.scrollTop = chat.scrollHeight;
 
-      const maxTok = parseInt(document.getElementById("maxTok").value, 10) || 128;
+      const maxTok = parseInt(document.getElementById("maxTok").value, 10) || 64;
       const temp = parseFloat(document.getElementById("temp").value);
       const auto = document.getElementById("autoLen").checked;
 
@@ -418,7 +488,7 @@
         const body = {
           prompt: q,
           max_new_tokens: maxTok,
-          temperature: Number.isFinite(temp) ? temp : 0.7,
+          temperature: Number.isFinite(temp) ? temp : 0.4,
           auto_length: auto,
           session_id: sessionId || null,
         };
@@ -440,8 +510,10 @@
         } else {
           const j = await r.json();
           sessionId = j.session_id || sessionId;
+          if (sessionId) localStorage.setItem("aeris_session", sessionId);
           const lat = j.latency_ms != null ? fmtMs(j.latency_ms) : "";
-          addBubble("bot", j.text || "(empty)", lat ? "latency " + lat : "");
+          const reply = (j.text || "").trim() || "(empty reply — train with more SFT data)";
+          addBubble("bot", reply, lat ? "latency " + lat : "");
           latencyEl.textContent = lat ? "last " + lat : "";
         }
       } catch (e) {
@@ -452,7 +524,7 @@
       promptEl.focus();
     }
 
-    sendBtn.onclick = () => send();
+    sendBtn.addEventListener("click", () => send());
     promptEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -460,44 +532,28 @@
       }
     });
 
-    document.querySelectorAll(".chip").forEach((c) => {
-      c.onclick = () => send(c.getAttribute("data-q"));
+    document.querySelectorAll(".chip").forEach(ch => {
+      ch.addEventListener("click", () => send(ch.getAttribute("data-q")));
     });
 
     async function resetSession() {
-      if (sessionId) {
-        try {
+      try {
+        if (sessionId) {
           await fetch("/v1/reset?session_id=" + encodeURIComponent(sessionId), { method: "POST" });
-        } catch (_) {}
-      }
+        }
+      } catch (_) {}
       sessionId = null;
+      localStorage.removeItem("aeris_session");
       chat.innerHTML = "";
-      // restore welcome
-      const w = document.createElement("div");
-      w.className = "welcome";
-      w.id = "welcome";
-      w.innerHTML = document.getElementById("welcome")
-        ? ""
-        : "";
-      // re-inject welcome markup
-      chat.innerHTML = `
-        <div class="welcome" id="welcome">
-          <h2>Hi — I am AERIS_64</h2>
-          <p>Helpful, direct, honest about limits. Small research checkpoint — not a frontier assistant.</p>
-          <div class="chips">
-            <button type="button" class="chip" data-q="Who are you?">Who are you?</button>
-            <button type="button" class="chip" data-q="Explain fast memory">Fast memory</button>
-            <button type="button" class="chip" data-q="Write a python hello">Python hello</button>
-            <button type="button" class="chip" data-q="Namaste">Namaste</button>
-          </div>
-        </div>`;
-      document.querySelectorAll(".chip").forEach((c) => {
-        c.onclick = () => send(c.getAttribute("data-q"));
-      });
+      if (welcome) {
+        chat.appendChild(welcome);
+        welcome.style.display = "";
+      }
       latencyEl.textContent = "";
     }
-    document.getElementById("btnReset").onclick = resetSession;
-    document.getElementById("btnClear").onclick = resetSession;
+    document.getElementById("btnReset").addEventListener("click", resetSession);
+    document.getElementById("btnClear").addEventListener("click", resetSession);
   </script>
+</script>
 </body>
 </html>
