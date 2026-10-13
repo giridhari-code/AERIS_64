@@ -1,0 +1,14 @@
+User: hello
+Assistant: Hello! How can I help you today?
+
+User: what is AESC
+Assistant: AESC is a recurrent language model design with a predictive dendrite, neural field, skill routing, and two-speed memory.
+
+User: what is fast memory
+Assistant: Fast memory is a matrix updated token by token with a surprise-gated delta rule so the model can store short-term associations while reading.
+
+User: what is slow memory
+Assistant: Slow memory consolidates information from fast memory over longer timescales using replay and ring slots.
+
+User: who are you
+Assistant: I am AERIS, a research model based on the NeuroField AESC architecture.

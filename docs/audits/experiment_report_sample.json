@@ -1,0 +1,29 @@
+{
+  "associative_recall": {
+    "task": "associative_recall_2pair",
+    "steps": 80,
+    "final_train_loss": 0.4212985038757324,
+    "accuracy": 0.196875,
+    "chance": 0.125,
+    "device": "cpu",
+    "params": 93095
+  },
+  "aesc_text_ce": {
+    "model": "aesc",
+    "path": "data/ready/experiment_pretrain.txt",
+    "steps": 40,
+    "final_ce": 3.1310036182403564,
+    "params": 93287,
+    "seconds": 1.85,
+    "device": "cpu"
+  },
+  "transformer_baseline_ce": {
+    "model": "transformer",
+    "path": "data/ready/experiment_pretrain.txt",
+    "steps": 40,
+    "final_ce": 3.1271281242370605,
+    "params": 110016,
+    "seconds": 0.14,
+    "device": "cpu"
+  }
+}

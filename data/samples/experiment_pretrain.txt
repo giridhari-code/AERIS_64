@@ -1,0 +1,10 @@
+Language models predict the next token from context.
+A dendrite mixes a short window of past embeddings with a delayed prediction error.
+The neural field refines a hidden state using local coupling and memory reads.
+Fast memory stores key value associations with a gated delta rule.
+Slow memory consolidates useful fast weights through surprise weighted replay.
+Routing selects a small set of skill modules for each position.
+Causal models must not let future tokens change past logits.
+Training minimises cross entropy on the next token plus optional auxiliary losses.
+Associative recall tests whether a key retrieves the value written earlier in the sequence.
+Transformers use self attention. AESC uses field dynamics and two speed memory instead.
