@@ -196,7 +196,9 @@ class NeuroField(nn.Module):
             "k_depth": None,       # per-pass carry below is filled by forward()
             "Hin": None, "M_pass": None, "D_pass": None, "R_pass": None,
             "bar_S": None,  # per-session running surprise (isolation)
+            "last_S": None,  # (B,) last mean surprise — metacognition input
             "last_router_ent": None,  # prior-step conflict for metacognition
+            "want_replay": False,
             # Context window ring in slow memory
             "slow_slots": torch.zeros(
                 batch, self.slow_mem.n_slots, self.cfg.d_k, self.cfg.d_v, device=device
@@ -240,9 +242,50 @@ class NeuroField(nn.Module):
         if state is None:
             state = self._init_state(B, device)
 
-        k_depth = int(k_depth or max(1, int(self.cfg.k_max)))
-        if not ab.use_metacognition:
+        # Metacognition: set depth k + encoding bias δ from *previous* step signals
+        # (carried in state). Same path for train (T>1) and decode (T=1).
+        self.meta.training = bool(self.training)
+        gate_bias_meta = None  # (B,) or None
+        want_replay = bool(state.get("want_replay") or False)
+        bar_S_state = state.get("bar_S")
+        # Always run meta for encoding bias δ when enabled; adaptive *k* only on
+        # decode steps (T==1). Multi-token train/prefill keeps k_max so one
+        # parallel depth applies to the whole chunk (logits stay prefix-consistent).
+        last_S = state.get("last_S")
+        if last_S is None or not torch.is_tensor(last_S):
+            last_S = torch.zeros(B, device=device)
+        else:
+            last_S = last_S.to(device).reshape(-1)
+            if last_S.numel() == 1 and B > 1:
+                last_S = last_S.expand(B)
+            elif last_S.numel() != B:
+                last_S = last_S.mean().expand(B)
+
+        if ab.use_metacognition:
+            ent_prev = state.get("last_router_ent")
+            mem_n = state.get("M")
+            mem_norm = mem_n.detach().norm(dim=(-2, -1)) if isinstance(mem_n, Tensor) else None
+            decision = self.meta.step(
+                last_S,
+                bar_S=bar_S_state if torch.is_tensor(bar_S_state) else None,
+                router_entropy=ent_prev if torch.is_tensor(ent_prev) else None,
+                mem_norm=mem_norm,
+            )
+            gate_bias_meta = decision.gate_bias  # (B,)
+            bar_S_state = decision.bar_S
+            want_replay = bool(decision.want_replay)
+            k_from_meta = max(1, min(int(self.cfg.k_max), int(decision.k)))
+        else:
+            k_from_meta = max(1, int(ab.fixed_k))
+
+        if k_depth is not None:
+            k_depth = max(1, int(k_depth))
+        elif not ab.use_metacognition:
             k_depth = max(1, int(ab.fixed_k))
+        elif T == 1:
+            k_depth = k_from_meta  # decode / generate: adaptive effort
+        else:
+            k_depth = max(1, int(self.cfg.k_max))  # train/prefill: full depth, parallel
 
         X = self.drop(self.embed(input_ids))  # (B, T, D)
         W = self.dendrite.window
@@ -259,6 +302,7 @@ class NeuroField(nn.Module):
         gates_audit: list[Tensor] = []
         write_norms: list[Tensor] = []
         mem_norms: list[Tensor] = []
+        pi: Tensor | None = None
 
         def _shift(x: Tensor) -> Tensor:
             return torch.cat([x.new_zeros(x[:, :1].shape), x[:, :-1]], dim=1)
@@ -302,11 +346,20 @@ class NeuroField(nn.Module):
             S = E.abs().mean(dim=-1)  # (B, T)
 
             if ab.use_neuromodulator:
-                activity = H.abs().mean(dim=-1)
+                activity = H.abs().mean(dim=-1)  # (B, T)
+                # δ from causal relative surprise (cumsum) — no future tokens in the baseline.
+                # Metacognition owns k (decode), want_replay, bar_S tracking separately.
+                t_idx = torch.arange(1, T + 1, device=S.device, dtype=S.dtype).view(1, T)
+                cmean = S.detach().cumsum(dim=-1) / t_idx
+                rel = S / cmean.clamp(min=1e-4)
+                delta = torch.zeros_like(S)
+                delta = torch.where(rel > 1.5, torch.full_like(delta, 0.5), delta)
+                delta = torch.where(rel < 0.5, torch.full_like(delta, -0.5), delta)
                 logit = (
                     self.neuromod.a_s * (S - 0.5)
                     + self.neuromod.a_c * activity
                     + self.neuromod.bias
+                    + delta
                 )
                 G = torch.sigmoid(logit).unsqueeze(-1).clamp(max=self.safety.gate_cap)
             else:
@@ -431,7 +484,11 @@ class NeuroField(nn.Module):
             "gate_mean": _gate_mean,
             "mem_norm": _mem_mean,
             "mean_S": float(S.detach().mean().item()) if T > 0 else 0.0,
+            "want_replay": 1.0 if want_replay else 0.0,
+            "meta_active": 1.0 if (ab.use_metacognition and gate_bias_meta is not None) else 0.0,
         }
+        if gate_bias_meta is not None:
+            metrics["gate_bias_mean"] = float(gate_bias_meta.detach().float().mean().item())
         if targets is not None:
             ce = F.cross_entropy(
                 logits.reshape(-1, self.cfg.vocab_size),
@@ -464,6 +521,14 @@ class NeuroField(nn.Module):
                 "final_mem_norm": float(M.detach().norm()) if isinstance(M, Tensor) else 0.0,
             }
 
+        # Signals for the *next* call's metacognition (decode T=1 or next train batch)
+        last_S_out = S.detach().mean(dim=-1) if T > 0 else torch.zeros(B, device=device)
+        # mean router entropy over positions (last pass)
+        if T > 0 and isinstance(pi, Tensor):
+            last_ent_out = (-(pi * pi.clamp_min(1e-12).log()).sum(-1)).mean(dim=-1).detach()
+        else:
+            last_ent_out = state.get("last_router_ent")
+
         new_state = {
             **state,
             "h": H[:, -1].detach() if T else state.get("h"),
@@ -484,6 +549,10 @@ class NeuroField(nn.Module):
             "slow_ptr": slow_ptr,
             "seg_pos": seg_pos,
             "memory_frozen": frozen,
+            "last_S": last_S_out,
+            "last_router_ent": last_ent_out,
+            "bar_S": bar_S_state.detach() if torch.is_tensor(bar_S_state) else bar_S_state,
+            "want_replay": want_replay,
         }
         return ModelOutput(
             logits=logits, loss=loss, metrics=metrics, audit=audit, state=new_state
