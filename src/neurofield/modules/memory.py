@@ -164,17 +164,20 @@ class FastMemory(nn.Module):
             # Store every M after step i for reads.
             M_hist = M.new_empty(B, C, dk, self.d_v)
             M_cur = M
-            M_before_chunk = M
+            M_before = M
             for i in range(C):
                 # M_cur = P[:,i] @ M_cur + b[:,i]
                 M_cur = torch.einsum("bkj,bjd->bkd", P[:, i], M_cur) + b[:, i]
+                # Per-step norm (same as token write / T=1 decode) — required for
+                # full-sequence ↔ token-by-token ring snap parity.
+                if max_n > 0:
+                    mn = M_cur.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                    M_cur = M_cur * (max_n / mn).clamp(max=1.0)
                 M_hist[:, i] = M_cur
                 if collect_stats:
-                    if i == 0:
-                        w_norms.append((M_cur - M_before_chunk).detach().norm())
-                    else:
-                        w_norms.append((M_cur - M_hist[:, i - 1]).detach().norm())
+                    w_norms.append((M_cur - M_before).detach().norm())
                     m_norms.append(M_cur.detach().norm())
+                    M_before = M_cur
                 if seg_len > 0:
                     seg_cnt += 1
                     if seg_cnt >= seg_len:
@@ -187,14 +190,7 @@ class FastMemory(nn.Module):
                         snaps.append((ti, M_cur.detach(), s_t))
                         seg_cnt = 0
 
-            # norm once per chunk (stability; matches prior intent of max_memory_norm)
-            if max_n > 0:
-                mn = M_cur.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                scale = (max_n / mn).clamp(max=1.0)
-                M_cur = M_cur * scale
-                M_hist = M_hist * scale.unsqueeze(1)
-
-            # reads: r_i = M_i^T q_i
+            # reads: r_i = M_i^T q_i  (after per-step norm)
             reads_t.append(torch.einsum("bckd,bck->bcd", M_hist, qc))
             M = M_cur
             t = t_end
