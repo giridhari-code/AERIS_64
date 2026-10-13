@@ -119,7 +119,7 @@ class NeuroField(nn.Module):
         self._segment_len = segment
         # Token-parallel ops: embed/windows always; router+field+slow-read batched over T
         # when enabled. Delta-rule memory stays sequential. NEUROFIELD_PARALLEL_OPS=0 disables.
-        self.parallel_ops = os.environ.get("NEUROFIELD_PARALLEL_OPS", "1") != "0"
+        self.parallel_ops = True  # looped form only; token-serial outer path removed
 
         self.P_f = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
         self.P_s = nn.Linear(cfg.d_v, cfg.d_model, bias=False)
@@ -221,17 +221,16 @@ class NeuroField(nn.Module):
         label_smoothing: float = 0.0,
     ) -> ModelOutput:
         """
-        Looped / Parallel Form (main path).
+        Looped form only (token-by-token outer loop removed).
 
-        Structure matches a *looped Transformer* (shared block × k depth):
-          1. Embed + dendrite windows over all T   (parallel)
-          2. for j in 1..k_depth:                 (shared weights, like loop layers)
-               predict / gate / router over T     (parallel)
-               fast-memory causal scan            (write_seq; rank-1 recurrence)
-               neural field over T                (parallel)
-          3. Final router + slow ring + logits    (parallel)
+        1. Embed + dendrite windows over all T
+        2. for j in 1..k_depth (shared weights):
+             predict / gate / router over T
+             fast-memory causal scan via write_seq (rank-1 recurrence, not an outer token API)
+             neural field over T
+        3. Final router + slow ring + logits
 
-        DDP only shards ranks; each rank runs this same forward.
+        Decode still passes T=1 with state; that is the same function, not a second code path.
         """
         B, T = input_ids.shape
         device = input_ids.device
@@ -320,23 +319,11 @@ class NeuroField(nn.Module):
             D = D_win + self.dendrite.gamma * E
 
             # Token-parallel router (positions independent given H)
-            if self.parallel_ops:
-                o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1))
-                O = o_flat.view(B, T, -1)
-                pi = pi_flat.view(B, T, -1)
-                ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
-                bal_loss = bal_loss + (pi.mean(0) - 1.0 / max(1, self.cfg.n_skills)).pow(2).sum()  # mean over B → (T, n_skills); same as per-t loop
-            else:
-                o_list = []
-                ent_list = []
-                for t in range(T):
-                    o_t, pi_t, _w = self.router(H[:, t])
-                    o_list.append(o_t)
-                    ent_list.append(-(pi_t * pi_t.clamp_min(1e-12).log()).sum(-1).mean().detach())
-                    bal_loss = bal_loss + (
-                        pi_t.mean(0) - 1.0 / max(1, self.cfg.n_skills)
-                    ).pow(2).sum()
-                O = torch.stack(o_list, dim=1)
+            o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1))
+            O = o_flat.view(B, T, -1)
+            pi = pi_flat.view(B, T, -1)
+            ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
+            bal_loss = bal_loss + (pi.mean(0) - 1.0 / max(1, self.cfg.n_skills)).pow(2).sum()
 
             if ab.use_fast_memory:
                 # Every depth pass owns its fast memory. Carry across decode calls.
@@ -346,50 +333,21 @@ class NeuroField(nn.Module):
                     else torch.zeros(B, self.cfg.d_k, self.cfg.d_v, device=device, dtype=X.dtype)
                 )
                 d_prev0 = D_prev_pass[_j] if D_prev_pass[_j] is not None else None
-                if self.parallel_ops:
-                    # Parallel W_k/W_v/W_q; only rank-1 M update is sequential
-                    M, R, more_snaps, seg_cnt, w_n, m_n = self.fast_mem.write_seq(
-                        M, D, O, G,
-                        d_prev0=d_prev0,
-                        truncate_window=self._truncate_window,
-                        max_memory_norm=float(self.safety.max_memory_norm or 0),
-                        segment_len=self._segment_len if (will_write_slow and _j == k_depth - 1) else 0,
-                        seg_cnt0=seg_cnt,
-                        surprises=S if (will_write_slow and _j == k_depth - 1) else None,
-                        collect_stats=collect,
-                    )
-                    snaps.extend(more_snaps)
-                    if collect:
-                        gates_audit.extend([G[:, t].detach().mean() for t in range(T)])
-                        write_norms.extend(w_n)
-                        mem_norms.extend(m_n)
-                else:
-                    reads = []
-                    for t in range(T):
-                        if t > 0:
-                            d_prev = D[:, t - 1]
-                        elif d_prev0 is not None:
-                            d_prev = d_prev0
-                        else:
-                            d_prev = torch.zeros_like(D[:, 0])
-                        M_before = M
-                        if t > 0 and (t % max(1, self._truncate_window) == 0):
-                            M = M.detach()
-                        M = self.fast_mem.write(M, d_prev, O[:, t], G[:, t])
-                        if self.safety.max_memory_norm > 0:
-                            mn = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                            M = M * (self.safety.max_memory_norm / mn).clamp(max=1.0)
-                        if collect:
-                            write_norms.append((M - M_before).detach().norm())
-                            mem_norms.append(M.detach().norm())
-                            gates_audit.append(G[:, t].detach().mean())
-                        reads.append(self.fast_mem.read(M, D[:, t]))
-                        if will_write_slow and _j == k_depth - 1:
-                            seg_cnt += 1
-                            if seg_cnt >= self._segment_len:
-                                snaps.append((t, M.detach(), S[:, t].detach()))
-                                seg_cnt = 0
-                    R = torch.stack(reads, dim=1)
+                M, R, more_snaps, seg_cnt, w_n, m_n = self.fast_mem.write_seq(
+                    M, D, O, G,
+                    d_prev0=d_prev0,
+                    truncate_window=self._truncate_window,
+                    max_memory_norm=float(self.safety.max_memory_norm or 0),
+                    segment_len=self._segment_len if (will_write_slow and _j == k_depth - 1) else 0,
+                    seg_cnt0=seg_cnt,
+                    surprises=S if (will_write_slow and _j == k_depth - 1) else None,
+                    collect_stats=collect,
+                )
+                snaps.extend(more_snaps)
+                if collect:
+                    gates_audit.extend([G[:, t].detach().mean() for t in range(T)])
+                    write_norms.extend(w_n)
+                    mem_norms.extend(m_n)
             else:
                 M = state.get("M")
                 if M is None:
@@ -401,30 +359,14 @@ class NeuroField(nn.Module):
             M_new.append(M.detach())
             D_new.append(D[:, -1].detach())
             R_new.append(R[:, -1].detach())
-            if self.parallel_ops:
-                H = self.field.single_step(
-                    H.reshape(B * T, -1),
-                    D.reshape(B * T, -1),
-                    R_shift.reshape(B * T, -1),
-                ).view(B, T, -1)
-            else:
-                H = torch.stack(
-                    [
-                        self.field.single_step(H[:, t], D[:, t], R_shift[:, t])
-                        for t in range(T)
-                    ],
-                    dim=1,
-                )
+            H = self.field.single_step(
+                H.reshape(B * T, -1),
+                D.reshape(B * T, -1),
+                R_shift.reshape(B * T, -1),
+            ).view(B, T, -1)
 
-        if self.parallel_ops:
-            o_flat, _pi, _w = self.router(H.reshape(B * T, -1))
-            O = o_flat.view(B, T, -1)
-        else:
-            o_list = []
-            for t in range(T):
-                o_t, _pi, _w = self.router(H[:, t])
-                o_list.append(o_t)
-            O = torch.stack(o_list, dim=1)
+        o_flat, _pi, _w = self.router(H.reshape(B * T, -1))
+        O = o_flat.view(B, T, -1)
 
         if ab.use_slow_memory:
             slow_slots = state.get("slow_slots")
@@ -437,15 +379,10 @@ class NeuroField(nn.Module):
                 U_parts: list[Tensor] = []
                 snap_i = 0
                 for t in range(T):
-                    if self.parallel_ops:
-                        # single-position read (same as loop)
-                        U_parts.append(
-                            self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
-                        )
-                    else:
-                        U_parts.append(
-                            self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
-                        )
+                    # causal ring: read before applying snapshot that closes at t
+                    U_parts.append(
+                        self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
+                    )
                     # apply any snapshot that closed on this position (visible from t+1)
                     while snap_i < len(snaps) and snaps[snap_i][0] == t:
                         _ti, M_snap, s_snap = snaps[snap_i]
@@ -457,16 +394,7 @@ class NeuroField(nn.Module):
                 U = torch.stack(U_parts, dim=1)
                 seg_pos = seg_cnt
             else:
-                if self.parallel_ops:
-                    U = self.slow_mem.read_seq(D, slow_slots, slow_filled)
-                else:
-                    U = torch.stack(
-                        [
-                            self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
-                            for t in range(T)
-                        ],
-                        dim=1,
-                    )
+                U = self.slow_mem.read_seq(D, slow_slots, slow_filled)
                 if will_write_slow and T > 0:
                     # no snaps this call; just carry segment counter
                     seg_pos = seg_cnt
