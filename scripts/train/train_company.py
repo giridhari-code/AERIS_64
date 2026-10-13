@@ -29,6 +29,31 @@ from neurofield.training.gpu import configure_accelerator, maybe_compile, autoca
 from neurofield.training.paper_step import maybe_replay
 
 
+
+def _forward_chunked(model, x, y, chunk_size, **kwargs):
+    """Carry state across chunks of length C (reference form, sequential over chunks)."""
+    if chunk_size <= 0 or x.size(1) <= chunk_size:
+        return model(x, targets=y, **kwargs)
+    B, T = x.shape
+    state = None
+    total_loss = None
+    last_out = None
+    n = 0
+    for start in range(0, T, chunk_size):
+        end = min(T, start + chunk_size)
+        xc = x[:, start:end]
+        yc = y[:, start:end] if y is not None else None
+        out = model(xc, targets=yc, state=state, **kwargs)
+        state = out.state
+        if out.loss is not None:
+            total_loss = out.loss if total_loss is None else total_loss + out.loss
+            n += 1
+        last_out = out
+    if last_out is not None and total_loss is not None and n > 0:
+        last_out.loss = total_loss / n
+    return last_out
+
+
 def main() -> None:
     init_distributed_if_needed()
     rank, world, local = world_info()
@@ -229,29 +254,6 @@ def main() -> None:
         f"schedule={getattr(args, "lr_schedule", "constant")} cosine={args.cosine} smooth={getattr(args, "label_smoothing", 0)} drop={getattr(args, "dropout", 0)} bf16={use_bf16} compile={accel.use_compile} "
         f"tf32={accel.tf32} replay_every={replay_every}"
     )
-
-def _forward_chunked(model, x, y, chunk_size, **kwargs):
-    """Carry state across chunks of length C (reference form, sequential over chunks)."""
-    if chunk_size <= 0 or x.size(1) <= chunk_size:
-        return model(x, targets=y, **kwargs)
-    B, T = x.shape
-    state = None
-    total_loss = None
-    last_out = None
-    n = 0
-    for start in range(0, T, chunk_size):
-        end = min(T, start + chunk_size)
-        xc = x[:, start:end]
-        yc = y[:, start:end] if y is not None else None
-        out = model(xc, targets=yc, state=state, **kwargs)
-        state = out.state
-        if out.loss is not None:
-            total_loss = out.loss if total_loss is None else total_loss + out.loss
-            n += 1
-        last_out = out
-    if last_out is not None and total_loss is not None and n > 0:
-        last_out.loss = total_loss / n
-    return last_out
 
     t0 = time.time()
     model.train()

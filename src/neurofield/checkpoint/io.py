@@ -108,7 +108,17 @@ def save_checkpoint(
     with tempfile.TemporaryDirectory() as td:
         td_path = Path(td)
         if not _HAS_ST:
-            raise ImportError("safetensors is required: pip install safetensors")
+            import warnings
+            warnings.warn("safetensors not installed; saving model.pt", UserWarning)
+            torch.save(state, root / "model.pt")
+            meta_out = dict(meta or {})
+            meta_out["format"] = "neurofield-torch-pt-v1"
+            meta_out["weights"] = "model.pt"
+            (root / "meta.json").write_text(json.dumps(meta_out, indent=2), encoding="utf-8")
+            cfg = getattr(model, "cfg", None)
+            if cfg is not None and hasattr(cfg, "to_dict"):
+                (root / "config.json").write_text(json.dumps(cfg.to_dict(), indent=2, default=str), encoding="utf-8")
+            return root
         _save_tensors(tensors, str(td_path / "model.safetensors"))
         if config is not None:
             (td_path / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
