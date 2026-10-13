@@ -59,6 +59,8 @@ def main() -> None:
                     help="Speed mode: short seq, large batch, compile on CUDA (batch-parallel)")
     ap.add_argument("--chunk-parallel", type=int, default=0,
                     help="If >0, cut each seq into chunks of this len and stack on batch (more parallel sequences, shorter serial depth)")
+    ap.add_argument("--chunk-size", type=int, default=0,
+                    help="If >0, run forward in sequential chunks of this length carrying state (paper-style chunked train; C=1 is full seq)")
     ap.add_argument("--no-tf32", action="store_true", help="Disable TF32 on CUDA")
     ap.add_argument("--out", default="docs/neurofield_company")
     ap.add_argument("--device", default="auto", help="cpu | cuda | cuda:0 | auto")
@@ -227,6 +229,30 @@ def main() -> None:
         f"schedule={getattr(args, "lr_schedule", "constant")} cosine={args.cosine} smooth={getattr(args, "label_smoothing", 0)} drop={getattr(args, "dropout", 0)} bf16={use_bf16} compile={accel.use_compile} "
         f"tf32={accel.tf32} replay_every={replay_every}"
     )
+
+def _forward_chunked(model, x, y, chunk_size, **kwargs):
+    """Carry state across chunks of length C (reference form, sequential over chunks)."""
+    if chunk_size <= 0 or x.size(1) <= chunk_size:
+        return model(x, targets=y, **kwargs)
+    B, T = x.shape
+    state = None
+    total_loss = None
+    last_out = None
+    n = 0
+    for start in range(0, T, chunk_size):
+        end = min(T, start + chunk_size)
+        xc = x[:, start:end]
+        yc = y[:, start:end] if y is not None else None
+        out = model(xc, targets=yc, state=state, **kwargs)
+        state = out.state
+        if out.loss is not None:
+            total_loss = out.loss if total_loss is None else total_loss + out.loss
+            n += 1
+        last_out = out
+    if last_out is not None and total_loss is not None and n > 0:
+        last_out.loss = total_loss / n
+    return last_out
+
     t0 = time.time()
     model.train()
     last_loss = 0.0
@@ -264,11 +290,15 @@ def main() -> None:
 
         x, y = batch()
         with autocast_ctx(accel):
-            out = model(
-                x, targets=y, lambda_err=0.03, lambda_bal=0.005,
+            fw_kwargs = dict(
+                lambda_err=0.03, lambda_bal=0.005,
                 label_smoothing=float(getattr(args, "label_smoothing", 0.0) or 0.0),
                 collect_stats=(step % 100 == 0 or step == 1),
             )
+            if getattr(args, "chunk_size", 0) and args.chunk_size > 0:
+                out = _forward_chunked(model, x, y, args.chunk_size, **fw_kwargs)
+            else:
+                out = model(x, targets=y, **fw_kwargs)
         loss = out.loss
         (loss / max(1, args.grad_accum)).backward()
         if step % max(1, args.grad_accum) == 0:
