@@ -66,6 +66,11 @@ class SafetyConfig:
     max_write_norm: float = 10.0
     max_memory_norm: float = 50.0
     gate_cap: float = 1.0
+    gate_floor: float = 0.05      # train-time minimum write gate (anti-collapse)
+    gate_target: float = 0.35     # soft target for gate_mean regularizer
+    lambda_gate: float = 0.01     # weight for (gate_mean - target)^2
+    lambda_ent: float = 0.005     # weight for low router-entropy penalty
+    slow_segment_len: int = 0     # 0 => auto max(4, min(16, truncate//4))
     anomaly_z_threshold: float = 4.0
     freeze_on_anomaly: bool = True  # paper §7: anomaly → g=0 (serve path)
     per_session_state: bool = True
