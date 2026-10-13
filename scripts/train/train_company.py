@@ -25,6 +25,7 @@ from neurofield.model import NeuroField
 from neurofield.tokenizer.bpe import BPETokenizer
 from neurofield.tokenizer.char import CharTokenizer
 from neurofield.utils.split import split_blocks
+from neurofield.data.corpus import load_corpus
 from neurofield.training.gpu import configure_accelerator, maybe_compile, autocast_ctx
 from neurofield.training.paper_step import maybe_replay
 
@@ -58,7 +59,8 @@ def main() -> None:
     init_distributed_if_needed()
     rank, world, local = world_info()
     ap = argparse.ArgumentParser(description="Train AERIS_64 (NeuroField architecture)")
-    ap.add_argument("--data", nargs="+", default=["data/company_corpus.txt", "data/code_corpus.txt", "data/india_multilang.txt", "data/skills_real.txt"])
+    ap.add_argument("--data", nargs="+", default=["data/company_corpus.txt", "data/code_corpus.txt", "data/india_multilang.txt", "data/skills_real.txt"],
+                    help="Corpus files: .txt | .jsonl | .json (SFT schemas normalized to User:/Assistant:)")
     ap.add_argument("--tokenizer", choices=["char", "bpe"], default="bpe")
     ap.add_argument("--bpe-vocab", type=int, default=400)
     ap.add_argument("--steps", type=int, default=800)
@@ -110,15 +112,12 @@ def main() -> None:
         print("[fast] seq_len=%d batch=%d compile=1 (sequence still serial; batch is parallel)" % (
             args.seq_len, args.batch_size))
 
-    parts = []
-    for path in args.data:
-        p = Path(path)
-        if p.is_file():
-            parts.append(p.read_text(encoding="utf-8"))
-            print(f"loaded {p} ({p.stat().st_size} B)")
-    text = "\n".join(parts)
-    lines = [ln for ln in text.splitlines() if not ln.strip().startswith("#")]
-    text = "\n".join(lines) + "\n"
+    # Multi-format: .txt / .jsonl / .json → unified plain text (User:/Assistant: or prose)
+    text, data_manifest = load_corpus(list(args.data))
+    for m in data_manifest:
+        print(f"loaded {m['path']} ({m['bytes']} B, {m['chars']} chars, format={m['format']})")
+    if not text.strip():
+        raise SystemExit("ERROR: no text loaded from --data (check paths and formats)")
     # Hold out BEFORE tokenizer training / training so nothing leaks into val.
     train_text, val_text, split_stats = split_blocks(text, args.val_frac)
     print(f"split: {split_stats} (duplicates removed before split)")
