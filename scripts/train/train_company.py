@@ -60,7 +60,7 @@ def main() -> None:
     rank, world, local = world_info()
     ap = argparse.ArgumentParser(description="Train AERIS_64 (NeuroField architecture)")
     ap.add_argument("--data", nargs="+", default=["data/company_corpus.txt", "data/code_corpus.txt", "data/india_multilang.txt", "data/skills_real.txt"],
-                    help="Corpus files: .txt | .jsonl | .json (SFT schemas normalized to User:/Assistant:)")
+                    help="Corpus: .txt .md .jsonl .json .csv .tsv .parquet .html (+.gz) or hf:dataset[:config:split]")
     ap.add_argument("--tokenizer", choices=["char", "bpe"], default="bpe")
     ap.add_argument("--bpe-vocab", type=int, default=400)
     ap.add_argument("--steps", type=int, default=800)
