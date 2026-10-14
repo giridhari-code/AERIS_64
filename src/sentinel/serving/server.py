@@ -562,6 +562,24 @@ def create_app(
     def _limit(request: Request, api_key: Optional[str]) -> None:
         _limiter.check(api_key or client_ip(request))
 
+    @app.middleware("http")
+    async def rate_limit_middleware(request: Request, call_next):
+        """Apply rate limit to all /v1/* API routes (product, tools, chat, agent)."""
+        path = request.url.path or ""
+        if path.startswith("/v1/"):
+            try:
+                # Prefer API key bucket when present
+                key = request.headers.get("x-api-key") or client_ip(request)
+                _limiter.check(key)
+            except HTTPException as e:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=e.status_code,
+                    content={"detail": e.detail},
+                    headers=dict(e.headers or {}),
+                )
+        return await call_next(request)
+
     def _need_model() -> None:
         if _model is None or _encode is None or _decode is None:
             raise HTTPException(status_code=503, detail="model not loaded")
