@@ -67,6 +67,12 @@ class ToolsConfig:
     file_search_max_file_bytes: int = 400_000
     file_search_max_snippet: int = 180
 
+    # Tool router / search
+    tool_search_top_k: int = 5
+    tool_search_min_score: float = 0.35
+    tool_search_catalog_max_chars: int = 1800
+    tool_search_only_active: bool = True  # rank only dispatchable tools
+
     # Optional capabilities (off until explicitly enabled + credentials present)
     image_generation_enabled: bool = False
     computer_use_enabled: bool = False
@@ -94,6 +100,12 @@ class ToolsConfig:
                 "NEUROFIELD_FILE_SEARCH_MAX_FILE", 400_000
             ),
             file_search_max_snippet=_env_int("NEUROFIELD_FILE_SEARCH_SNIPPET", 180),
+            tool_search_top_k=_env_int("NEUROFIELD_TOOL_SEARCH_TOP_K", 5),
+            tool_search_min_score=_env_float("NEUROFIELD_TOOL_SEARCH_MIN_SCORE", 0.35),
+            tool_search_catalog_max_chars=_env_int(
+                "NEUROFIELD_TOOL_SEARCH_MAX_CHARS", 1800
+            ),
+            tool_search_only_active=_env_bool("NEUROFIELD_TOOL_SEARCH_ACTIVE_ONLY", True),
             image_generation_enabled=_env_bool("NEUROFIELD_IMAGE_GEN", False),
             computer_use_enabled=_env_bool("NEUROFIELD_COMPUTER_USE", False),
             image_provider=(
