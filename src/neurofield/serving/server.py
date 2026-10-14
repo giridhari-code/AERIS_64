@@ -557,11 +557,27 @@ def create_app(
         await require_api_key(request.headers.get("x-api-key"))
 
     @app.get("/")
-    async def frontend():
-        index = static_dir / "index.html"
-        if index.is_file():
-            return FileResponse(str(index))
-        return PlainTextResponse(f"{product} API. See /docs")
+    async def root():
+        # Dual-stack: Python is the model backend. Chat UI lives on the Bun edge (:3000).
+        # Set NEUROFIELD_SERVE_UI=1 to serve the legacy HTML UI from this process.
+        if _env("SERVE_UI", "0") == "1":
+            index = static_dir / "index.html"
+            if index.is_file():
+                return FileResponse(str(index))
+        return {
+            "service": "aeris-python-backend",
+            "role": "model_inference",
+            "product": product,
+            "version": __version__,
+            "model_loaded": _model is not None,
+            "model": _model_id or None,
+            "docs": "/docs",
+            "healthz": "/healthz",
+            "readyz": "/readyz",
+            "chat": "POST /v1/chat",
+            "frontend": "Use the Bun app at http://localhost:3000 (apps/web)",
+            "hint": "Set NEUROFIELD_SERVE_UI=1 if you still want the HTML UI on this port",
+        }
 
     @app.get("/healthz")
     async def healthz():

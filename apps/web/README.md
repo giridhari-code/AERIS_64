@@ -1,16 +1,14 @@
-# AERIS Web (TypeScript + Bun) — Frontend
+# AERIS Web — TypeScript + Bun Frontend
 
-Real chat UI + API gateway. Python keeps the neural model.
+| Port | Stack | Role |
+|------|--------|------|
+| **:3000** | Bun + TypeScript | **Frontend** — chat UI |
+| **:8000** | Python | **Backend** — model only (JSON API) |
 
-| Port | Role |
-|------|------|
-| **:3000** (Bun) | Chat frontend + proxy + git helpers |
-| **:8000** (Python) | Model inference only |
-
-## Run
+## Run both
 
 ```bash
-# Terminal 1 — Python model
+# Terminal 1 — Python backend (no UI)
 cd ~/AERIS_64
 export PYTHONPATH=src
 export NEUROFIELD_CHECKPOINT=checkpoints/examples/AERIS_main
@@ -18,14 +16,12 @@ uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8
 
 # Terminal 2 — Bun frontend
 cd ~/AERIS_64/apps/web
-bun install
-bun run dev
+bun install && bun run dev
 ```
 
-Open **http://localhost:3000** — same chat UI as before, served by Bun.
+Open **http://localhost:3000** for chat.
 
-## What Bun does
+- `:8000/` → JSON (backend info)
+- `:3000/` → full chat UI
 
-- Serves the chat UI (`public/index.html`)
-- Proxies `/v1/chat`, `/readyz`, `/v1/reset`, … → Python `:8000`
-- Local git helpers: `/v1/git/status|log|diff`
+Legacy: `NEUROFIELD_SERVE_UI=1` serves the old HTML UI on Python port too.
