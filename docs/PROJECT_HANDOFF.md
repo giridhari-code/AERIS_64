@@ -1,4 +1,4 @@
-# AERIS_64 / NeuroField — Project handoff
+# SENTINEL (AERIS_64) — Project handoff
 
 **Date:** 2026-10-12  
 **Author:** Giridhari Karmakar · giriisdev@gmail.com  
@@ -35,7 +35,7 @@
 4. Multi-seed eval vs Transformer baseline  
 5. Stronger safety policy  
 
-## Architecture one-liner
+## Architecture one-liner (SENTINEL)
 
 Embed → causal dendrite → k depth (predict/gate/router/fast-M scan/field) → slow ring → logits.
 

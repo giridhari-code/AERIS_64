@@ -1,4 +1,4 @@
-# AERIS / NeuroField — Full component guide
+# SENTINEL — Full component guide
 
 **Purpose:** Har component kya hai, kaise kaam karta hai, kis order mein chalta hai.  
 **Audience:** Tum (owner) — copy / reference ke liye.  

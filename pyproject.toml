@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "neurofield"
 version = "2.3.1"
-description = "NeuroField / AESC: two-speed memory architecture (v2.3)"
+description = "SENTINEL: two-speed memory architecture (NeuroField/AESC lineage, v2.3)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}   # custom source-available, non-commercial (NOT MIT)

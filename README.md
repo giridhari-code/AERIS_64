@@ -1,6 +1,6 @@
-# NeuroField / AERIS
+# SENTINEL
 
-**Two-speed memory architecture** for recurrent language models  
+**Two-speed memory architecture** (SENTINEL · formerly NeuroField / AESC / AERIS) for recurrent language models  
 Research code · production-oriented layout · not a finished frontier product
 
 | | |
@@ -16,7 +16,7 @@ Research code · production-oriented layout · not a finished frontier product
 
 ## What this is
 
-NeuroField (AESC) is a recurrent LM with:
+SENTINEL is a recurrent LM with two-speed memory (NeuroField/AESC lineage) with:
 
 - k-step neural field  
 - predictive dendrite (delayed error)  
