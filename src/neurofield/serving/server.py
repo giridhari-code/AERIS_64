@@ -159,6 +159,14 @@ class ChatRequest(BaseModel):
         description="Owner of the persistent slow memory + chat transcripts (needs NEUROFIELD_MEMORY_DIR).",
     )
     remember: bool = Field(True, description="False: do not store this turn or update the user's slow memory.")
+    use_meta_rag: bool = Field(
+        True,
+        description="Metacognition-controlled Adaptive RAG: retrieve only when confidence is low / arousal high.",
+    )
+    force_rag: Optional[bool] = Field(
+        None,
+        description="Override meta decision: true=always retrieve, false=never, null=let metacognition decide.",
+    )
 
 
 # Sandbox request bodies live at MODULE level on purpose. With
@@ -184,6 +192,10 @@ class ChatResponse(BaseModel):
     session_id: str
     latency_ms: float
     model: str = ""
+    meta_rag: Optional[dict] = Field(
+        None,
+        description="Adaptive RAG decision (should_retrieve, confidence, top_k, reason, hits).",
+    )
 
 
 # --------------------------------------------------------------------------
@@ -675,7 +687,7 @@ def create_app(
 
     def _prepare_chat(
         req: ChatRequest, sid: str, owner: Optional[str] = None
-    ) -> tuple[str, list[int], int, float, int, Optional[dict]]:
+    ) -> tuple[str, list[int], int, float, int, Optional[dict], Optional[dict]]:
         prompt = normalize_prompt(req.prompt)
         slow_seed = None
         if _memory is not None and req.remember:
@@ -683,8 +695,42 @@ def create_app(
             if history_len(sid) == 0:  # new process / TTL eviction: the chat window is NOT lost
                 restore_turns(sid, _memory.recent_turns(owner, uid, sid, n=12))
             slow_seed = _memory.load_slow(owner, uid)
+
+        # --- Auto RAG (metacognition-controlled, mode=auto by default) ---
+        # Retrieves for informational prompts; skips pure chit-chat.
+        # Live surprise from prior tokens feeds confidence when available.
+        meta_rag_info: Optional[dict] = None
+        rag_prompt = prompt
+        if req.use_meta_rag or req.force_rag is True:
+            try:
+                from neurofield.rag.meta_rag import auto_rag
+
+                conf = arou = confict = None
+                with _lock:
+                    sess = _sessions.get(sid) or {}
+                    state = sess.get("state") or {}
+                    last_S = state.get("last_S")
+                    if last_S is not None:
+                        try:
+                            s_val = float(last_S.mean().item()) if hasattr(last_S, "mean") else float(last_S)
+                            conf = max(0.05, min(0.95, 1.0 / (1.0 + s_val)))
+                            arou = max(0.0, s_val)
+                        except Exception:
+                            pass
+                rag_prompt, meta_rag_info = auto_rag(
+                    prompt,
+                    confidence=conf,
+                    arousal=arou,
+                    conflict=confict,
+                    force=req.force_rag,
+                    session_key=sid or "default",
+                )
+            except Exception as e:
+                logger.warning("auto_rag failed, continuing without retrieval: %s", e)
+                rag_prompt = prompt
+
         # Real-world facts (weather / web) injected when tools enabled
-        enriched, _tool_note = enrich_prompt_with_tools(prompt)
+        enriched, _tool_note = enrich_prompt_with_tools(rag_prompt)
         input_ids = _encode(build_prompt(sid, enriched)) or _encode(enriched) or [0]
         n_user = len(_encode(build_user_part(enriched)) or [])
         replay_len = max(0, len(input_ids) - n_user) if slow_seed is not None else 0
@@ -694,7 +740,7 @@ def create_app(
             user_temp=req.temperature,
             auto=req.auto_length,
         )
-        return prompt, input_ids, max_new, temperature, replay_len, slow_seed
+        return prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info
 
     def _persist(sid: str, owner: Optional[str], req: ChatRequest, prompt: str, text: str) -> None:
         """Lossless transcript + the user's slow ring (after norm cap + audit), never from a flagged turn."""
@@ -735,7 +781,7 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         try:
-            prompt, input_ids, max_new, temperature, replay_len, slow_seed = _prepare_chat(
+            prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = _prepare_chat(
                 req, sid, _owner(api_key)
             )
             # History is re-fed as text every turn, so start from a fresh FAST state (reset=True);
@@ -749,7 +795,9 @@ def create_app(
             append_turn(sid, "user", prompt)
             append_turn(sid, "assistant", text)
             _persist(sid, _owner(api_key), req, prompt, text)
-            return ChatResponse(text=text, session_id=sid, latency_ms=lat, model=_model_id)
+            return ChatResponse(
+                text=text, session_id=sid, latency_ms=lat, model=_model_id, meta_rag=meta_rag_info
+            )
         except HTTPException:
             raise
         except Exception as e:
@@ -768,12 +816,17 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         owner = _owner(api_key)
-        prompt, input_ids, max_new, temperature, replay_len, slow_seed = _prepare_chat(req, sid, owner)
+        prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = _prepare_chat(
+            req, sid, owner
+        )
 
         def event_gen() -> Iterator[str]:
             start = time.perf_counter()
             new_ids: list[int] = []
-            yield f"data: {json.dumps({'session_id': sid, 'event': 'start'})}\n\n"
+            start_payload = {"session_id": sid, "event": "start"}
+            if meta_rag_info is not None:
+                start_payload["meta_rag"] = meta_rag_info
+            yield f"data: {json.dumps(start_payload)}\n\n"
             try:
                 for nid, _ in _token_stream(
                     input_ids, max_new, temperature, sid, owner, reset=True,
@@ -797,7 +850,10 @@ def create_app(
             append_turn(sid, "user", prompt)
             append_turn(sid, "assistant", text)
             _persist(sid, owner, req, prompt, text)
-            yield f"data: {json.dumps({'event': 'done', 'latency_ms': lat, 'text': text})}\n\n"
+            done_payload = {"event": "done", "latency_ms": lat, "text": text}
+            if meta_rag_info is not None:
+                done_payload["meta_rag"] = meta_rag_info
+            yield f"data: {json.dumps(done_payload)}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(event_gen(), media_type="text/event-stream")

@@ -58,6 +58,8 @@ class AgentConfig:
     require_tool_for_live_facts: bool = True
     # If True, always run tool enrichment before generate
     always_enrich: bool = True
+    # Auto RAG (metacognition-gated knowledge retrieval) before generate
+    use_auto_rag: bool = True
 
 
 @dataclass
@@ -187,6 +189,25 @@ def run_agent(
             facts_block=facts,
             latency_ms=(time.perf_counter() - t_all) * 1000,
         )
+
+    # Step 1b: Auto RAG — metacognition-gated knowledge retrieval
+    if cfg.use_auto_rag:
+        steps += 1
+        t0 = time.perf_counter()
+        try:
+            from neurofield.rag.meta_rag import auto_rag
+
+            prompt, rag_info = auto_rag(prompt, session_key="agent")
+            ms = (time.perf_counter() - t0) * 1000
+            detail = (
+                f"retrieve={rag_info.get('should_retrieve')} "
+                f"hits={rag_info.get('hits')} mode={rag_info.get('mode')} "
+                f"conf={rag_info.get('confidence')}"
+            )
+            events.append(ToolEvent("auto_rag", True, detail[:500], ms))
+        except Exception as e:  # noqa: BLE001
+            ms = (time.perf_counter() - t0) * 1000
+            events.append(ToolEvent("auto_rag", False, f"{type(e).__name__}: {e}", ms))
 
     # Step 2: generate or factual reply
     steps += 1
