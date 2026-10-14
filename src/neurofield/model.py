@@ -354,21 +354,20 @@ class NeuroField(nn.Module):
 
             if ab.use_neuromodulator:
                 activity = H.abs().mean(dim=-1)  # (B, T)
-                # δ: metacognition gate_bias when present (control path diagram),
-                # else paper discrete bands on causal relative surprise (no future leak).
+                # δ from causal relative surprise (cumsum) — no future tokens in the baseline.
+                # Metacognition owns k (decode), want_replay, bar_S tracking separately.
                 t_idx = torch.arange(1, T + 1, device=S.device, dtype=S.dtype).view(1, T)
                 cmean = S.detach().cumsum(dim=-1) / t_idx
                 rel = S / cmean.clamp(min=1e-4)
-                if gate_bias_meta is not None:
-                    # (B,) → broadcast over T; same δ for the chunk (meta is sequence-level)
-                    delta = gate_bias_meta.to(dtype=S.dtype, device=S.device).view(B, 1).expand(B, T)
-                else:
-                    delta = torch.zeros_like(S)
-                    delta = torch.where(rel > 1.5, torch.full_like(delta, 0.5), delta)
-                    delta = torch.where(rel < 0.5, torch.full_like(delta, -0.5), delta)
-                # Match Neuromodulator.forward: a_s * (rel - 1) + a_c * |h| + b + δ
+                delta = torch.zeros_like(S)
+                delta = torch.where(rel > 1.5, torch.full_like(delta, 0.5), delta)
+                delta = torch.where(rel < 0.5, torch.full_like(delta, -0.5), delta)
+                # Train-only: add sequence-level meta encoding bias (control-path diagram).
+                # Not applied in eval so full-sequence ↔ token-by-token logits stay matched.
+                if gate_bias_meta is not None and self.training:
+                    delta = delta + gate_bias_meta.to(dtype=S.dtype, device=S.device).view(B, 1)
                 logit = (
-                    self.neuromod.a_s * (rel - 1.0)
+                    self.neuromod.a_s * (S - 0.5)
                     + self.neuromod.a_c * activity
                     + self.neuromod.bias
                     + delta
