@@ -1,0 +1,89 @@
+{
+  "suite": "reasoning_tool_si_v1",
+  "passed": 10,
+  "total": 10,
+  "accuracy": 1.0,
+  "note": "Tool-augmented scores measure agent+calc reliability, not LM chain-of-thought.",
+  "results": [
+    {
+      "id": "r01",
+      "q": "calculate 3+4",
+      "expect": "7",
+      "answer_preview": "Calculator: 3+4 = 7.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r02",
+      "q": "calculate 12*5",
+      "expect": "60",
+      "answer_preview": "Calculator: 12*5 = 60.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r03",
+      "q": "calculate 100-37",
+      "expect": "63",
+      "answer_preview": "Calculator: 100-37 = 63.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r04",
+      "q": "calculate 8/2",
+      "expect": "4",
+      "answer_preview": "Calculator: 8/2 = 4.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r05",
+      "q": "calculate 7*8+1",
+      "expect": "57",
+      "answer_preview": "Calculator: 7*8+1 = 57.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r06",
+      "q": "calculate 2+2*3",
+      "expect": "8",
+      "answer_preview": "Calculator: 2+2*3 = 8.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r07",
+      "q": "what time is it",
+      "expect": "\\d{4}-\\d{2}-\\d{2}|\\d+:\\d+",
+      "answer_preview": "Current datetime (UTC): 2026-10-14 19:32:12 UTC (weekday Wednesday).",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r08",
+      "q": "calculate 15*3",
+      "expect": "45",
+      "answer_preview": "Calculator: 15*3 = 45.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r09",
+      "q": "calculate 9*9",
+      "expect": "81",
+      "answer_preview": "Calculator: 9*9 = 81.0",
+      "stopped": "answered_facts",
+      "ok": true
+    },
+    {
+      "id": "r10",
+      "q": "calculate 50/5",
+      "expect": "10",
+      "answer_preview": "Calculator: 50/5 = 10.0",
+      "stopped": "answered_facts",
+      "ok": true
+    }
+  ]
+}
