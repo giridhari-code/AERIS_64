@@ -9,6 +9,7 @@ from neurofield.tools.tool_search import (
     get_relevant_schemas,
     format_tool_catalog_for_prompt,
     route_tool_names,
+    tools_for_request,
 )
 from neurofield.tools.code_execution import code_execution, code_interpreter
 from neurofield.tools.bash_tool import bash
@@ -18,6 +19,7 @@ from neurofield.tools.image_generation import image_generation
 from neurofield.tools.computer_use import computer_use
 from neurofield.tools.mcp_support import mcp_list_tools, mcp_call_tool
 from neurofield.tools.config import ToolsConfig, load_tools_config
+from neurofield.tools.limits import ToolLimitError, max_tools_per_request, enforce_tool_limit
 
 
 __all__ = [
@@ -29,6 +31,7 @@ __all__ = [
     "get_relevant_schemas",
     "format_tool_catalog_for_prompt",
     "route_tool_names",
+    "tools_for_request",
     "code_execution",
     "code_interpreter",
     "bash",
@@ -40,6 +43,9 @@ __all__ = [
     "mcp_call_tool",
     "ToolsConfig",
     "load_tools_config",
+    "ToolLimitError",
+    "max_tools_per_request",
+    "enforce_tool_limit",
     "git_report",
     "git_status",
 ]
