@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable, Optional
 
-from neurofield.cowork.config import load_cowork_config
+from neurofield.ajeebwork.config import load_ajeebwork_config
 
 RunStepFn = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -50,7 +50,7 @@ class PlanResult:
 
 
 def build_plan(objective: str, step_specs: list[dict[str, Any]]) -> list[PlanStep]:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if len(step_specs) > cfg.max_plan_steps:
         step_specs = step_specs[: cfg.max_plan_steps]
     steps: list[PlanStep] = []

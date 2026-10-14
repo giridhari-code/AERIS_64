@@ -229,7 +229,7 @@ def tool_schemas() -> list[dict[str, Any]]:
 
 
         {
-            "name": "cowork_file",
+            "name": "ajeebwork_file",
             "description": "Read, write, edit, or batch-process local workspace files. Deletes require allow_delete=true.",
             "inputSchema": {
                 "type": "object",
@@ -245,7 +245,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "cowork_plan",
+            "name": "ajeebwork_plan",
             "description": "Build a structured multi-step plan for a complex objective (autonomous execution when run_step is wired).",
             "inputSchema": {
                 "type": "object",
@@ -257,7 +257,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "cowork_subagents",
+            "name": "ajeebwork_subagents",
             "description": "Coordinate parallel sub-agent workstreams with shared budgets.",
             "inputSchema": {
                 "type": "object",
@@ -268,7 +268,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "cowork_task",
+            "name": "ajeebwork_task",
             "description": "Background/scheduled task create, status, list (persisted progress and reasoning).",
             "inputSchema": {
                 "type": "object",
@@ -281,8 +281,8 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "cowork_memory",
-            "description": "Shared memory between chat and cowork sessions (optional per-task off switch).",
+            "name": "ajeebwork_memory",
+            "description": "Shared memory between chat and ajeebwork sessions (optional per-task off switch).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -295,7 +295,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "cowork_document",
+            "name": "ajeebwork_document",
             "description": "Create markdown reports, CSV/Excel-compatible tables, or presentation outlines in the workspace.",
             "inputSchema": {
                 "type": "object",
@@ -312,7 +312,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "cowork_draft_edit",
+            "name": "ajeebwork_draft_edit",
             "description": "In-place edit of a selected span inside a Markdown/text draft.",
             "inputSchema": {
                 "type": "object",
@@ -325,7 +325,7 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
-            "name": "cowork_skill",
+            "name": "ajeebwork_skill",
             "description": "Save/load/list reusable skills; call registered external connectors.",
             "inputSchema": {
                 "type": "object",

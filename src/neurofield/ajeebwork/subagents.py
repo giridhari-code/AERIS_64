@@ -1,7 +1,7 @@
 """Parallel sub-agent coordination with hard budgets.
 
 Each sub-agent is a callable work item. Results are collected with a shared
-timeout and concurrency limit from CoworkConfig.
+timeout and concurrency limit from AjeebWorkConfig.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, asdict
 from typing import Any, Callable, Optional
 
-from neurofield.cowork.config import load_cowork_config
+from neurofield.ajeebwork.config import load_ajeebwork_config
 
 WorkFn = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -38,10 +38,10 @@ def run_subagents(
     Run ``tasks`` in parallel. Each task dict must include ``name`` and any
     payload fields the ``worker`` understands.
     """
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.enabled:
         return [
-            SubAgentResult(name="system", ok=False, detail="cowork disabled", duration_ms=0.0)
+            SubAgentResult(name="system", ok=False, detail="ajeebwork disabled", duration_ms=0.0)
         ]
 
     max_workers = min(

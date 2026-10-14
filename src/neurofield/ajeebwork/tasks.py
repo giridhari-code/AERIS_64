@@ -15,7 +15,7 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from neurofield.cowork.config import load_cowork_config
+from neurofield.ajeebwork.config import load_ajeebwork_config
 
 _lock = threading.Lock()
 _tasks: dict[str, "TaskRecord"] = {}
@@ -39,7 +39,7 @@ class TaskRecord:
 
 
 def _store_dir() -> Path:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     d = Path(cfg.task_store_dir)
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -56,7 +56,7 @@ def create_task(
     schedule: Optional[str] = None,
     detail: str = "",
 ) -> TaskRecord:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     with _lock:
         if len(_tasks) >= cfg.max_background_tasks:
             raise RuntimeError(

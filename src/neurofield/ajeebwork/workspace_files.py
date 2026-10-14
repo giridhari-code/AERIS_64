@@ -3,7 +3,7 @@
 Security:
   - Paths must resolve under an allowed root (symlink escape rejected).
   - Deletes require allow_delete=True on the call (and config may still deny).
-  - Read/write size capped by CoworkConfig.
+  - Read/write size capped by AjeebWorkConfig.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Iterable, Optional
 
-from neurofield.cowork.config import load_cowork_config, resolve_workspace_roots
+from neurofield.ajeebwork.config import load_ajeebwork_config, resolve_workspace_roots
 
 
 class WorkspaceError(ValueError):
@@ -44,9 +44,9 @@ def resolve_path(path: str, roots: Optional[list[Path]] = None) -> Path:
 
 
 def read_file(path: str, max_bytes: Optional[int] = None) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.enabled:
-        return "WorkspaceFiles: cowork disabled."
+        return "WorkspaceFiles: ajeebwork disabled."
     limit = int(max_bytes if max_bytes is not None else cfg.max_read_bytes)
     try:
         p = resolve_path(path)
@@ -69,9 +69,9 @@ def read_file(path: str, max_bytes: Optional[int] = None) -> str:
 
 
 def write_file(path: str, content: str, *, create_parents: bool = True) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.enabled:
-        return "WorkspaceFiles: cowork disabled."
+        return "WorkspaceFiles: ajeebwork disabled."
     content = content if content is not None else ""
     if len(content.encode("utf-8")) > cfg.max_write_bytes:
         return (
@@ -92,9 +92,9 @@ def write_file(path: str, content: str, *, create_parents: bool = True) -> str:
 
 
 def edit_file(path: str, old: str, new: str, *, replace_all: bool = False) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.enabled:
-        return "WorkspaceFiles: cowork disabled."
+        return "WorkspaceFiles: ajeebwork disabled."
     try:
         p = resolve_path(path)
     except WorkspaceError as e:
@@ -125,12 +125,12 @@ def edit_file(path: str, old: str, new: str, *, replace_all: bool = False) -> st
 def delete_file(path: str, *, allow_delete: bool = False) -> str:
     """Delete a file. Requires explicit allow_delete=True on every call.
 
-    Additionally, NEUROFIELD_COWORK_ALLOW_DELETE must be enabled for the
+    Additionally, NEUROFIELD_AJEEBWORK_ALLOW_DELETE must be enabled for the
     process, so a single mistaken tool call cannot wipe files.
     """
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.enabled:
-        return "WorkspaceFiles: cowork disabled."
+        return "WorkspaceFiles: ajeebwork disabled."
     if not allow_delete:
         return (
             "WorkspaceFiles: deletion blocked. "
@@ -139,7 +139,7 @@ def delete_file(path: str, *, allow_delete: bool = False) -> str:
     if not cfg.allow_delete_default:
         return (
             "WorkspaceFiles: deletion blocked by policy. "
-            "Set NEUROFIELD_COWORK_ALLOW_DELETE=1 to permit deletes."
+            "Set NEUROFIELD_AJEEBWORK_ALLOW_DELETE=1 to permit deletes."
         )
     try:
         p = resolve_path(path)
@@ -165,9 +165,9 @@ def batch_process(
     new: str = "",
     allow_delete: bool = False,
 ) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.enabled:
-        return "WorkspaceFiles: cowork disabled."
+        return "WorkspaceFiles: ajeebwork disabled."
     path_list = list(paths)
     if len(path_list) > cfg.max_batch_files:
         return (
