@@ -515,8 +515,11 @@ def create_app(
         lifespan=lifespan,
     )
 
+    # Backend = API only. Chat UI is the Bun frontend on :3000.
+    # Opt-in legacy UI: NEUROFIELD_SERVE_UI=1
     static_dir = Path(__file__).parent / "static"
-    if static_dir.is_dir():
+    serve_ui = _env("SERVE_UI", "0") == "1"
+    if serve_ui and static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     global _memory
@@ -558,25 +561,28 @@ def create_app(
 
     @app.get("/")
     async def root():
-        # Dual-stack: Python is the model backend. Chat UI lives on the Bun edge (:3000).
-        # Set NEUROFIELD_SERVE_UI=1 to serve the legacy HTML UI from this process.
-        if _env("SERVE_UI", "0") == "1":
+        if serve_ui:
             index = static_dir / "index.html"
             if index.is_file():
                 return FileResponse(str(index))
+        # Pure backend response — no HTML
         return {
             "service": "aeris-python-backend",
             "role": "model_inference",
+            "stack": "python",
             "product": product,
             "version": __version__,
             "model_loaded": _model is not None,
             "model": _model_id or None,
-            "docs": "/docs",
-            "healthz": "/healthz",
-            "readyz": "/readyz",
-            "chat": "POST /v1/chat",
-            "frontend": "Use the Bun app at http://localhost:3000 (apps/web)",
-            "hint": "Set NEUROFIELD_SERVE_UI=1 if you still want the HTML UI on this port",
+            "endpoints": {
+                "docs": "/docs",
+                "healthz": "/healthz",
+                "readyz": "/readyz",
+                "chat": "POST /v1/chat",
+                "completions": "POST /v1/completions",
+                "models": "GET /v1/models",
+            },
+            "frontend": "http://localhost:3000",
         }
 
     @app.get("/healthz")
