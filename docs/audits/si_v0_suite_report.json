@@ -1,0 +1,34 @@
+{
+  "passed": 4,
+  "total": 4,
+  "results": [
+    {
+      "id": "calc_1",
+      "ok": true,
+      "stopped": "facts_only",
+      "answer_preview": "Calculator: 12*12 = 144.0",
+      "steps": 2
+    },
+    {
+      "id": "calc_2",
+      "ok": true,
+      "stopped": "facts_only",
+      "answer_preview": "Calculator: 7+5 = 12.0\nWikipedia error: HTTP Error 404: Not Found",
+      "steps": 2
+    },
+    {
+      "id": "empty",
+      "ok": true,
+      "stopped": "empty_input",
+      "answer_preview": "(empty input)",
+      "steps": 0
+    },
+    {
+      "id": "time_or_facts",
+      "ok": true,
+      "stopped": "facts_only",
+      "answer_preview": "Current datetime (UTC): 2026-10-14 05:03:34 UTC (weekday Wednesday).",
+      "steps": 2
+    }
+  ]
+}
