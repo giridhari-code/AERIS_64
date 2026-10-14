@@ -36,3 +36,6 @@ checkpoints/**/model.safetensors
 data/ready/
 data/tokens/
 data/raw/
+node_modules/
+apps/web/node_modules/
+apps/web/bun.lock

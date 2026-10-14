@@ -28,6 +28,23 @@ NeuroField (AESC) is a recurrent LM with:
 
 The small checkpoints under `checkpoints/examples/` are **side-car configs only** (weights are not in git). Train locally to serve a model.
 
+### Dual stack
+
+| Layer | Stack | Role |
+|-------|--------|------|
+| **Model** | Python | Training, neural field, fast/slow memory, inference (`src/neurofield`) |
+| **Edge** | TypeScript + Bun | API gateway, git helpers, future UI/agent orchestration (`apps/web`) |
+
+```bash
+# Python model server
+uvicorn "neurofield.serving.server:create_app" --factory --port 8000
+
+# Bun edge (proxies chat → Python, exposes /v1/git/*)
+cd apps/web && bun install && bun run dev   # :3000
+```
+
+See [apps/web/README.md](apps/web/README.md).
+
 ---
 
 ## Repository layout
@@ -54,6 +71,7 @@ AERIS_64/
 │   ├── audits/              # Engineering audits & patch notes
 │   └── archive/             # Historical notes
 ├── deploy/                  # Docker, k8s, systemd
+├── apps/web/                # TypeScript + Bun edge (API gateway, git helpers)
 ├── artifacts/               # Local outputs (gitignored content)
 └── pyproject.toml
 ```
