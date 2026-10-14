@@ -1,0 +1,18 @@
+{
+  "name": "aeris-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript + Bun edge layer for AERIS_64 (API gateway, git helpers). Python keeps the neural model.",
+  "scripts": {
+    "dev": "bun run --hot src/server.ts",
+    "start": "bun run src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
