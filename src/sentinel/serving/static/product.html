@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SENTINEL · Product</title>
+  <style>
+    :root {
+      --bg: #0c0d10; --surface: #14161c; --border: #2a2e3a;
+      --text: #eceef2; --muted: #8b919c; --accent: #7c9cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header a { color: var(--accent); text-decoration: none; font-size: 0.85rem; }
+    header h1 { font-size: 1rem; margin: 0; }
+    main { flex: 1; max-width: 900px; margin: 0 auto; padding: 16px; width: 100%; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tab {
+      padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); cursor: pointer;
+    }
+    .tab.active { border-color: var(--accent); background: rgba(124,156,255,0.15); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    label { display: block; font-size: 0.75rem; color: var(--muted); margin: 8px 0 4px; }
+    input, textarea {
+      width: 100%; background: #0a0b0e; border: 1px solid var(--border);
+      color: var(--text); border-radius: 10px; padding: 10px; font: inherit;
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    button.primary {
+      margin-top: 12px; background: var(--accent); color: #0c0d10;
+      border: none; border-radius: 10px; padding: 10px 16px; font-weight: 600; cursor: pointer;
+    }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px; margin-top: 10px;
+    }
+    .card h3 { margin: 0 0 6px; font-size: 0.95rem; }
+    .meta { font-size: 0.7rem; color: var(--muted); }
+    pre {
+      white-space: pre-wrap; word-break: break-word;
+      background: #0a0b0e; padding: 10px; border-radius: 8px; font-size: 0.8rem;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .err { color: #f07178; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SENTINEL · Product</h1>
+    <a href="/">← Chat</a>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab active" data-tab="k">Kalofacts</button>
+      <button class="tab" data-tab="a">AjeebWork plan</button>
+      <button class="tab" data-tab="s">SI_v1</button>
+    </div>
+
+    <section id="panel-k" class="panel active">
+      <p class="meta">Versioned artifacts — create, list, open.</p>
+      <label>Title</label>
+      <input id="k-title" value="Note" />
+      <label>Content</label>
+      <textarea id="k-content" placeholder="Write something…"></textarea>
+      <button class="primary" id="k-save">Save artifact</button>
+      <button class="primary" id="k-refresh" style="background:#2a2e3a;color:var(--text)">Refresh list</button>
+      <div id="k-list"></div>
+      <p class="err" id="k-err"></p>
+    </section>
+
+    <section id="panel-a" class="panel">
+      <p class="meta">Build a structured plan (dry-run, no file writes).</p>
+      <label>Objective</label>
+      <input id="a-obj" placeholder="e.g. Summarize project status" />
+      <button class="primary" id="a-run">Build plan</button>
+      <pre id="a-out"></pre>
+      <p class="err" id="a-err"></p>
+    </section>
+
+    <section id="panel-s" class="panel">
+      <p class="meta">SI_v1: plan → tool → verify → answer</p>
+      <label>Question</label>
+      <input id="s-q" value="calculate 12*12" />
+      <button class="primary" id="s-run">Run SI_v1</button>
+      <pre id="s-out"></pre>
+    </section>
+  </main>
+  <script>
+    const tabs = document.querySelectorAll(".tab");
+    tabs.forEach(t => t.addEventListener("click", () => {
+      tabs.forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+      document.getElementById("panel-" + t.dataset.tab).classList.add("active");
+    }));
+
+    async function jfetch(url, opts) {
+      const r = await fetch(url, {
+        headers: { "Content-Type": "application/json", ...(opts && opts.headers) },
+        ...opts,
+      });
+      const text = await r.text();
+      let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!r.ok) throw new Error(data.detail || data.raw || r.status);
+      return data;
+    }
+
+    async function refreshK() {
+      const err = document.getElementById("k-err");
+      err.textContent = "";
+      try {
+        const data = await jfetch("/v1/kalofacts");
+        const box = document.getElementById("k-list");
+        const arts = data.artifacts || data || [];
+        box.innerHTML = "";
+        (Array.isArray(arts) ? arts : []).forEach(a => {
+          const id = a.artifact_id || a.id || "?";
+          const el = document.createElement("div");
+          el.className = "card";
+          el.innerHTML = `<h3>${(a.title || "Untitled").replace(/</g,"")}</h3>
+            <div class="meta">${id}</div>
+            <pre>${(a.content || a.preview || "").slice(0, 400).replace(/</g,"")}</pre>`;
+          box.appendChild(el);
+        });
+        if (!(Array.isArray(arts) && arts.length)) {
+          box.innerHTML = "<p class='meta'>No artifacts yet.</p>";
+        }
+      } catch (e) {
+        err.textContent = String(e.message || e);
+      }
+    }
+
+    document.getElementById("k-save").onclick = async () => {
+      const err = document.getElementById("k-err");
+      err.textContent = "";
+      try {
+        await jfetch("/v1/kalofacts", {
+          method: "POST",
+          body: JSON.stringify({
+            title: document.getElementById("k-title").value,
+            content: document.getElementById("k-content").value,
+            kind: "text",
+          }),
+        });
+        document.getElementById("k-content").value = "";
+        await refreshK();
+      } catch (e) {
+        err.textContent = String(e.message || e);
+      }
+    };
+    document.getElementById("k-refresh").onclick = refreshK;
+    refreshK();
+
+    document.getElementById("a-run").onclick = async () => {
+      const err = document.getElementById("a-err");
+      err.textContent = "";
+      try {
+        const data = await jfetch("/v1/ajeebwork/plan", {
+          method: "POST",
+          body: JSON.stringify({ objective: document.getElementById("a-obj").value }),
+        });
+        document.getElementById("a-out").textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        err.textContent = String(e.message || e);
+      }
+    };
+
+    document.getElementById("s-run").onclick = async () => {
+      try {
+        const data = await jfetch("/v1/si/v1", {
+          method: "POST",
+          body: JSON.stringify({ prompt: document.getElementById("s-q").value }),
+        });
+        document.getElementById("s-out").textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById("s-out").textContent = String(e.message || e);
+      }
+    };
+  </script>
+</body>
+</html>

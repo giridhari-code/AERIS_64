@@ -1063,6 +1063,92 @@ def create_app(
         )
         return result.to_dict()
 
+    # ------------------------------------------------------------------
+    # Product UX: Kalofacts library + AjeebWork plan (optional layer)
+    # ------------------------------------------------------------------
+    @app.get("/product")
+    def product_page():
+        from fastapi.responses import FileResponse
+        path = Path(__file__).resolve().parent / "static" / "product.html"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="product.html missing")
+        return FileResponse(path)
+
+    @app.get("/v1/kalofacts")
+    def kalofacts_list(api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.kalofacts.store import list_artifacts
+        return {"artifacts": list_artifacts()}
+
+    @app.post("/v1/kalofacts")
+    def kalofacts_create(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.kalofacts.store import create_and_save
+        title = str((body or {}).get("title") or "Untitled").strip() or "Untitled"
+        content = str((body or {}).get("content") or "")
+        kind = str((body or {}).get("kind") or "text")
+        art = create_and_save(title=title, content=content, kind=kind)
+        return art.to_dict() if hasattr(art, "to_dict") else art
+
+    @app.get("/v1/kalofacts/{artifact_id}")
+    def kalofacts_get(artifact_id: str, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.kalofacts.store import get
+        art = get(artifact_id)
+        if art is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return art.to_dict() if hasattr(art, "to_dict") else art
+
+    @app.put("/v1/kalofacts/{artifact_id}")
+    def kalofacts_update(artifact_id: str, body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.kalofacts.store import get, save
+        from sentinel.kalofacts.edit import replace_all_content
+        art = get(artifact_id)
+        if art is None:
+            raise HTTPException(status_code=404, detail="not found")
+        content = (body or {}).get("content")
+        if content is not None:
+            art = replace_all_content(art, str(content))
+        title = (body or {}).get("title")
+        if title is not None:
+            art.title = str(title)
+        save(art)
+        return art.to_dict() if hasattr(art, "to_dict") else art
+
+    @app.delete("/v1/kalofacts/{artifact_id}")
+    def kalofacts_delete(artifact_id: str, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.kalofacts.store import delete
+        ok = delete(artifact_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="not found")
+        return {"status": "deleted", "id": artifact_id}
+
+    @app.post("/v1/ajeebwork/plan")
+    def ajeeb_plan(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.ajeebwork.plan_execute import build_plan, plan_execute_report
+        objective = str((body or {}).get("objective") or "").strip()
+        if not objective:
+            raise HTTPException(status_code=400, detail="objective required")
+        step_specs = (body or {}).get("steps") or []
+        if not isinstance(step_specs, list):
+            step_specs = []
+        # default one noop step if empty — structure only
+        if not step_specs:
+            step_specs = [{"title": "Review objective", "action": "note", "args": {"text": objective}}]
+        report = plan_execute_report(objective, step_specs, run_step=None)
+        steps = build_plan(objective, step_specs)
+        return {
+            "objective": objective,
+            "report": report,
+            "steps": [s.__dict__ if hasattr(s, "__dict__") else s for s in steps],
+        }
+
+    @app.post("/v1/si/v1")
+    def si_v1_endpoint(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.agent.si_v1 import run_si_v1, SI_v1Config
+        prompt = str((body or {}).get("prompt") or (body or {}).get("question") or "").strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt required")
+        max_steps = int((body or {}).get("max_steps") or 6)
+        return run_si_v1(prompt, config=SI_v1Config(max_steps=max_steps)).to_dict()
+
     return app
 
 
