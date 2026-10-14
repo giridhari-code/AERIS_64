@@ -121,9 +121,9 @@ def tool_schemas() -> list[dict[str, Any]]:
         {
             "name": "tool_search",
             "description": (
-                "Claude-style Tool Search: given a natural-language need, rank and return "
-                "the most relevant tools from the full catalog. Use this when you have many "
-                "tools and want only the best matches instead of loading everything."
+                "Rank tools in the catalog against a natural-language need and return "
+                "the best matches. Use when the tool set is large and only relevant "
+                "tools should be considered."
             ),
             "inputSchema": {
                 "type": "object",

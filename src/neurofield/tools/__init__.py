@@ -3,7 +3,13 @@
 from neurofield.tools.catalog import list_mcp_tools, tool_schemas
 from neurofield.tools.git_tool import git_report, git_status
 from neurofield.tools.orchestrate import enrich_prompt_with_tools
-from neurofield.tools.tool_search import search_tools, tool_search_report, get_relevant_schemas, format_tool_catalog_for_prompt
+from neurofield.tools.tool_search import (
+    search_tools,
+    tool_search_report,
+    get_relevant_schemas,
+    format_tool_catalog_for_prompt,
+    route_tool_names,
+)
 from neurofield.tools.code_execution import code_execution, code_interpreter
 from neurofield.tools.bash_tool import bash
 from neurofield.tools.web_fetch import web_fetch
@@ -22,6 +28,7 @@ __all__ = [
     "tool_search_report",
     "get_relevant_schemas",
     "format_tool_catalog_for_prompt",
+    "route_tool_names",
     "code_execution",
     "code_interpreter",
     "bash",
