@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from neurofield.checkpoint import save_checkpoint  # noqa: E402
 from neurofield.config import ModelConfig, SafetyConfig  # noqa: E402
-from neurofield.model import NeuroField  # noqa: E402
+from neurofield.model import SENTINEL  # noqa: E402
 from neurofield.serving import chat_history  # noqa: E402
 from neurofield.serving.server import create_app  # noqa: E402
 from neurofield.serving.user_memory import UserMemoryStore, cap_slow_norm  # noqa: E402
@@ -83,7 +83,7 @@ def ckpt_dir(tmp_path_factory):
     cfg = ModelConfig(d_model=32, d_k=16, d_v=16, n_skills=3, top_k=2, k_max=2,
                       vocab_size=tok.vocab_size, dendrite_window=2, max_seq_len=256)
     torch.manual_seed(0)
-    out = save_checkpoint(root, NeuroField(cfg, SafetyConfig(enable_audit=False)), config={}, meta={"model_id": "mem-test"})
+    out = save_checkpoint(root, SENTINEL(cfg, SafetyConfig(enable_audit=False)), config={}, meta={"model_id": "mem-test"})
     (out / "tokenizer.json").write_text(json.dumps(tok.to_vocab_dict()), encoding="utf-8")
     return out
 

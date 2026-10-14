@@ -1,6 +1,6 @@
 # Anthropic-style pipeline on AERIS_64 (mini)
 
-Maps **public Claude training ideas** onto a **toy** NeuroField model.
+Maps **public Claude training ideas** onto a **toy** SENTINEL model.
 
 | Anthropic stage | AERIS command / files |
 |-----------------|------------------------|

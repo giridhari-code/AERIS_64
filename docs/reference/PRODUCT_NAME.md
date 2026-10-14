@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|--------|
 | **Product / model name** | **AERIS_64** |
-| **Architecture** | **NeuroField v2** (two-speed memory) |
+| **Architecture** | **SENTINEL** (two-speed memory) |
 
 - API `model` id: `AERIS_64`
 - Checkpoint folder can stay `docs/neurofield_company` or rename to `docs/AERIS_64`

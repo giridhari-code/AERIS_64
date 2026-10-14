@@ -1,16 +1,16 @@
 # Production patch — sandbox + contribution ablation
 
-Apply these files onto your AERIS_64 / NeuroField tree. **No demo / Tiny re-implementation.**
+Apply these files onto your AERIS_64 / SENTINEL tree. **No demo / Tiny re-implementation.**
 
 ## What changed
 
 ### 1. `src/neurofield/config.py`
 - Added `AblationConfig` (defaults = production: all modules on)
 - Added `truncate_write_window` on `SafetyConfig` (was only via getattr before)
-- `NeuroFieldConfig` carries optional `ablation` block
+- `SENTINELConfig` carries optional `ablation` block
 
 ### 2. `src/neurofield/model.py`
-- `NeuroField(..., ablation: AblationConfig | None = None)`
+- `SENTINEL(..., ablation: AblationConfig | None = None)`
 - `set_ablation(cfg)` for hot-swap without rebuilding weights
 - Forward path respects:
   - `use_fast_memory` — skip write/read, zero fast vector
@@ -36,7 +36,7 @@ Apply these files onto your AERIS_64 / NeuroField tree. **No demo / Tiny re-impl
   - `NEUROFIELD_SANDBOX_TIMEOUT`, `_NETWORK`, `_MAX_SESSIONS`, `_MAX_CALLS`
 
 ### 5. `scripts/contribution_ablation.py`
-- Imports **real** `neurofield.model.NeuroField`
+- Imports **real** `neurofield.model.SENTINEL`
 - Section 7 recall task, multi-seed, JSON report
 
 ### 6. `tests/test_ablation_and_sandbox.py`

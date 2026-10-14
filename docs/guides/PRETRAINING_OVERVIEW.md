@@ -16,7 +16,7 @@ Model ko itna expose karo ki woh:
 
 dono seekh le — bina har task ke liye alag label ke.
 
-NeuroField Company mein yahi goal chhote scale pe: identity, Hindlish, skills, API help, thoda code.
+SENTINEL Company mein yahi goal chhote scale pe: identity, Hindlish, skills, API help, thoda code.
 
 ---
 
@@ -37,7 +37,7 @@ Ye **self-supervised** hai:
 - alag human labels ki zaroorat nahi
 - bas raw text / code stream
 
-NeuroField train scripts (`train_company.py`, `train_multilang.py`) yahi karte hain:
+SENTINEL train scripts (`train_company.py`, `train_multilang.py`) yahi karte hain:
 
 - character-level **ya** BPE tokens
 - next-token CE (+ optional error-energy / balance terms from architecture)
@@ -74,7 +74,7 @@ Track B (frontier) pe aap khud legal dumps + filters use karoge.
 
 ---
 
-## 4. How this maps to NeuroField daily training
+## 4. How this maps to SENTINEL daily training
 
 ```text
 Stanford concept          →  Aapka action

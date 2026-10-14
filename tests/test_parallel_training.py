@@ -11,8 +11,8 @@ torch = pytest.importorskip("torch")
 import torch.distributed as dist  # noqa: E402
 import torch.multiprocessing as mp  # noqa: E402
 
-from neurofield.config import ModelConfig, NeuroFieldConfig, SafetyConfig  # noqa: E402
-from neurofield.model import NeuroField  # noqa: E402
+from neurofield.config import ModelConfig, SENTINELConfig, SafetyConfig  # noqa: E402
+from neurofield.model import SENTINEL  # noqa: E402
 
 
 def _cfg(**kw):
@@ -22,7 +22,7 @@ def _cfg(**kw):
 
 def test_parallel_ops_is_numerically_identical_to_the_per_token_path():
     torch.manual_seed(0)
-    m = NeuroField(_cfg(), SafetyConfig(enable_audit=False))
+    m = SENTINEL(_cfg(), SafetyConfig(enable_audit=False))
     m.meta.track_global = False
     x, y = torch.randint(0, 300, (3, 40)), torch.randint(0, 300, (3, 40))
     res = {}
@@ -47,7 +47,7 @@ def test_parallel_ops_chunked_state_continuation_matches_per_token_path():
     at its last token. What must hold is parallel == per-token for the SAME chunking.)
     """
     torch.manual_seed(1)
-    m = NeuroField(_cfg(), SafetyConfig(enable_audit=False)).eval()
+    m = SENTINEL(_cfg(), SafetyConfig(enable_audit=False)).eval()
     x = torch.randint(0, 300, (2, 30))
     outs = {}
     with torch.no_grad():
@@ -65,7 +65,7 @@ def test_parallel_ops_chunked_state_continuation_matches_per_token_path():
 
 def test_read_seq_matches_per_token_read():
     torch.manual_seed(2)
-    m = NeuroField(_cfg(), SafetyConfig(enable_audit=False)).eval()
+    m = SENTINEL(_cfg(), SafetyConfig(enable_audit=False)).eval()
     sm = m.slow_mem
     B, T = 3, 9
     D = torch.randn(B, T, m.cfg.d_model)
@@ -96,12 +96,12 @@ def _worker(rank: int, world: int, port: int, out_dir: str) -> None:
     from neurofield.training import Trainer
 
     torch.manual_seed(0)  # identical init on every rank (DDP also broadcasts rank 0)
-    cfg = NeuroFieldConfig()
+    cfg = SENTINELConfig()
     t = cfg.training
     t.device, t.max_steps, t.warmup_steps, t.replay_every = "cpu", 6, 1, 3
     t.log_every, t.eval_every, t.checkpoint_every, t.grad_accum_steps = 100, 1000, 1000, 2
     t.lambda_err_warmup_steps, t.output_dir = 4, out_dir
-    model = NeuroField(
+    model = SENTINEL(
         ModelConfig(d_model=24, d_k=8, d_v=8, n_skills=2, top_k=1, k_max=2, vocab_size=20,
                     max_seq_len=16, dendrite_window=2), cfg.safety)
     g = torch.Generator().manual_seed(100 + rank)  # DIFFERENT data on each rank
@@ -124,4 +124,4 @@ def test_ddp_two_ranks_stay_identical_with_accumulation_replay_and_warmup(tmp_pa
 
 
 def test_lambda_err_warmup_field_defaults_off():
-    assert NeuroFieldConfig().training.lambda_err_warmup_steps == 0
+    assert SENTINELConfig().training.lambda_err_warmup_steps == 0

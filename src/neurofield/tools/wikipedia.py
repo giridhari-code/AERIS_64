@@ -13,7 +13,7 @@ def wikipedia_summary(topic: str, lang: str = "en", timeout: float = 10.0) -> st
         return "Wikipedia: empty topic."
     title = urllib.parse.quote(topic.replace(" ", "_"))
     url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{title}"
-    req = urllib.request.Request(url, headers={"User-Agent": "AERIS-NeuroField/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "SENTINEL/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))

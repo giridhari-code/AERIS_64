@@ -1,4 +1,4 @@
-# SDLC — NeuroField / AERIS
+# SDLC — SENTINEL / AERIS
 
 Production lifecycle for this repository. No demo stages: each gate is real.
 

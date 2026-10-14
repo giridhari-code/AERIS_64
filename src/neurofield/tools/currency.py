@@ -11,7 +11,7 @@ def convert_currency(amount: float, fr: str, to: str, timeout: float = 8.0) -> s
     fr, to = fr.upper().strip(), to.upper().strip()
     q = urllib.parse.urlencode({"amount": amount, "from": fr, "to": to})
     url = f"https://api.frankfurter.app/latest?{q}"
-    req = urllib.request.Request(url, headers={"User-Agent": "AERIS-NeuroField/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "SENTINEL/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))

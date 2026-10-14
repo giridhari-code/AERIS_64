@@ -1,4 +1,4 @@
-"""Multi-format corpus loader → unified plain text for NeuroField training.
+"""Multi-format corpus loader → unified plain text for SENTINEL training.
 
 Supported file types
 --------------------

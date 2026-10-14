@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train NeuroField on India multilang + Hindlish + spelling-robust data."""
+"""Train SENTINEL on India multilang + Hindlish + spelling-robust data."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from torch.optim import AdamW
 
 from neurofield.checkpoint import save_checkpoint
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.training.paper_step import maybe_replay
 
 
@@ -55,7 +55,7 @@ def main() -> None:
         tie_embeddings=True,
         dropout=0.05,
     )
-    model = NeuroField(cfg, SafetyConfig(enable_audit=False, max_memory_norm=40.0))
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=False, max_memory_norm=40.0))
     opt = AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
     def batch(bs=16, seq=48):

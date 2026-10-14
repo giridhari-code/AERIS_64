@@ -1,4 +1,4 @@
-"""Per-session isolated tool execution for NeuroField serving."""
+"""Per-session isolated tool execution for SENTINEL serving."""
 
 from .executor import SandboxConfig, SandboxExecutor, SandboxResult
 from .session import SandboxRegistry, SessionSandbox

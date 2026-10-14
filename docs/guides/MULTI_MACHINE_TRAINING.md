@@ -3,7 +3,7 @@
 **Contact:** giriisdev@gmail.com
 
 When several people train (home PC, laptop, Google Colab), you get **multiple weight files**.
-They do **not** merge by themselves. This doc is the full policy for AERIS / NeuroField.
+They do **not** merge by themselves. This doc is the full policy for SENTINEL.
 
 ---
 

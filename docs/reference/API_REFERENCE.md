@@ -1,4 +1,4 @@
-# NeuroField Company API Reference
+# SENTINEL Company API Reference
 
 Base URL: `http://127.0.0.1:8000`
 

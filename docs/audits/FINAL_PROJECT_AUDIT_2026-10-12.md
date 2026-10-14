@@ -4,7 +4,7 @@
 
 ## Architecture: OK
 
-NeuroField parallel/looped path is the main forward. Components present: embed, dendrite, predictor, neuromod, router, fast_mem, field, slow_mem, readout. Smoke test: `path=parallel`, forward+loss OK.
+SENTINEL parallel/looped path is the main forward. Components present: embed, dendrite, predictor, neuromod, router, fast_mem, field, slow_mem, readout. Smoke test: `path=parallel`, forward+loss OK.
 
 ## Removed earlier as non-identity
 

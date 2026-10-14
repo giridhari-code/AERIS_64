@@ -1,4 +1,4 @@
-# AERIS / NeuroField — Training 0 se 100
+# SENTINEL — Training 0 se 100
 
 Ek hi guide: bilkul shuru se trained model + chat tak.
 

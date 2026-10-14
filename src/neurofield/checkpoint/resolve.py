@@ -14,8 +14,8 @@ from typing import Any, Optional
 
 from neurofield.checkpoint.infer import infer_model_dims, remap_legacy_keys, strip_compile_prefix
 from neurofield.checkpoint.io import load_checkpoint
-from neurofield.config import ModelConfig, NeuroFieldConfig, SafetyConfig, load_config
-from neurofield.model import NeuroField
+from neurofield.config import ModelConfig, SENTINELConfig, SafetyConfig, load_config
+from neurofield.model import SENTINEL
 from neurofield.tokenizer.bpe import BPETokenizer
 from neurofield.tokenizer.char import CharTokenizer
 from neurofield.tokenizer.hf import HFTokenizer
@@ -38,14 +38,14 @@ def load_tokenizer(checkpoint: str | Path, ckpt: dict[str, Any]):
 
 def resolve_model_config(
     ckpt: dict[str, Any], config_path: Optional[str] = None
-) -> tuple[ModelConfig, SafetyConfig, NeuroFieldConfig]:
+) -> tuple[ModelConfig, SafetyConfig, SENTINELConfig]:
     """Declared config supplies non-shape knobs; weight shapes win for dimensions."""
     state = ckpt["model"]
     if config_path:
         full = load_config(config_path)
         declared = dict(full.model.__dict__)
     else:
-        full = NeuroFieldConfig()
+        full = SENTINELConfig()
         raw = ckpt.get("config") or {}
         if isinstance(raw, dict) and isinstance(raw.get("model"), dict):
             raw = raw["model"]
@@ -55,13 +55,13 @@ def resolve_model_config(
 
     inferred = infer_model_dims(state)
     if not inferred:
-        raise ValueError("Checkpoint has no recognisable NeuroField tensors (embed.weight ...)")
+        raise ValueError("Checkpoint has no recognisable SENTINEL tensors (embed.weight ...)")
     for k, v in inferred.items():
         if k in declared and declared[k] != v:
             logger.warning("config says %s=%s but weights say %s; using weights", k, declared[k], v)
         declared[k] = v
     model_cfg = ModelConfig(**{k: declared[k] for k in ModelConfig.__dataclass_fields__ if k in declared})
-    merged = NeuroFieldConfig(
+    merged = SENTINELConfig(
         model=model_cfg, training=full.training, data=full.data, safety=full.safety, logging=full.logging
     )
     return model_cfg, full.safety, merged
@@ -72,7 +72,7 @@ def load_model_from_checkpoint(
     config_path: Optional[str] = None,
     device: str = "cpu",
     strict: bool = True,
-) -> tuple[NeuroField, Any, NeuroFieldConfig, dict[str, Any]]:
+) -> tuple[SENTINEL, Any, SENTINELConfig, dict[str, Any]]:
     """Return (model.eval() on `device`, tokenizer, merged config, meta)."""
     ckpt = load_checkpoint(checkpoint)
     ckpt["model"], stripped = strip_compile_prefix(ckpt["model"])
@@ -88,7 +88,7 @@ def load_model_from_checkpoint(
             f"Tokenizer vocab ({tok.vocab_size}) > model vocab ({model_cfg.vocab_size}): "
             "wrong tokenizer for this checkpoint."
         )
-    model = NeuroField(model_cfg, safety_cfg)
+    model = SENTINEL(model_cfg, safety_cfg)
     res = model.load_state_dict(ckpt["model"], strict=False)
     missing = list(getattr(res, "missing_keys", []))
     unexpected = list(getattr(res, "unexpected_keys", []))

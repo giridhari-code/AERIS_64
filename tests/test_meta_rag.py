@@ -46,8 +46,8 @@ def test_auto_mode_and_helper():
 
     ctrl = MetaRAGController(mode="auto", enabled=True)
     ctrl._rag = RAGPipeline()
-    ctrl._rag.ingest_text("NeuroField uses fast and slow memory.", source="test")
-    d = ctrl.decide("What is NeuroField memory?", session_key="auto1")
+    ctrl._rag.ingest_text("SENTINEL uses fast and slow memory.", source="test")
+    d = ctrl.decide("What is SENTINEL memory?", session_key="auto1")
     assert d.should_retrieve is True
 
     # auto_rag helper uses the process singleton; just ensure it returns a dict

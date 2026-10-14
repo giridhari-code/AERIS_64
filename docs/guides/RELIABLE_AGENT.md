@@ -8,7 +8,7 @@ Predictable tool use + hard budgets — not open-ended autonomy.
 
 1. User text  
 2. **Enrich** via allow-listed tools (`orchestrate.enrich_prompt_with_tools`)  
-3. Optional **generate_fn** (NeuroField checkpoint)  
+3. Optional **generate_fn** (SENTINEL checkpoint)  
 4. Stop: answer | tool_fail_budget | empty | max_steps  
 
 ## Config

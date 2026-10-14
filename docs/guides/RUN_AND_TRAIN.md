@@ -1,6 +1,6 @@
 > **Note (v2.2):** server env vars are now `NEUROFIELD_CHECKPOINT / NEUROFIELD_CONFIG / NEUROFIELD_DEVICE` (the short `CHECKPOINT/CONFIG/DEVICE` still work). For the 1B configuration see [TRAIN_1B.md](TRAIN_1B.md).
 
-# NeuroField v2 — Run & Training Guide
+# SENTINEL — Run & Training Guide
 
 Complete steps: install → train → serve → chat.
 
@@ -24,7 +24,7 @@ pip install -e ".[serve]"
 Check:
 
 ```bash
-PYTHONPATH=src python -c "from neurofield.model import NeuroField; print('OK')"
+PYTHONPATH=src python -c "from neurofield.model import SENTINEL; print('OK')"
 ```
 
 ---
@@ -155,7 +155,7 @@ PYTHONPATH=src python scripts/train_skills.py \
 ```
 1. Load text files (UTF-8)
 2. Build character vocabulary (stoi / itos)
-3. Create NeuroField model (dendrite, field, fast/slow memory, router…)
+3. Create SENTINEL model (dendrite, field, fast/slow memory, router…)
 4. Loop:
      - sample random batches of character sequences
      - forward → next-char loss + error energy

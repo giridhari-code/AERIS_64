@@ -1,6 +1,6 @@
 # AERIS_64 — Model Card
 
-**Architecture:** NeuroField v2 (two-speed memory). **Product name:** AERIS_64.
+**Architecture:** SENTINEL (two-speed memory). **Product name:** AERIS_64.
 
 
 ## Model details
@@ -8,7 +8,7 @@
 | Field | Value |
 |-------|--------|
 | Name | **AERIS_64** |
-| Architecture | NeuroField v2 (two-speed memory) — unchanged |
+| Architecture | SENTINEL (two-speed memory) — unchanged |
 | Product version | 2.2.0 |
 | Tokenizer | Character (default) or BPE |
 | Bundled demo checkpoints | ~36k–63k parameters (measured from tensor shapes) |
@@ -61,4 +61,4 @@ Older `eval_report.json` files in `docs/` computed val on the training corpus an
 
 ## Contact / ownership
 
-NeuroField Contributors — research prototype productized for deployment practice.
+SENTINEL Contributors — research prototype productized for deployment practice.

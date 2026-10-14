@@ -11,7 +11,7 @@ from typing import Any, Optional
 def geocode(place: str, timeout: float = 8.0) -> Optional[dict[str, Any]]:
     q = urllib.parse.urlencode({"name": place, "count": 1, "language": "en", "format": "json"})
     url = f"https://geocoding-api.open-meteo.com/v1/search?{q}"
-    req = urllib.request.Request(url, headers={"User-Agent": "AERIS-NeuroField/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "SENTINEL/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     results = data.get("results") or []
@@ -36,7 +36,7 @@ def forecast(lat: float, lon: float, timeout: float = 8.0) -> dict[str, Any]:
         }
     )
     url = f"https://api.open-meteo.com/v1/forecast?{q}"
-    req = urllib.request.Request(url, headers={"User-Agent": "AERIS-NeuroField/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "SENTINEL/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Production contribution ablation for NeuroField v2.
+Production contribution ablation for SENTINEL v2.
 
-Uses the real neurofield.model.NeuroField (Appendix A), not a re-implementation.
+Uses the real neurofield.model.SENTINEL (Appendix A), not a re-implementation.
 Measures eval accuracy on 4-pair associative recall while switching modules via
 AblationConfig (Section 7 protocol).
 
@@ -34,7 +34,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from neurofield.config import AblationConfig, ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 
 
 PRESETS: dict[str, AblationConfig] = {
@@ -138,7 +138,7 @@ def run_one(
         gate_cap=1.0,
         truncate_write_window=32,
     )
-    model = NeuroField(cfg, safety=safety, ablation=ablation).to(device)
+    model = SENTINEL(cfg, safety=safety, ablation=ablation).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=lr)
 
     t0 = time.time()
@@ -198,7 +198,7 @@ def run_one(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="NeuroField production contribution ablation")
+    ap = argparse.ArgumentParser(description="SENTINEL production contribution ablation")
     ap.add_argument("--steps", type=int, default=800)
     ap.add_argument("--seeds", type=str, default="0")
     ap.add_argument("--d-model", type=int, default=64)

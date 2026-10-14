@@ -15,7 +15,7 @@ def make_generate_fn(
     temperature: float = 0.4,
 ) -> Callable[[str], str]:
     """
-    Load NeuroField checkpoint once; return prompt -> text.
+    Load SENTINEL checkpoint once; return prompt -> text.
 
     Uses ``load_model_from_checkpoint`` (same path as the server).
     On failure, returns a function that yields "" and sets ``fn.load_error``.

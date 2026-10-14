@@ -9,9 +9,9 @@ from pathlib import Path
 
 import torch
 
-from neurofield.config import load_config, NeuroFieldConfig
+from neurofield.config import load_config, SENTINELConfig
 from neurofield.data import build_dataloader
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.training import Trainer
 
 
@@ -24,7 +24,7 @@ def setup_logging(level: str = "INFO") -> None:
 
 
 def train_main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Train NeuroField v2")
+    parser = argparse.ArgumentParser(description="Train SENTINEL v2")
     parser.add_argument("--config", type=str, default=None, help="Path to YAML config")
     parser.add_argument("--train-data", type=str, default=None)
     parser.add_argument("--val-data", type=str, default=None)
@@ -72,7 +72,7 @@ def train_main(argv: list[str] | None = None) -> None:
         logging.error("vocab_size %d does not fit uint16; use --token-dtype int32", cfg.model.vocab_size)
         sys.exit(1)
 
-    model = NeuroField(cfg.model, cfg.safety)
+    model = SENTINEL(cfg.model, cfg.safety)
     report = model.param_report()
     logging.info("Parameter report: %s", report)
 
@@ -102,7 +102,7 @@ def train_main(argv: list[str] | None = None) -> None:
 
 
 def eval_main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Evaluate a NeuroField checkpoint on a tokenized .bin/.npy")
+    parser = argparse.ArgumentParser(description="Evaluate a SENTINEL checkpoint on a tokenized .bin/.npy")
     parser.add_argument("--checkpoint", type=str, required=True, help="safetensors folder or checkpoint_*.pt")
     parser.add_argument("--data", type=str, required=True, help="HELD-OUT token file")
     parser.add_argument("--config", type=str, default=None)

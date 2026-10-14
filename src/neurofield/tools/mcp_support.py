@@ -1,4 +1,4 @@
-"""MCP-facing list and dispatch for NeuroField tools.
+"""MCP-facing list and dispatch for SENTINEL tools.
 
 The catalog is the source of truth for schemas. Dispatch maps tool names to
 callables. Optional tools (image generation, computer use) are only listed

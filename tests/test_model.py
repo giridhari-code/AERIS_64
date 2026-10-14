@@ -1,11 +1,11 @@
-"""Smoke tests for NeuroField v2 – no external data required."""
+"""Smoke tests for SENTINEL v2 – no external data required."""
 
 from __future__ import annotations
 
 import torch
 
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 
 
 def test_forward_shape_and_grad():
@@ -20,7 +20,7 @@ def test_forward_shape_and_grad():
         dendrite_window=2,
         tie_embeddings=True,
     )
-    model = NeuroField(cfg, SafetyConfig(enable_audit=True))
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=True))
     model.train()
 
     B, T = 2, 16
@@ -45,7 +45,7 @@ def test_forward_shape_and_grad():
 
 def test_param_report():
     cfg = ModelConfig(d_model=32, vocab_size=50, n_skills=2)
-    model = NeuroField(cfg)
+    model = SENTINEL(cfg)
     report = model.param_report()
     assert "total" in report
     assert report["total"] > 0
@@ -53,7 +53,7 @@ def test_param_report():
 
 def test_freeze_writes():
     cfg = ModelConfig(d_model=32, vocab_size=50)
-    model = NeuroField(cfg)
+    model = SENTINEL(cfg)
     model.freeze_writes()
     # Gate should collapse near zero
     h = torch.randn(2, 32)
@@ -65,7 +65,7 @@ def test_freeze_writes():
 def _tiny(**safety):
     cfg = ModelConfig(d_model=32, d_k=16, d_v=16, n_skills=3, top_k=2, k_max=2,
                       vocab_size=50, dendrite_window=2)
-    return NeuroField(cfg, SafetyConfig(enable_audit=True, **safety)).eval()
+    return SENTINEL(cfg, SafetyConfig(enable_audit=True, **safety)).eval()
 
 
 def test_audit_is_plain_floats_one_per_step():
@@ -93,14 +93,14 @@ def test_no_cross_session_leak_when_global_tracking_off():
 
 
 def test_truncate_window_comes_from_training_config():
-    from neurofield.config import NeuroFieldConfig
+    from neurofield.config import SENTINELConfig
     from neurofield.training import Trainer
 
-    cfg = NeuroFieldConfig()
+    cfg = SENTINELConfig()
     cfg.training.truncate_write_window = 7
     cfg.training.device = "cpu"
     cfg.training.output_dir = "/tmp/nf_trainer_test"
-    m = NeuroField(ModelConfig(d_model=16, d_k=8, d_v=8, n_skills=2, vocab_size=20))
+    m = SENTINEL(ModelConfig(d_model=16, d_k=8, d_v=8, n_skills=2, vocab_size=20))
     Trainer(m, cfg, train_loader=[])
     assert m._truncate_window == 7
 

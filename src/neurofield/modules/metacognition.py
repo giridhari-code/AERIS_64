@@ -1,5 +1,5 @@
 """
-Brain-inspired metacognition for NeuroField.
+Brain-inspired metacognition for SENTINEL.
 
 Human metacognition (roughly):
   MONITOR  — how wrong / uncertain am I? (prediction error, conflict, confidence)

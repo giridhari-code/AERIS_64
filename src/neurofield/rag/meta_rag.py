@@ -1,6 +1,6 @@
 """Metacognition-controlled Adaptive RAG.
 
-Puts retrieval under the same monitor→control loop as the rest of NeuroField:
+Puts retrieval under the same monitor→control loop as the rest of SENTINEL:
 
   MONITOR  — confidence / arousal / conflict (from Metacognition or a prompt heuristic)
   CONTROL  — should_retrieve?, top_k, min_score

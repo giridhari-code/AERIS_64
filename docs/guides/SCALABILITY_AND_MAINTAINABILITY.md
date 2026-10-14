@@ -1,6 +1,6 @@
 # Scalability · Maintainability · Operability
 
-How to grow AERIS / NeuroField without turning the repo into chaos.
+How to grow SENTINEL without turning the repo into chaos.
 
 ---
 

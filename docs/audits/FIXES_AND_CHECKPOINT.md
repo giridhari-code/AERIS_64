@@ -1,4 +1,4 @@
-# NeuroField v2 — Fixes, Safetensors & Multi-File Guide
+# SENTINEL — Fixes, Safetensors & Multi-File Guide
 
 ## 1. Problem: `Error: model not loaded`
 
@@ -59,7 +59,7 @@ Legacy `.pt` files still load for compatibility, but **prefer the folder**.
 | `.pt` / pickle | Can execute arbitrary code on load | Old PyTorch only |
 | **`.safetensors`** | Weights only, safe | Hugging Face, Diffusers, vLLM, industry |
 
-NeuroField now saves/loads safetensors by default via `neurofield.checkpoint`.
+SENTINEL now saves/loads safetensors by default via `neurofield.checkpoint`.
 
 ---
 

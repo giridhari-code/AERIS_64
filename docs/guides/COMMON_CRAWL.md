@@ -100,7 +100,7 @@ Or snapshot download with patterns — see FineWeb dataset card on Hugging Face.
 
 ---
 
-## NeuroField Company (this repo)
+## SENTINEL Company (this repo)
 
 | Can we ship full CC in the zip? | **No** |
 |--------------------------------|--------|

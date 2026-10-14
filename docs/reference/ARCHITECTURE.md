@@ -1,4 +1,4 @@
-# NeuroField / AESC architecture
+# SENTINEL architecture
 
 ## Per-token loop (every word)
 

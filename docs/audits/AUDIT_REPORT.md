@@ -1,6 +1,6 @@
 > **Superseded by [AUDIT_V2_2.md](AUDIT_V2_2.md).** This file is the project's own earlier self-report; several of its claims (e.g. session isolation, tests) did not hold up under review.
 
-# NeuroField v2 — Post-Audit Fix Report
+# SENTINEL — Post-Audit Fix Report
 
 **Date:** 2026-10-06
 

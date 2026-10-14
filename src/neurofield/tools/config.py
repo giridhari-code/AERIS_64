@@ -1,4 +1,4 @@
-"""Production configuration for NeuroField external tools.
+"""Production configuration for SENTINEL external tools.
 
 All limits and feature flags come from environment variables so the same
 binary can run in dev, staging, and production without code changes.

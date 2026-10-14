@@ -10,14 +10,14 @@
 |------|--------|
 | Architecture design | **OK** — two-speed memory, dendrite, field, router, parallel/looped path |
 | Core code | **Runs** — train / checkpoint / serve path present |
-| Research paper | **docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf** (diagrams + formulas) |
+| Research paper | **docs/paper/AESC_SENTINEL_Full_Research_Paper_Giridhari_Karmakar.pdf** (diagrams + formulas) |
 | Production frontier LM | **Not claimed** — needs data, compute, eval |
 
 ## Canonical artifacts
 
 - Code: `src/neurofield/` (model parallel path)
 - Train: `scripts/train/train_company.py`
-- Paper: `docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf`
+- Paper: `docs/paper/AESC_SENTINEL_Full_Research_Paper_Giridhari_Karmakar.pdf`
 - Figures: `docs/paper/figures/`
 - Audit: `docs/audits/FINAL_PROJECT_AUDIT_2026-10-12.md`
 

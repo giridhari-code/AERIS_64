@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 
 from neurofield.config import ModelConfig, SafetyConfig, AblationConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 
 
 def _make():
@@ -13,7 +13,7 @@ def _make():
         d_model=48, d_k=24, d_v=24, n_skills=2, top_k=1, k_max=2,
         vocab_size=32, max_seq_len=64, dendrite_window=2, dropout=0.0,
     )
-    return NeuroField(cfg, SafetyConfig(enable_audit=False, truncate_write_window=16))
+    return SENTINEL(cfg, SafetyConfig(enable_audit=False, truncate_write_window=16))
 
 
 def test_forward_shape_and_path():

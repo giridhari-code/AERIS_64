@@ -1,4 +1,4 @@
-"""Training loop for NeuroField (1B-ready).
+"""Training loop for SENTINEL (1B-ready).
 
 Adds over the original loop:
   * gradient accumulation (training.grad_accum_steps)
@@ -26,8 +26,8 @@ from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 
 from neurofield.checkpoint.io import _torch_load, save_checkpoint
-from neurofield.config import NeuroFieldConfig, save_config
-from neurofield.model import NeuroField
+from neurofield.config import SENTINELConfig, save_config
+from neurofield.model import SENTINEL
 from neurofield.training.distributed import is_distributed, is_main
 
 logger = logging.getLogger(__name__)
@@ -67,8 +67,8 @@ def _decay_groups(model: torch.nn.Module, weight_decay: float) -> list[dict[str,
 class Trainer:
     def __init__(
         self,
-        model: NeuroField,
-        cfg: NeuroFieldConfig,
+        model: SENTINEL,
+        cfg: SENTINELConfig,
         train_loader: Any,
         val_loader: Optional[Any] = None,
         extra_files: Optional[dict[str, str]] = None,

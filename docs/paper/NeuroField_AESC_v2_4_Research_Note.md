@@ -1,10 +1,10 @@
-# NeuroField / AESC v2.4 — Research Note
+# SENTINEL v2.4 — Research Note
 
 **Two-Speed Memory with Per-Token Dendritic Loop and Context-Window Slow Store**
 
 | Field | Value |
 |-------|--------|
-| Project | AERIS / NeuroField |
+| Project | SENTINEL |
 | Version | v2.4 (architecture note) |
 | Date | 2026-10-10 |
 | Contact | giriisdev@gmail.com |
@@ -14,13 +14,13 @@
 
 ## Abstract
 
-NeuroField is a recurrent language-model architecture that processes tokens **one step at a time**. Each step builds a local dendritic feature \(d_t\) from a short causal window of embeddings, updates a working field state \(h\), routes through skill operators, and writes to a **fast** associative matrix. Long context is not expanded inside the dendrite; it is stored in a **slow** ring of segment slots that implement an explicit **context window**. This note describes the per-token loop, the two-speed memory split, metacognitive control, and the limits of the design relative to large Transformer LMs.
+SENTINEL is a recurrent language-model architecture that processes tokens **one step at a time**. Each step builds a local dendritic feature \(d_t\) from a short causal window of embeddings, updates a working field state \(h\), routes through skill operators, and writes to a **fast** associative matrix. Long context is not expanded inside the dendrite; it is stored in a **slow** ring of segment slots that implement an explicit **context window**. This note describes the per-token loop, the two-speed memory split, metacognitive control, and the limits of the design relative to large Transformer LMs.
 
 ---
 
 ## 1. Motivation
 
-Standard Transformers keep context via attention over a token sequence. NeuroField instead uses:
+Standard Transformers keep context via attention over a token sequence. SENTINEL instead uses:
 
 1. A **fixed local window** (dendrite) for immediate sensory context.
 2. A **fast weight matrix** \(M\) for the current segment (delta-rule).
@@ -205,7 +205,7 @@ Checkpoints: **`model.safetensors` only** (no pickle `.pt` load path in current 
 
 ## 10. Conclusion
 
-NeuroField v2.4 makes the **per-token loop** and **context-window slow store** explicit: dendrite stays local; long context is a ring of segment memories; field state \(h\) links steps. The architecture is coherent for research on two-speed memory and metacognitive gating. It is not a claim of frontier LLM equivalence.
+SENTINEL.4 makes the **per-token loop** and **context-window slow store** explicit: dendrite stays local; long context is a ring of segment memories; field state \(h\) links steps. The architecture is coherent for research on two-speed memory and metacognitive gating. It is not a claim of frontier LLM equivalence.
 
 ---
 

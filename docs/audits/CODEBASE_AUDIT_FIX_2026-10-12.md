@@ -2,7 +2,7 @@
 
 ## Smoke
 
-- NeuroField parallel forward + loss + backward: OK
+- SENTINEL parallel forward + loss + backward: OK
 - Core tests: **53 passed** (delta rule, safety freeze, parallel main, decode parity, paper checklist, model, components)
 - `test_company` / `test_server`: require FastAPI; now `importorskip` so collection does not hard-fail without deps
 
@@ -15,7 +15,7 @@
 
 ## Architecture status
 
-Main path remains parallel/looped NeuroField (not Transformer). Modules: embed, dendrite, field, predictor, neuromod, router, fast_mem, slow_mem, readout.
+Main path remains parallel/looped SENTINEL (not Transformer). Modules: embed, dendrite, field, predictor, neuromod, router, fast_mem, slow_mem, readout.
 
 ## Known non-blocking gaps
 

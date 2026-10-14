@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Micro-benchmark: NeuroField vs minimal Transformer block (same d_model, seq).
+"""Micro-benchmark: SENTINEL vs minimal Transformer block (same d_model, seq).
 
 Measures wall time + rough param counts — for cost intuition, not paper claims.
 """
@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from neurofield.config import ModelConfig, SafetyConfig, model_preset
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 
 
 class MiniTransformerLM(nn.Module):
@@ -76,7 +76,7 @@ def main() -> None:
     cfg.d_k = max(8, cfg.d_model // 2)
     cfg.d_v = max(8, cfg.d_model // 2)
 
-    nf = NeuroField(cfg, SafetyConfig(enable_audit=False)).to(device)
+    nf = SENTINEL(cfg, SafetyConfig(enable_audit=False)).to(device)
     # match param ballpark roughly: 2 layers
     tf = MiniTransformerLM(args.vocab, cfg.d_model, n_layers=2, n_heads=max(1, cfg.d_model // 16)).to(device)
 
@@ -109,7 +109,7 @@ def main() -> None:
 
     print("=== Cost micro-benchmark (wall time) ===")
     print(f"preset={args.preset} d_model={cfg.d_model} seq={args.seq} batch={args.batch} device={device}")
-    print(f"NeuroField params:     {count_params(nf):,}")
+    print(f"SENTINEL params:     {count_params(nf):,}")
     print(f"MiniTransformer params:{count_params(tf):,}")
     print(f"NF  forward ms: {bench(nf_fwd)*1000:.2f}")
     print(f"TF  forward ms: {bench(tf_fwd)*1000:.2f}")

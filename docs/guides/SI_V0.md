@@ -3,7 +3,7 @@
 ## Definition
 
 ```text
-SI_v0 = tools + budgets + audit + optional NeuroField generate
+SI_v0 = tools + budgets + audit + optional SENTINEL generate
 ```
 
 Not AGI. Success = fixed suite passes + live facts from tools.

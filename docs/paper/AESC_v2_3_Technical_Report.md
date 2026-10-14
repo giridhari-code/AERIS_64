@@ -5,11 +5,11 @@
 
 ## Abstract
 
-AESC / NeuroField is a recurrent LM with a k-step neural field, predictive dendrite, top-k skill routing, and two-speed memory. Fast weights use a surprise-gated delta rule; slow weights use backprop + surprise-weighted replay.
+AESC / SENTINEL is a recurrent LM with a k-step neural field, predictive dendrite, top-k skill routing, and two-speed memory. Fast weights use a surprise-gated delta rule; slow weights use backprop + surprise-weighted replay.
 
 v2 (Oct 2, 2026) fixed eleven failure modes and claimed 1.000 recall on a 9.92M reference model. **v2.3** documents production defects that blocked that result in the public tree, the fixes, measured module contributions, brain-inspired metacognition, and a tool sandbox.
 
-After fixes, production NeuroField (`d_model=64`) reaches **0.973** eval accuracy on 4-pair recall at 800 steps vs **0.344** with fast memory off (chance 0.125).
+After fixes, production SENTINEL (`d_model=64`) reaches **0.973** eval accuracy on 4-pair recall at 800 steps vs **0.344** with fast memory off (chance 0.125).
 
 ## Key results
 

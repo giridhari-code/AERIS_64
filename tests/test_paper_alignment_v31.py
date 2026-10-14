@@ -7,12 +7,12 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.modules.memory import FastMemory
 
 
 def test_parallel_ops_forced_true():
-    m = NeuroField(
+    m = SENTINEL(
         ModelConfig(d_model=32, d_k=16, d_v=16, n_skills=2, top_k=1, k_max=2, vocab_size=40, dendrite_window=2, max_seq_len=32),
         SafetyConfig(enable_audit=False),
     )
@@ -22,7 +22,7 @@ def test_parallel_ops_forced_true():
 def test_per_batch_fast_memory_not_shared_across_sequences():
     """Failure mode 1: each batch row has its own M plane."""
     torch.manual_seed(0)
-    m = NeuroField(
+    m = SENTINEL(
         ModelConfig(d_model=32, d_k=16, d_v=16, n_skills=2, top_k=1, k_max=2, vocab_size=40, dendrite_window=2, max_seq_len=32),
         SafetyConfig(enable_audit=False),
     )
@@ -36,7 +36,7 @@ def test_per_batch_fast_memory_not_shared_across_sequences():
 
 
 def test_freeze_zeros_gate_in_forward_metrics_path():
-    m = NeuroField(
+    m = SENTINEL(
         ModelConfig(d_model=32, d_k=16, d_v=16, n_skills=2, top_k=1, k_max=2, vocab_size=40, dendrite_window=2, max_seq_len=32),
         SafetyConfig(enable_audit=False),
     )

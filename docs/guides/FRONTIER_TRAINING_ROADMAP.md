@@ -6,7 +6,7 @@
 |-------|---------|
 | “Day N pe top frontier LLM (GPT-4 / Claude class) ready” | **Nahi** — iske liye generally **months–years**, **thousands of GPUs**, **trillions of tokens**, **$10M–$100M+** scale |
 | “Day 1 se roz training, improve hota rahe” | **Haan** — yeh sahi approach hai |
-| NeuroField Company se start → bada model | **Sahi path** research/product ke liye; frontier parity alag league |
+| SENTINEL Company se start → bada model | **Sahi path** research/product ke liye; frontier parity alag league |
 
 Yeh doc **do tracks** deta hai:
 
@@ -17,7 +17,7 @@ Dono mein “roz thoda train / measure / data add” wahi discipline hai.
 
 ---
 
-## Track A — NeuroField Company (local / small GPU)
+## Track A — SENTINEL Company (local / small GPU)
 
 Goal: har din model **thoda better**, measurable metrics ke saath.
 
@@ -36,7 +36,7 @@ Goal: har din model **thoda better**, measurable metrics ke saath.
 | Day | Focus | Training | Data / code |
 |-----|--------|----------|-------------|
 | **1** | Baseline | `train_company.py --steps 500` | Existing company + india + skills |
-| **2** | Identity solid | +500 steps | 50 lines: “I am NeuroField…” only |
+| **2** | Identity solid | +500 steps | 50 lines: “I am SENTINEL…” only |
 | **3** | Hindlish | +500 | 100 Hindlish lines |
 | **4** | Eval discipline | +0 train; only eval + fix prompts | Write `docs/daily_log.md` |
 | **5** | Spelling robustness | +500 | Typos: namste, plz, modle… |
@@ -104,7 +104,7 @@ CHECKPOINT=docs/neurofield_company PYTHONPATH=src \
 
 Internal demo **done** jab:
 
-- [ ] identity stable (`who am I` → NeuroField)
+- [ ] identity stable (`who am I` → SENTINEL)
 - [ ] 15/20 fixed prompts acceptable
 - [ ] API: chat + stream + auth work
 - [ ] eval report checked in `docs/`
@@ -144,7 +144,7 @@ Day k (pretrain):
 
 | Scale | Params | Tokens (order) | Hardware (order) | Time (order) |
 |-------|--------|----------------|------------------|--------------|
-| Toy (NeuroField now) | 10⁴–10⁶ | 10³–10⁶ | CPU / 1 GPU | hours–days |
+| Toy (SENTINEL now) | 10⁴–10⁶ | 10³–10⁶ | CPU / 1 GPU | hours–days |
 | Small product | 10⁷–10⁸ | 10⁹–10¹⁰ | few GPUs | days–weeks |
 | Mid | 10⁹–10¹⁰ | 10¹¹–10¹² | dozens–hundreds GPUs | weeks–months |
 | Frontier | 10¹¹+ | 10¹³+ | thousands GPUs | months + |
@@ -154,16 +154,16 @@ Frontier = Track B phases, not “Day 50 pe GPT-4”.
 
 ---
 
-## Recommended path for YOU (NeuroField)
+## Recommended path for YOU (SENTINEL)
 
 ```text
 Week 1–4   Track A (is repo) — daily train/eval/serve
 Month 2    Bigger d_model + BPE + domain data + 1–8 GPUs
-Month 3+   If budget: standard Transformer or scaled NeuroField pretrain
+Month 3+   If budget: standard Transformer or scaled SENTINEL pretrain
 Ongoing    Eval, safety, product API (already started in this zip)
 ```
 
-Architecture paper (NeuroField) **research edge** de sakti hai;  
+Architecture paper (SENTINEL) **research edge** de sakti hai;  
 **frontier quality** almost always = data scale + compute + alignment, architecture ke saath.
 
 ---

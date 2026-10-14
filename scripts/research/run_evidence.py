@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Evidence script for NeuroField v2 architecture.
+Evidence script for SENTINEL v2 architecture.
 
 Reproduces the key claims from the technical report Section 7:
   1. Associative recall task (4-pair, chance = 0.125)
@@ -23,7 +23,7 @@ import torch.nn.functional as F
 from torch.optim import AdamW
 
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def make_recall_batch(
 # ---------------------------------------------------------------------------
 
 @torch.no_grad()
-def evaluate_recall(model: NeuroField, n_batches: int = 20, batch_size: int = 16) -> float:
+def evaluate_recall(model: SENTINEL, n_batches: int = 20, batch_size: int = 16) -> float:
     model.eval()
     correct = 0
     total = 0
@@ -110,7 +110,7 @@ def evaluate_recall(model: NeuroField, n_batches: int = 20, batch_size: int = 16
     return correct / max(1, total)
 
 
-def gradient_audit(model: NeuroField) -> dict[str, float]:
+def gradient_audit(model: SENTINEL) -> dict[str, float]:
     """One backward pass → report grad norms per top-level module."""
     model.train()
     device = next(model.parameters()).device
@@ -134,7 +134,7 @@ def gradient_audit(model: NeuroField) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 def train_for_evidence(
-    model: NeuroField,
+    model: SENTINEL,
     steps: int = 400,
     batch_size: int = 16,
     lr: float = 3e-3,
@@ -171,7 +171,7 @@ def main():
     random.seed(42)
     device = torch.device("cpu")
     print("=" * 60)
-    print("NeuroField v2 – Architecture Evidence")
+    print("SENTINEL – Architecture Evidence")
     print("=" * 60)
 
     # Small config matching the spirit of the 9.92M reference (scaled down for CPU)
@@ -193,7 +193,7 @@ def main():
     # 1. Gradient audit (Proposition 1)
     # ------------------------------------------------------------------
     print("\n[1] Gradient audit (one backward pass)")
-    model = NeuroField(base_cfg, safety).to(device)
+    model = SENTINEL(base_cfg, safety).to(device)
     grads = gradient_audit(model)
     zero_mods = [k for k, v in grads.items() if v == 0.0]
     print("  Grad norms:")
@@ -209,7 +209,7 @@ def main():
     # 2. Full model – fast memory ON
     # ------------------------------------------------------------------
     print("\n[2] Training with fast memory ON (target: high recall accuracy)")
-    model = NeuroField(base_cfg, safety).to(device)
+    model = SENTINEL(base_cfg, safety).to(device)
     t0 = time.time()
     hist_on = train_for_evidence(model, steps=300, batch_size=16, lr=3e-3)
     final_on = hist_on[-1]
@@ -220,7 +220,7 @@ def main():
     # 3. Ablation – fast memory removed (read zeros, no write)
     # ------------------------------------------------------------------
     print("\n[3] Ablation: fast memory surgically disabled")
-    model_off = NeuroField(base_cfg, safety).to(device)
+    model_off = SENTINEL(base_cfg, safety).to(device)
 
     # Monkey-patch: write becomes no-op, read returns zeros
     def no_write(M, d_prev, o_t, g):
@@ -238,7 +238,7 @@ def main():
     # 4. Stop-gradient write ablation
     # ------------------------------------------------------------------
     print("\n[4] Ablation: stop-gradient on fast write")
-    model_sg = NeuroField(base_cfg, safety).to(device)
+    model_sg = SENTINEL(base_cfg, safety).to(device)
     original_write = model_sg.fast_mem.write
 
     def sg_write(M, d_prev, o_t, g):

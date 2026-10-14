@@ -1,4 +1,4 @@
-# Training speed (AESC / NeuroField)
+# Training speed (AESC / SENTINEL)
 
 ## Why it feels slow
 

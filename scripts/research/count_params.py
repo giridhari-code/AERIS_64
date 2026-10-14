@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact NeuroField parameter count from a config — no torch needed.
+"""Exact SENTINEL parameter count from a config — no torch needed.
 
     python scripts/count_params.py configs/aeris_1b.yaml
     python scripts/count_params.py --preset aeris_1b

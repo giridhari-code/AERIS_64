@@ -1,4 +1,4 @@
-"""AjeebWork / autonomous workspace capabilities for NeuroField."""
+"""AjeebWork / autonomous workspace capabilities for SENTINEL."""
 
 from neurofield.ajeebwork.config import AjeebWorkConfig, load_ajeebwork_config
 from neurofield.ajeebwork.workspace_files import (

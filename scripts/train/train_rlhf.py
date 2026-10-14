@@ -25,7 +25,7 @@ from torch.optim import AdamW
 
 from neurofield.checkpoint import load_checkpoint, save_checkpoint
 from neurofield.config import ModelConfig, SafetyConfig, model_preset
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.rlhf.dpo import dpo_loss
 from neurofield.rlhf.ppo import ppo_policy_loss
 from neurofield.rlhf.rewards import pairwise_reward_loss
@@ -52,7 +52,7 @@ def pack_pair(tok, prompt: str, answer: str, max_len: int = 96):
     return x, y
 
 
-def build_model(tok, resume: str, preset: str, device: torch.device) -> NeuroField:
+def build_model(tok, resume: str, preset: str, device: torch.device) -> SENTINEL:
     root = Path(resume)
     d_model = model_preset(preset).d_model
     vocab_size = tok.vocab_size
@@ -76,7 +76,7 @@ def build_model(tok, resume: str, preset: str, device: torch.device) -> NeuroFie
         tie_embeddings=True,
         dropout=0.0,
     )
-    model = NeuroField(cfg, SafetyConfig(enable_audit=False)).to(device)
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=False)).to(device)
     if root.exists():
         try:
             ck = load_checkpoint(resume)

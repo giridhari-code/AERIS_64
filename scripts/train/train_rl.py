@@ -32,7 +32,7 @@ from torch.optim import AdamW
 
 from neurofield.checkpoint import load_checkpoint, save_checkpoint
 from neurofield.config import ModelConfig, SafetyConfig, model_preset
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.tokenizer.char import CharTokenizer
 
 
@@ -180,7 +180,7 @@ def main() -> None:
         tie_embeddings=True,
         dropout=0.0,
     )
-    model = NeuroField(cfg, SafetyConfig(enable_audit=False)).to(device)
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=False)).to(device)
     if root.exists():
         try:
             ck = load_checkpoint(args.resume)

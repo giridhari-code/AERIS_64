@@ -19,7 +19,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="AERIS SI_v0 reliable agent")
     ap.add_argument("question", nargs="?", default="")
     ap.add_argument("--max-steps", type=int, default=4)
-    ap.add_argument("--checkpoint", default="", help="Optional NeuroField ckpt for generate_fn")
+    ap.add_argument("--checkpoint", default="", help="Optional SENTINEL ckpt for generate_fn")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--max-tokens", type=int, default=64)
     ap.add_argument("--temp", type=float, default=0.4)

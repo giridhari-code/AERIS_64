@@ -3,7 +3,7 @@
 The server and eval suite decode like this: prefill the prompt, then feed one token at a time with `state`.
 Training runs one full pass. If the two compute different functions, what is trained is not what is served.
 
-Only the public API is used (no k_depth / write_slow arguments), so this runs on any version of NeuroField.
+Only the public API is used (no k_depth / write_slow arguments), so this runs on any version of SENTINEL.
 Depth is varied through ModelConfig.k_max. The slow ring is switched off by an ablation because it is written
 at the end of every multi-token call and would change the slow read between a prefill and a full pass; that
 effect is real but separate from the fast-memory / error-path question tested here.
@@ -19,7 +19,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from neurofield.config import AblationConfig, ModelConfig, SafetyConfig  # noqa: E402
-from neurofield.model import NeuroField  # noqa: E402
+from neurofield.model import SENTINEL  # noqa: E402
 
 V = 40
 
@@ -29,7 +29,7 @@ def _make(k_max: int):
         d_model=32, d_k=16, d_v=16, n_skills=2, top_k=1, k_max=k_max,
         vocab_size=V, max_seq_len=64, dendrite_window=3, dropout=0.0,
     )
-    m = NeuroField(cfg, SafetyConfig(enable_audit=False, truncate_write_window=64))
+    m = SENTINEL(cfg, SafetyConfig(enable_audit=False, truncate_write_window=64))
     m.set_ablation(AblationConfig(use_slow_memory=False))
     return m.eval()
 

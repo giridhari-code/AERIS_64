@@ -1,4 +1,4 @@
-"""Fast (delta-rule) and slow (context-window ring) memory — AESC / NeuroField.
+"""Fast (delta-rule) and slow (context-window ring) memory — AESC / SENTINEL.
 
 This module is the architectural answer to **static KV caching memory inefficiency**.
 
@@ -6,7 +6,7 @@ Traditional transformer inference keeps a growing Key-Value cache that scales as
 (sequence length × layers × heads). Under high concurrency or long sessions this
 explodes GPU memory, forces small batches, and raises cost.
 
-NeuroField replaces that with two fixed-size memories:
+SENTINEL replaces that with two fixed-size memories:
 
   Fast memory M  — short segment, written every token (delta rule).
                    Shape is always (B, d_k, d_v) — does **not** grow with T.
