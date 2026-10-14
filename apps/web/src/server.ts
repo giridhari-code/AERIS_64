@@ -22,7 +22,7 @@ app.use(
   "*",
   cors({
     origin: "*",
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
 
@@ -67,6 +67,47 @@ app.get("/v1/git/status", async (c) => c.json(await gitStatus()));
 app.get("/v1/git/log", async (c) => c.json(await gitLog()));
 app.get("/v1/git/diff", async (c) => c.json(await gitDiff()));
 
+// ---- Product APIs (proxy to Python: kalofacts / ajeebwork / SI_v1) --------
+
+app.get("/v1/kalofacts", async (c) => {
+  const r = await proxyJson("GET", "/v1/kalofacts");
+  return c.json(r.body, r.status as 200);
+});
+
+app.post("/v1/kalofacts", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/kalofacts", body);
+  return c.json(r.body, r.status as 200);
+});
+
+app.get("/v1/kalofacts/:id", async (c) => {
+  const r = await proxyJson("GET", `/v1/kalofacts/${c.req.param("id")}`);
+  return c.json(r.body, r.status as 200);
+});
+
+app.put("/v1/kalofacts/:id", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("PUT", `/v1/kalofacts/${c.req.param("id")}`, body);
+  return c.json(r.body, r.status as 200);
+});
+
+app.delete("/v1/kalofacts/:id", async (c) => {
+  const r = await proxyJson("DELETE", `/v1/kalofacts/${c.req.param("id")}`);
+  return c.json(r.body, r.status as 200);
+});
+
+app.post("/v1/ajeebwork/plan", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/ajeebwork/plan", body);
+  return c.json(r.body, r.status as 200);
+});
+
+app.post("/v1/si/v1", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/si/v1", body);
+  return c.json(r.body, r.status as 200);
+});
+
 // ---- Static chat UI (same look as Python frontend) ------------------------
 
 app.use("/static/*", serveStatic({ root: "./public" }));
@@ -74,6 +115,8 @@ app.get("/logo.svg", serveStatic({ path: "./public/logo.svg" }));
 
 // Serve chat UI at /
 app.get("/", serveStatic({ path: "./public/index.html" }));
+
+app.get("/product", serveStatic({ path: "./public/product.html" }));
 
 // Fallback: any unknown GET → UI
 app.get("*", serveStatic({ path: "./public/index.html" }));

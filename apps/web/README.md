@@ -25,3 +25,10 @@ Open **http://localhost:3000** for chat.
 - `:3000/` → full chat UI
 
 Legacy: `NEUROFIELD_SERVE_UI=1` serves the old HTML UI on Python port too.
+
+
+## Product UX
+
+- Chat UI: `http://localhost:3000/`
+- Product (Kalofacts / AjeebWork / SI_v1): `http://localhost:3000/product`
+- APIs proxied to Python `:8000`
