@@ -6,7 +6,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from neurofield.modules.memory import FastMemory
+from sentinel.modules.memory import FastMemory
 
 
 def test_decay_consistent_write_matches_formula():

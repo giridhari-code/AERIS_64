@@ -3,7 +3,7 @@
 
     python scripts/count_params.py configs/aeris_1b.yaml
     python scripts/count_params.py --preset aeris_1b
-    python scripts/count_params.py --checkpoint docs/neurofield_india   # reads safetensors header
+    python scripts/count_params.py --checkpoint docs/sentinel_india   # reads safetensors header
 
 The formula is validated by tests against real checkpoint headers.
 """

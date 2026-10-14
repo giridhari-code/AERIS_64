@@ -1,0 +1,133 @@
+"""One place that turns a checkpoint path into (model, tokenizer, config).
+
+Used by the server, the CLI and the eval scripts so they cannot drift apart.
+Shapes in the weights are the source of truth for dimensions; a config.json that
+is empty/missing/wrong no longer yields a mis-shaped or half-random model.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Any, Optional
+
+from sentinel.checkpoint.infer import infer_model_dims, remap_legacy_keys, strip_compile_prefix
+from sentinel.checkpoint.io import load_checkpoint
+from sentinel.config import ModelConfig, SENTINELConfig, SafetyConfig, load_config
+from sentinel.model import SENTINEL
+from sentinel.tokenizer.bpe import BPETokenizer
+from sentinel.tokenizer.char import CharTokenizer
+from sentinel.tokenizer.hf import HFTokenizer
+
+logger = logging.getLogger(__name__)
+
+
+def load_tokenizer(checkpoint: str | Path, ckpt: dict[str, Any]):
+    root = Path(checkpoint)
+    tok_path = root / "tokenizer.json" if root.is_dir() else root.with_name("tokenizer.json")
+    if tok_path.is_file():
+        data = json.loads(tok_path.read_text(encoding="utf-8"))
+        if HFTokenizer.is_hf_json(data):
+            return HFTokenizer(tok_path)
+        if data.get("type") == "bpe":
+            return BPETokenizer.load(tok_path)
+        return CharTokenizer.from_vocab_dict(data)
+    return CharTokenizer(ckpt.get("stoi") or {}, ckpt.get("itos") or {})
+
+
+def resolve_model_config(
+    ckpt: dict[str, Any], config_path: Optional[str] = None
+) -> tuple[ModelConfig, SafetyConfig, SENTINELConfig]:
+    """Declared config supplies non-shape knobs; weight shapes win for dimensions."""
+    state = ckpt["model"]
+    if config_path:
+        full = load_config(config_path)
+        declared = dict(full.model.__dict__)
+    else:
+        full = SENTINELConfig()
+        raw = ckpt.get("config") or {}
+        if isinstance(raw, dict) and isinstance(raw.get("model"), dict):
+            raw = raw["model"]
+        fields = set(ModelConfig.__dataclass_fields__)
+        given = {k: v for k, v in raw.items() if k in fields} if isinstance(raw, dict) else {}
+        declared = {**ModelConfig().__dict__, **given}
+
+    inferred = infer_model_dims(state)
+    if not inferred:
+        raise ValueError("Checkpoint has no recognisable SENTINEL tensors (embed.weight ...)")
+    for k, v in inferred.items():
+        if k in declared and declared[k] != v:
+            logger.warning("config says %s=%s but weights say %s; using weights", k, declared[k], v)
+        declared[k] = v
+    model_cfg = ModelConfig(**{k: declared[k] for k in ModelConfig.__dataclass_fields__ if k in declared})
+    merged = SENTINELConfig(
+        model=model_cfg, training=full.training, data=full.data, safety=full.safety, logging=full.logging
+    )
+    return model_cfg, full.safety, merged
+
+
+def load_model_from_checkpoint(
+    checkpoint: str | Path,
+    config_path: Optional[str] = None,
+    device: str = "cpu",
+    strict: bool = True,
+) -> tuple[SENTINEL, Any, SENTINELConfig, dict[str, Any]]:
+    """Return (model.eval() on `device`, tokenizer, merged config, meta)."""
+    ckpt = load_checkpoint(checkpoint)
+    ckpt["model"], stripped = strip_compile_prefix(ckpt["model"])
+    if stripped:
+        logger.warning("Stripped torch.compile prefix from %d keys", len(stripped))
+    ckpt["model"], renamed = remap_legacy_keys(ckpt["model"])
+    if renamed:
+        logger.warning("Renamed legacy tensor keys: %s", renamed)
+    tok = load_tokenizer(checkpoint, ckpt)
+    model_cfg, safety_cfg, full_cfg = resolve_model_config(ckpt, config_path)
+    if tok.vocab_size > model_cfg.vocab_size:
+        raise ValueError(
+            f"Tokenizer vocab ({tok.vocab_size}) > model vocab ({model_cfg.vocab_size}): "
+            "wrong tokenizer for this checkpoint."
+        )
+    model = SENTINEL(model_cfg, safety_cfg)
+    res = model.load_state_dict(ckpt["model"], strict=False)
+    missing = list(getattr(res, "missing_keys", []))
+    unexpected = list(getattr(res, "unexpected_keys", []))
+    if unexpected:
+        logger.warning("Ignoring %d unexpected keys: %s", len(unexpected), unexpected[:5])
+
+    # New architecture knobs that older checkpoints never saved — safe to keep init.
+    # (e.g. slow_mem.log_temp added for context-window slot attention temperature)
+    _COMPAT_MISSING_PREFIXES = (
+        "slow_mem.log_temp",
+        "field.R.weight",
+        "field.R.bias",
+        "slow_scale",  # added with the slow-path scale; see the legacy default below
+    )
+    hard_missing = [
+        k for k in missing
+        if not any(k == p or k.startswith(p + ".") for p in _COMPAT_MISSING_PREFIXES)
+    ]
+    soft_missing = [k for k in missing if k not in hard_missing]
+    if soft_missing:
+        logger.warning(
+            "Compat: %d new param(s) not in checkpoint, keeping init values: %s",
+            len(soft_missing), soft_missing[:8],
+        )
+    if "slow_scale" in soft_missing:
+        # Checkpoints from before `slow_scale` existed were trained with the slow read UNscaled (coefficient 1),
+        # not with the new init 1.5: load them with 1.0 so they keep behaving as they were trained.
+        import torch
+
+        with torch.no_grad():
+            model.slow_scale.fill_(1.0)
+    if hard_missing:
+        msg = (
+            f"{len(hard_missing)} weights missing from checkpoint "
+            f"(would start random): {hard_missing[:5]}"
+        )
+        if strict:
+            raise RuntimeError(msg)
+        logger.error(msg)
+    model.to(device)
+    model.eval()
+    return model, tok, full_cfg, dict(ckpt.get("meta") or {})

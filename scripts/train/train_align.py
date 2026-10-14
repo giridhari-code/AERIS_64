@@ -20,11 +20,11 @@ import torch
 import torch.nn.functional as F
 from torch.optim import AdamW
 
-from neurofield.checkpoint import load_checkpoint, save_checkpoint
-from neurofield.config import ModelConfig, SafetyConfig, model_preset
-from neurofield.model import SENTINEL
-from neurofield.training.paper_step import maybe_replay
-from neurofield.tokenizer.char import CharTokenizer
+from sentinel.checkpoint import load_checkpoint, save_checkpoint
+from sentinel.config import ModelConfig, SafetyConfig, model_preset
+from sentinel.model import SENTINEL
+from sentinel.training.paper_step import maybe_replay
+from sentinel.tokenizer.char import CharTokenizer
 
 
 def load_text_files(paths: list[str]) -> str:
@@ -99,7 +99,7 @@ def main() -> None:
     if Path(args.resume).exists():
         try:
             ck = load_checkpoint(args.resume)
-            from neurofield.checkpoint import remap_legacy_keys
+            from sentinel.checkpoint import remap_legacy_keys
             ck["model"], _renamed = remap_legacy_keys(ck["model"])
             # if vocab mismatch, still try partial load
             model.load_state_dict(ck["model"], strict=False)

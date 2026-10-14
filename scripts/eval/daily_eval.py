@@ -8,8 +8,8 @@ import json
 from datetime import date
 from pathlib import Path
 
-from neurofield.checkpoint.resolve import load_model_from_checkpoint
-from neurofield.eval.suite import run_eval_suite, save_eval_report
+from sentinel.checkpoint.resolve import load_model_from_checkpoint
+from sentinel.eval.suite import run_eval_suite, save_eval_report
 
 
 def main() -> None:

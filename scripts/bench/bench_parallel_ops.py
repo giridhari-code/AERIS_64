@@ -9,8 +9,8 @@ import time
 
 import torch
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
 
 
 def main() -> None:

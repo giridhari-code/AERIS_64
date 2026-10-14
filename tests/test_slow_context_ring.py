@@ -1,9 +1,9 @@
 """Slow memory context-window ring: write slots, query all filled."""
 
 import torch
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.modules.memory import SlowMemory
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.modules.memory import SlowMemory
 
 
 def test_n_slots_auto():

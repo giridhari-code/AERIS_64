@@ -11,7 +11,7 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
 
-from neurofield.serving.server import create_app  # noqa: E402
+from sentinel.serving.server import create_app  # noqa: E402
 
 CKPT = Path(__file__).resolve().parents[1] / "checkpoints" / "examples" / "AERIS_main"
 
@@ -41,10 +41,10 @@ def test_checkpoint_without_slow_scale_loads_with_the_legacy_value_and_new_ones_
     weights = load_file(str(legacy / "model.safetensors"))
     weights.pop("slow_scale", None)                       # what a pre-slow_scale checkpoint looks like
     save_file(weights, str(legacy / "model.safetensors"))
-    from neurofield.serving.server import create_app
+    from sentinel.serving.server import create_app
 
     app = create_app(checkpoint=str(legacy), device="cpu")
-    import neurofield.serving.server as srv
+    import sentinel.serving.server as srv
 
     assert float(srv._model.slow_scale) == 1.0
 

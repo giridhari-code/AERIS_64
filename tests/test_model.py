@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
 
 
 def test_forward_shape_and_grad():
@@ -93,8 +93,8 @@ def test_no_cross_session_leak_when_global_tracking_off():
 
 
 def test_truncate_window_comes_from_training_config():
-    from neurofield.config import SENTINELConfig
-    from neurofield.training import Trainer
+    from sentinel.config import SENTINELConfig
+    from sentinel.training import Trainer
 
     cfg = SENTINELConfig()
     cfg.training.truncate_write_window = 7

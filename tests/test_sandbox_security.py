@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from neurofield.sandbox import SandboxConfig, SandboxExecutor, SandboxRegistry
+from sentinel.sandbox import SandboxConfig, SandboxExecutor, SandboxRegistry
 
 
 @pytest.fixture()
@@ -64,7 +64,7 @@ def test_offline_run_has_no_network_when_isolation_available(ex):
 
 
 def test_require_isolation_fails_closed(tmp_path, monkeypatch):
-    import neurofield.sandbox.executor as e
+    import sentinel.sandbox.executor as e
 
     monkeypatch.setattr(e, "_NET_ISOLATION_PREFIX", [])  # pretend unshare is unavailable
     ex = SandboxExecutor(SandboxConfig(work_root=str(tmp_path), require_isolation=True), session_id="iso-test")

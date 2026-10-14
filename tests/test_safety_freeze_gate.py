@@ -6,9 +6,9 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.safety.monitor import SafetyMonitor
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.safety.monitor import SafetyMonitor
 
 
 def _model():

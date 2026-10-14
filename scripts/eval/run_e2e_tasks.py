@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 def make_local_generate(checkpoint: str, device: str = "cpu"):
     import torch
-    from neurofield.checkpoint.infer import load_model_from_checkpoint
+    from sentinel.checkpoint.infer import load_model_from_checkpoint
 
     model, tok, cfg, meta = load_model_from_checkpoint(checkpoint, None, device=device)
     model.eval()
@@ -82,7 +82,7 @@ def main() -> None:
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
-    from neurofield.tasks.e2e import run_task_file
+    from sentinel.tasks.e2e import run_task_file
 
     if args.api:
         gen = make_http_generate(args.api)

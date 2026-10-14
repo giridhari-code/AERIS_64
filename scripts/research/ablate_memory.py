@@ -14,10 +14,10 @@ import argparse
 
 import torch
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.modules.memory import FastMemory
-from neurofield.modules.predictor import Predictor
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.modules.memory import FastMemory
+from sentinel.modules.predictor import Predictor
 
 
 def main() -> None:

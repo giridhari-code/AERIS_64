@@ -6,8 +6,8 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from neurofield.config import ModelConfig, SafetyConfig  # noqa: E402
-from neurofield.model import SENTINEL  # noqa: E402
+from sentinel.config import ModelConfig, SafetyConfig  # noqa: E402
+from sentinel.model import SENTINEL  # noqa: E402
 
 V = 50
 

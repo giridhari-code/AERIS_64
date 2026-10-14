@@ -6,9 +6,9 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.modules.memory import FastMemory
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.modules.memory import FastMemory
 
 
 def test_parallel_ops_forced_true():

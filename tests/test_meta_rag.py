@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from neurofield.rag.meta_rag import (
+from sentinel.rag.meta_rag import (
     MetaRAGController,
     estimate_prompt_confidence,
     get_meta_rag,
@@ -41,8 +41,8 @@ def test_controller_skips_when_confident():
 
 
 def test_auto_mode_and_helper():
-    from neurofield.rag.pipeline import RAGPipeline
-    from neurofield.rag.meta_rag import auto_rag
+    from sentinel.rag.pipeline import RAGPipeline
+    from sentinel.rag.meta_rag import auto_rag
 
     ctrl = MetaRAGController(mode="auto", enabled=True)
     ctrl._rag = RAGPipeline()
@@ -101,7 +101,7 @@ def test_maybe_augment_no_hits_returns_original():
     """Empty store → prompt unchanged even if decision says retrieve."""
     ctrl = MetaRAGController(enabled=True)
     # Use a fresh controller with empty store by not loading default knowledge
-    from neurofield.rag.pipeline import RAGPipeline
+    from sentinel.rag.pipeline import RAGPipeline
 
     ctrl._rag = RAGPipeline()  # empty
     prompt = "What is the capital of France?"

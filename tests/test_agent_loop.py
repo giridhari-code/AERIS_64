@@ -1,6 +1,6 @@
 """Reliable agent loop smoke (no network required for calc path)."""
 
-from neurofield.agent import AgentConfig, run_agent
+from sentinel.agent import AgentConfig, run_agent
 
 
 def test_agent_calc_facts():

@@ -22,8 +22,8 @@ import torch
 import torch.nn.functional as F
 from torch.optim import AdamW
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
 
 
 # ---------------------------------------------------------------------------

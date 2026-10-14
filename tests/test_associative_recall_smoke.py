@@ -5,8 +5,8 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
 
 
 def _batch(n_pairs: int = 2, n_keys: int = 8, n_vals: int = 8, batch: int = 4, device="cpu"):
@@ -36,7 +36,7 @@ def _batch(n_pairs: int = 2, n_keys: int = 8, n_vals: int = 8, batch: int = 4, d
 
 
 def test_field_R_convolves_over_neurons():
-    from neurofield.modules.field import NeuralField
+    from sentinel.modules.field import NeuralField
 
     f = NeuralField(16, 8)
     h = torch.randn(2, 16)

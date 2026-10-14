@@ -5,15 +5,15 @@ from __future__ import annotations
 import torch
 import pytest
 
-from neurofield.config import AblationConfig, ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.modules.dendrite import Dendrite
-from neurofield.modules.field import NeuralField
-from neurofield.modules.memory import FastMemory, SlowMemory
-from neurofield.modules.metacognition import Metacognition
-from neurofield.modules.neuromodulator import Neuromodulator
-from neurofield.modules.predictor import Predictor
-from neurofield.modules.router import SkillRouter
+from sentinel.config import AblationConfig, ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.modules.dendrite import Dendrite
+from sentinel.modules.field import NeuralField
+from sentinel.modules.memory import FastMemory, SlowMemory
+from sentinel.modules.metacognition import Metacognition
+from sentinel.modules.neuromodulator import Neuromodulator
+from sentinel.modules.predictor import Predictor
+from sentinel.modules.router import SkillRouter
 
 
 def test_dendrite():

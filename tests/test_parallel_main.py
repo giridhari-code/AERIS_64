@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from neurofield.config import ModelConfig, SafetyConfig, AblationConfig
-from neurofield.model import SENTINEL
+from sentinel.config import ModelConfig, SafetyConfig, AblationConfig
+from sentinel.model import SENTINEL
 
 
 def _make():

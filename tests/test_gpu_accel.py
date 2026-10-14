@@ -1,4 +1,4 @@
-from neurofield.training.gpu import configure_accelerator, maybe_compile, autocast_ctx
+from sentinel.training.gpu import configure_accelerator, maybe_compile, autocast_ctx
 import torch
 import torch.nn as nn
 

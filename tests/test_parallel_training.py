@@ -11,8 +11,8 @@ torch = pytest.importorskip("torch")
 import torch.distributed as dist  # noqa: E402
 import torch.multiprocessing as mp  # noqa: E402
 
-from neurofield.config import ModelConfig, SENTINELConfig, SafetyConfig  # noqa: E402
-from neurofield.model import SENTINEL  # noqa: E402
+from sentinel.config import ModelConfig, SENTINELConfig, SafetyConfig  # noqa: E402
+from sentinel.model import SENTINEL  # noqa: E402
 
 
 def _cfg(**kw):
@@ -93,7 +93,7 @@ def _worker(rank: int, world: int, port: int, out_dir: str) -> None:
     os.environ.update(MASTER_ADDR="127.0.0.1", MASTER_PORT=str(port), RANK=str(rank),
                       WORLD_SIZE=str(world), LOCAL_RANK="0")
     dist.init_process_group("gloo", rank=rank, world_size=world)
-    from neurofield.training import Trainer
+    from sentinel.training import Trainer
 
     torch.manual_seed(0)  # identical init on every rank (DDP also broadcasts rank 0)
     cfg = SENTINELConfig()
