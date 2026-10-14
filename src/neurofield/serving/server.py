@@ -890,6 +890,35 @@ def create_app(
             raise HTTPException(status_code=400, detail="from and to required")
         return {"report": convert_currency(amount, fr, to)}
 
+    @app.post("/v1/agent")
+    def agent_run(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        """Reliable agent: tool enrich + optional model polish. Hard step budget."""
+        from neurofield.agent import AgentConfig, run_agent
+
+        prompt = str((body or {}).get("prompt") or (body or {}).get("question") or "").strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt required")
+        use_model = bool((body or {}).get("use_model", False))
+        max_steps = int((body or {}).get("max_steps") or 4)
+
+        generate_fn = None
+        if use_model:
+            # reuse chat path lightly: one completion from global model if loaded
+            def generate_fn(enriched: str) -> str:
+                # Prefer existing generate helper if present on app state
+                gen = getattr(app.state, "generate_text", None)
+                if callable(gen):
+                    return gen(enriched)
+                # Fallback: empty -> facts-only agent behaviour
+                return ""
+
+        result = run_agent(
+            prompt,
+            generate_fn=generate_fn if use_model else None,
+            config=AgentConfig(max_steps=max_steps),
+        )
+        return result.to_dict()
+
     return app
 
 
