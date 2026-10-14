@@ -42,6 +42,20 @@ _ALIASES = {
     "rag": "rag_retrieve",
     "docs": "rag_retrieve",
     "knowledge": "rag_retrieve",
+    "code": "code_execution",
+    "python": "code_execution",
+    "interpreter": "code_execution",
+    "bash": "bash",
+    "shell": "bash",
+    "terminal": "bash",
+    "fetch": "web_fetch",
+    "url": "web_fetch",
+    "file": "file_search",
+    "find": "file_search",
+    "image": "image_generation",
+    "generate": "image_generation",
+    "screenshot": "computer_use",
+    "click": "computer_use",
 }
 
 
