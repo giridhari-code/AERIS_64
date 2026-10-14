@@ -490,6 +490,24 @@ def create_app(
     device = _env("DEVICE", device) or "cpu"
     product = _env("PRODUCT", "NeuroField") or "NeuroField"
 
+    # Auto-fallback: if no checkpoint env is set, try the shipped demo weights.
+    # Avoids the common "Error: model not loaded" when users just run uvicorn.
+    if not checkpoint:
+        for candidate in (
+            Path("checkpoints/examples/AERIS_main"),
+            Path(__file__).resolve().parents[3] / "checkpoints" / "examples" / "AERIS_main",
+            Path.cwd() / "checkpoints" / "examples" / "AERIS_main",
+        ):
+            if (candidate / "model.safetensors").is_file():
+                checkpoint = str(candidate)
+                logger.info("No NEUROFIELD_CHECKPOINT set — using demo weights at %s", checkpoint)
+                break
+        if not checkpoint:
+            logger.warning(
+                "No checkpoint configured. Set NEUROFIELD_CHECKPOINT=/path/to/folder "
+                "(folder must contain model.safetensors) or chat will return 503 model not loaded."
+            )
+
     app = FastAPI(
         title=f"{product} API",
         description=f"{product} — NeuroField two-speed memory architecture.",
@@ -514,7 +532,13 @@ def create_app(
             )
 
     if checkpoint:
-        load_model(checkpoint, config_path, device)
+        try:
+            load_model(checkpoint, config_path, device)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Failed to load checkpoint %s: %s", checkpoint, e)
+            # leave _model None — /v1/chat will still return a clear 503
+    else:
+        logger.error("Model not loaded: no checkpoint path available")
 
     def _owner(api_key: Optional[str]) -> Optional[str]:
         # Session ownership is enforced only when auth is enabled.
@@ -546,7 +570,13 @@ def create_app(
     @app.get("/readyz")
     async def readyz():
         if _model is None:
-            raise HTTPException(status_code=503, detail="model not loaded")
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "model not loaded — set NEUROFIELD_CHECKPOINT to a folder that contains "
+                    "model.safetensors (e.g. checkpoints/examples/AERIS_main), then restart uvicorn"
+                ),
+            )
         return {
             "status": "ready",
             "device": str(_device),
