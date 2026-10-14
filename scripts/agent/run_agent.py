@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI: reliable agent without or with a checkpoint generate_fn."""
+"""SI_v0 CLI: reliable agent (± checkpoint generate)."""
 
 from __future__ import annotations
 
@@ -12,22 +12,38 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from neurofield.agent import AgentConfig, run_agent
+from neurofield.agent.generate import make_generate_fn
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="AERIS reliable agent")
+    ap = argparse.ArgumentParser(description="AERIS SI_v0 reliable agent")
     ap.add_argument("question", nargs="?", default="")
     ap.add_argument("--max-steps", type=int, default=4)
+    ap.add_argument("--checkpoint", default="", help="Optional NeuroField ckpt for generate_fn")
+    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--max-tokens", type=int, default=64)
+    ap.add_argument("--temp", type=float, default=0.4)
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     q = args.question or sys.stdin.read()
+    gen = None
+    if args.checkpoint:
+        gen = make_generate_fn(
+            args.checkpoint,
+            device=args.device,
+            max_new_tokens=args.max_tokens,
+            temperature=args.temp,
+        )
     cfg = AgentConfig(max_steps=args.max_steps)
-    result = run_agent(q, generate_fn=None, config=cfg)
+    result = run_agent(q, generate_fn=gen, config=cfg)
     if args.json:
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
     else:
         print(result.answer)
-        print(f"\n[-- stopped={result.stopped_reason} steps={result.steps} ms={result.latency_ms:.0f}]", file=sys.stderr)
+        print(
+            f"\n[-- stopped={result.stopped_reason} steps={result.steps} ms={result.latency_ms:.0f}]",
+            file=sys.stderr,
+        )
     return 0
 
 
