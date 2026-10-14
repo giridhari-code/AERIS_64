@@ -103,6 +103,21 @@ def tool_schemas() -> list[dict[str, Any]]:
                 "required": ["command"],
             },
         },
+        {
+            "name": "rag_retrieve",
+            "description": (
+                "Retrieval-Augmented Generation: search the domain knowledge base "
+                "(vector store) for chunks similar to the query, then rank them."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "top_k": {"type": "integer", "default": 4},
+                },
+                "required": ["query"],
+            },
+        },
     ]
 
 
