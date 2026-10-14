@@ -144,3 +144,16 @@ def test_slow_state_export_import_roundtrip_and_fast_state_is_fresh():
     assert float(st["M"].abs().sum()) == 0 and float(st["h"].abs().sum()) == 0  # fast memory NOT carried over
     bad = dict(slow, slow_slots=slow["slow_slots"][:-1])  # wrong shape (other checkpoint) => ignored
     assert float(m.new_state(1, torch.device("cpu"), slow=bad)["slow_filled"].sum()) == 0
+
+
+def test_short_turn_leaves_the_ring_empty_until_consolidate_turn():
+    """forward() writes only at global segment boundaries; a short chat turn needs the explicit turn-end snapshot."""
+    m = _small_model(window=32)
+    with torch.no_grad():
+        st = m(torch.randint(0, 30, (1, 9))).state            # 9 tokens < segment_len
+    assert float(st["slow_filled"].sum()) == 0
+    st2 = m.consolidate_turn(st)
+    assert float(st2["slow_filled"].sum()) == 1 and st2["slow_ptr"] == 1
+    assert torch.allclose(st2["slow_slots"][0, 0], st["M"][0])  # the snapshot is the final fast memory
+    assert float(st["slow_filled"].sum()) == 0                    # input state untouched
+    assert m.consolidate_turn(None) is None

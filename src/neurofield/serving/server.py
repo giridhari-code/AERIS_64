@@ -650,6 +650,8 @@ def create_app(
             sess = _sessions.get(sid)
             state = sess["state"] if sess else None
             anomaly = bool(sess and sess.get("anomaly"))
+        if _model is not None and state is not None and not anomaly:
+            state = _model.consolidate_turn(state)  # turn-end snapshot of the fast memory into the user's ring
         slow = _model.export_slow_state(state) if (_model is not None and state is not None) else None
         if slow is None:
             return
