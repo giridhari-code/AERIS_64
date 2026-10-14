@@ -1,21 +1,18 @@
 /**
- * AERIS_64 TypeScript / Bun edge layer
+ * AERIS_64 TypeScript / Bun edge layer — real frontend + API gateway
  *
- * Python keeps the neural model (train / serve / memory).
- * This Bun service handles:
- *   - HTTP API gateway (proxy to Python NeuroField server)
- *   - Agent-facing helpers (git status, health)
- *   - Static UI (optional)
+ * Python  (:8000) → neural model only
+ * Bun     (:3000) → chat UI + proxy + git helpers
  *
- * Run:
- *   bun run dev          # http://localhost:3000
+ *   bun run dev
  *   AERIS_PYTHON_URL=http://127.0.0.1:8000 bun run start
  */
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { proxyChat, proxyHealth, pythonBase } from "./proxy";
+import { serveStatic } from "hono/bun";
+import { proxyChat, proxyHealth, proxyJson, pythonBase } from "./proxy";
 import { gitStatus, gitLog, gitDiff } from "./git";
 
 const app = new Hono();
@@ -29,57 +26,61 @@ app.use(
   }),
 );
 
-app.get("/", (c) =>
-  c.json({
-    service: "aeris-web",
-    runtime: "bun",
-    language: "typescript",
-    model_backend: pythonBase(),
-    endpoints: {
-      health: "GET /healthz",
-      chat: "POST /v1/chat",
-      git_status: "GET /v1/git/status",
-      git_log: "GET /v1/git/log",
-      git_diff: "GET /v1/git/diff",
-    },
-  }),
-);
+// ---- API (proxied to Python model server) --------------------------------
 
 app.get("/healthz", async (c) => {
   const py = await proxyHealth();
-  return c.json({
-    web: "ok",
-    runtime: "bun",
-    python: py,
-  });
+  return c.json({ web: "ok", runtime: "bun", python: py });
 });
 
-/** Proxy chat to the Python NeuroField server */
+app.get("/readyz", async (c) => {
+  const r = await proxyJson("GET", "/readyz");
+  return c.json(r.body, r.status as 200);
+});
+
 app.post("/v1/chat", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const result = await proxyChat(body);
   return c.json(result.body, result.status as 200);
 });
 
-/** Local git helpers (same idea as the Python git_tool) */
-app.get("/v1/git/status", async (c) => {
-  const out = await gitStatus();
-  return c.json(out);
+app.post("/v1/chat/stream", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/chat/stream", body);
+  return c.json(r.body, r.status as 200);
 });
 
-app.get("/v1/git/log", async (c) => {
-  const out = await gitLog();
-  return c.json(out);
+app.post("/v1/reset", async (c) => {
+  const url = new URL(c.req.url);
+  const r = await proxyJson("POST", `/v1/reset${url.search}`);
+  return c.json(r.body, r.status as 200);
 });
 
-app.get("/v1/git/diff", async (c) => {
-  const out = await gitDiff();
-  return c.json(out);
+app.get("/v1/models", async (c) => {
+  const r = await proxyJson("GET", "/v1/models");
+  return c.json(r.body, r.status as 200);
 });
+
+// ---- Git helpers (local, no Python needed) --------------------------------
+
+app.get("/v1/git/status", async (c) => c.json(await gitStatus()));
+app.get("/v1/git/log", async (c) => c.json(await gitLog()));
+app.get("/v1/git/diff", async (c) => c.json(await gitDiff()));
+
+// ---- Static chat UI (same look as Python frontend) ------------------------
+
+app.use("/static/*", serveStatic({ root: "./public" }));
+app.get("/logo.svg", serveStatic({ path: "./public/logo.svg" }));
+
+// Serve chat UI at /
+app.get("/", serveStatic({ path: "./public/index.html" }));
+
+// Fallback: any unknown GET → UI
+app.get("*", serveStatic({ path: "./public/index.html" }));
 
 const port = Number(process.env.PORT || 3000);
-console.log(`AERIS web (Bun/TS) listening on http://0.0.0.0:${port}`);
-console.log(`Python backend: ${pythonBase()}`);
+console.log(`AERIS frontend (Bun/TS)  → http://0.0.0.0:${port}`);
+console.log(`Python model backend     → ${pythonBase()}`);
 
 export default {
   port,
