@@ -135,7 +135,7 @@ def main() -> None:
                     arr.astype(np_dtype).tofile(fb)
                     n_tok += len(ids)
             print(f"{name}: {n_tok:,} tokens -> {out / (name + '.bin')}")
-    print("done. Use data.train_path/val_path in configs/aeris_1b.yaml and pass --tokenizer-json to neurofield.cli")
+    print("done. Use data.train_path/val_path in configs/aeris_1b.yaml and pass --tokenizer-json to sentinel.cli")
 
 
 if __name__ == "__main__":

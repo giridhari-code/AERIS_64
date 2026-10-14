@@ -11,8 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from neurofield.agent import AgentConfig, run_agent
-from neurofield.agent.generate import make_generate_fn
+from sentinel.agent import AgentConfig, run_agent
+from sentinel.agent.generate import make_generate_fn
 
 
 def main() -> int:

@@ -1,7 +1,7 @@
 """Pure-shape tests: architecture inference, param formula, legacy key remap, leak-free split."""
 
-from neurofield.checkpoint.infer import count_params_from_shapes, infer_model_dims, remap_legacy_keys
-from neurofield.utils.split import split_blocks
+from sentinel.checkpoint.infer import count_params_from_shapes, infer_model_dims, remap_legacy_keys
+from sentinel.utils.split import split_blocks
 
 
 def _fake_state(V=100, D=48, dk=24, dv=24, n=4, W=3):

@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "neurofield"
+name = "sentinel"
 version = "2.3.1"
 description = "SENTINEL: two-speed memory architecture (SENTINEL lineage, v2.3)"
 readme = "README.md"
@@ -42,19 +42,19 @@ sdk = [
     "httpx>=0.26",
 ]
 all = [
-    "neurofield[dev,serve,data,sdk]",
+    "sentinel[dev,serve,data,sdk]",
 ]
 
 [project.scripts]
-neurofield-train = "neurofield.cli:train_main"
-neurofield-eval  = "neurofield.cli:eval_main"
+sentinel-train = "sentinel.cli:train_main"
+sentinel-eval  = "sentinel.cli:eval_main"
 
 [tool.setuptools.package-data]
-neurofield = ["serving/static/*"]
+sentinel = ["serving/static/*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["neurofield*"]
+include = ["sentinel*"]
 
 [tool.ruff]
 line-length = 100

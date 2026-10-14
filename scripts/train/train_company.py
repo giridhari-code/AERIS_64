@@ -10,7 +10,7 @@ from pathlib import Path
 
 import torch
 
-from neurofield.training.distributed import (
+from sentinel.training.distributed import (
     init_distributed_if_needed,
     is_main,
     cleanup as dist_cleanup,
@@ -18,16 +18,16 @@ from neurofield.training.distributed import (
 )
 from torch.optim import AdamW
 
-from neurofield.checkpoint import save_checkpoint
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.eval.suite import run_eval_suite, save_eval_report
-from neurofield.model import SENTINEL
-from neurofield.tokenizer.bpe import BPETokenizer
-from neurofield.tokenizer.char import CharTokenizer
-from neurofield.utils.split import split_blocks
-from neurofield.data.corpus import load_corpus
-from neurofield.training.gpu import configure_accelerator, maybe_compile, autocast_ctx
-from neurofield.training.paper_step import maybe_replay
+from sentinel.checkpoint import save_checkpoint
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.eval.suite import run_eval_suite, save_eval_report
+from sentinel.model import SENTINEL
+from sentinel.tokenizer.bpe import BPETokenizer
+from sentinel.tokenizer.char import CharTokenizer
+from sentinel.utils.split import split_blocks
+from sentinel.data.corpus import load_corpus
+from sentinel.training.gpu import configure_accelerator, maybe_compile, autocast_ctx
+from sentinel.training.paper_step import maybe_replay
 
 
 
@@ -89,7 +89,7 @@ def main() -> None:
     ap.add_argument("--chunk-size", type=int, default=0,
                     help="If >0, run forward in sequential chunks of this length carrying state (paper-style chunked train; C=1 is full seq)")
     ap.add_argument("--no-tf32", action="store_true", help="Disable TF32 on CUDA")
-    ap.add_argument("--out", default="docs/neurofield_company")
+    ap.add_argument("--out", default="docs/sentinel_company")
     ap.add_argument("--device", default="auto", help="cpu | cuda | cuda:0 | auto")
     ap.add_argument("--resume", default="", help="Continue training from checkpoint folder")
     ap.add_argument("--val-frac", type=float, default=0.1, help="held-out fraction (de-duplicated, never trained on)")
@@ -159,7 +159,7 @@ def main() -> None:
     if world > 1 and torch.cuda.is_available() and str(device).startswith("cuda"):
         device = torch.device("cuda", int(local))
         torch.cuda.set_device(device)
-    from neurofield.config import model_preset
+    from sentinel.config import model_preset
     preset_cfg = model_preset(args.preset)
     d_model = args.d_model if args.d_model and args.d_model > 0 else preset_cfg.d_model
     seq_len = args.seq_len if getattr(args, "seq_len", 0) and args.seq_len > 0 else max(32, min(256, preset_cfg.max_seq_len // 2))
@@ -192,10 +192,10 @@ def main() -> None:
             print(f"[distributed] DDP on {world} ranks")
     model = maybe_compile(model, accel.use_compile)
     if args.resume:
-        from neurofield.checkpoint import load_checkpoint
+        from sentinel.checkpoint import load_checkpoint
         try:
             ck = load_checkpoint(args.resume)
-            from neurofield.checkpoint import remap_legacy_keys
+            from sentinel.checkpoint import remap_legacy_keys
             ck["model"], _renamed = remap_legacy_keys(ck["model"])
             missing, unexpected = model.load_state_dict(ck["model"], strict=False)
             print(f"resumed from {args.resume} missing={len(missing)} unexpected={len(unexpected)}")

@@ -5,10 +5,10 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi import HTTPException
 
-from neurofield.serving.auth import RateLimiter, _key_valid
-from neurofield.tokenizer.bpe import BPETokenizer
-from neurofield.tokenizer.char import CharTokenizer
-from neurofield.utils.text_norm import normalize_prompt
+from sentinel.serving.auth import RateLimiter, _key_valid
+from sentinel.tokenizer.bpe import BPETokenizer
+from sentinel.tokenizer.char import CharTokenizer
+from sentinel.utils.text_norm import normalize_prompt
 
 
 def test_char_roundtrip():

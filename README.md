@@ -37,7 +37,7 @@ The small checkpoints under `checkpoints/examples/` are **side-car configs only*
 
 ```bash
 # Python model server
-uvicorn "neurofield.serving.server:create_app" --factory --port 8000
+uvicorn "sentinel.serving.server:create_app" --factory --port 8000
 
 # Bun edge (proxies chat → Python, exposes /v1/git/*)
 cd apps/web && bun install && bun run dev   # :3000
@@ -51,7 +51,7 @@ See [apps/web/README.md](apps/web/README.md).
 
 ```text
 AERIS_64/
-├── src/neurofield/          # Library (model, modules, serve, train, sandbox)
+├── src/sentinel/          # Library (model, modules, serve, train, sandbox)
 ├── configs/                 # YAML configs (default, presets, 1B recipe)
 ├── scripts/
 │   ├── train/               # Training entrypoints
@@ -105,7 +105,7 @@ python scripts/train/train_company.py \
 
 # Serve (folder must contain model.safetensors)
 export NEUROFIELD_CHECKPOINT=checkpoints/local_run
-uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+uvicorn "sentinel.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
 ```
 
 Open http://127.0.0.1:8000/
@@ -145,7 +145,7 @@ PYTHONPATH=src python scripts/research/contribution_ablation.py \
   all `T` tokens at once; only the genuinely sequential fast-memory delta-rule recurrence stays in a loop. Per-token gate/memory
   norms are only collected on logged steps (`collect_stats`). `tests/test_parallel_training.py` compares both paths;
   `python scripts/bench/bench_parallel_ops.py` measures the speed-up.
-* **Data parallel (DDP)**: `torchrun --nproc_per_node=N -m neurofield.cli train ...` shards the data per rank, all-reduces
+* **Data parallel (DDP)**: `torchrun --nproc_per_node=N -m sentinel.cli train ...` shards the data per rank, all-reduces
   gradients (only on the last micro-batch of an accumulation), and all-reduces the slow-memory replay so ranks cannot drift.
   Also: gradient accumulation, bf16, fused AdamW and TF32 on CUDA, optional `lambda_err_warmup_steps` (paper v3 proposal, off by
   default), and embedding-norm logging (Appendix B item 14).

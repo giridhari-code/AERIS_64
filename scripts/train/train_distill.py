@@ -38,12 +38,12 @@ def main() -> None:
     ap.add_argument("--preset", default="small")
     args = ap.parse_args()
 
-    from neurofield.checkpoint.infer import load_model_from_checkpoint
-    from neurofield.checkpoint.io import save_checkpoint
-    from neurofield.config import ModelConfig
+    from sentinel.checkpoint.infer import load_model_from_checkpoint
+    from sentinel.checkpoint.io import save_checkpoint
+    from sentinel.config import ModelConfig
     # train helpers from company if available
     try:
-        from neurofield.model import SENTINEL
+        from sentinel.model import SENTINEL
     except ImportError:
         pass
 
@@ -118,7 +118,7 @@ def main() -> None:
         config=config,
         stoi=getattr(tok, "stoi", None),
         itos=getattr(tok, "itos", None),
-        meta={"format": "neurofield-safetensors-v1", "distill_from": args.teacher, "steps": args.steps},
+        meta={"format": "sentinel-safetensors-v1", "distill_from": args.teacher, "steps": args.steps},
     )
     print(f"saved student → {out}")
 

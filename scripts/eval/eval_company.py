@@ -12,13 +12,13 @@ import argparse
 import json
 from pathlib import Path
 
-from neurofield.checkpoint.resolve import load_model_from_checkpoint
-from neurofield.eval.suite import run_eval_suite, save_eval_report
+from sentinel.checkpoint.resolve import load_model_from_checkpoint
+from sentinel.eval.suite import run_eval_suite, save_eval_report
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", default="docs/neurofield_company")
+    ap.add_argument("--checkpoint", default="docs/sentinel_company")
     ap.add_argument("--config", default=None, help="optional YAML (non-shape knobs only)")
     ap.add_argument("--train-data", default=None, help="text used for training (train_nll only)")
     ap.add_argument("--val-data", default=None, help="held-out text (REQUIRED for val metrics)")

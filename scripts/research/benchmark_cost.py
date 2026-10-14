@@ -13,8 +13,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from neurofield.config import ModelConfig, SafetyConfig, model_preset
-from neurofield.model import SENTINEL
+from sentinel.config import ModelConfig, SafetyConfig, model_preset
+from sentinel.model import SENTINEL
 
 
 class MiniTransformerLM(nn.Module):

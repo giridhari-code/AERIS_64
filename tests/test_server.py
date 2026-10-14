@@ -10,12 +10,12 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient  # noqa: E402
 
-from neurofield.checkpoint import save_checkpoint  # noqa: E402
-from neurofield.config import ModelConfig, SafetyConfig  # noqa: E402
-from neurofield.model import SENTINEL  # noqa: E402
-from neurofield.serving import chat_history  # noqa: E402
-from neurofield.serving.server import create_app  # noqa: E402
-from neurofield.tokenizer.char import CharTokenizer  # noqa: E402
+from sentinel.checkpoint import save_checkpoint  # noqa: E402
+from sentinel.config import ModelConfig, SafetyConfig  # noqa: E402
+from sentinel.model import SENTINEL  # noqa: E402
+from sentinel.serving import chat_history  # noqa: E402
+from sentinel.serving.server import create_app  # noqa: E402
+from sentinel.tokenizer.char import CharTokenizer  # noqa: E402
 
 CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ :.?!\n"
 

@@ -10,10 +10,10 @@ from pathlib import Path
 import torch
 from torch.optim import AdamW
 
-from neurofield.checkpoint import save_checkpoint
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.training.paper_step import maybe_replay
+from sentinel.checkpoint import save_checkpoint
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.training.paper_step import maybe_replay
 
 
 def main() -> None:
@@ -22,7 +22,7 @@ def main() -> None:
     ap.add_argument("--extra", default="data/skills_real.txt", help="optional extra corpus")
     ap.add_argument("--steps", type=int, default=1000)
     ap.add_argument("--lr", type=float, default=3e-3)
-    ap.add_argument("--out", default="docs/neurofield_india")
+    ap.add_argument("--out", default="docs/sentinel_india")
     ap.add_argument("--d-model", type=int, default=64)
     args = ap.parse_args()
 

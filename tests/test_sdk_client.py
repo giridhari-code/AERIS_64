@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 
-from neurofield.sdk import AerisClient, AerisClientError
+from sentinel.sdk import AerisClient, AerisClientError
 
 
 def _handler(request: httpx.Request) -> httpx.Response:

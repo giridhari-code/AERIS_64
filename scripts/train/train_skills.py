@@ -10,9 +10,9 @@ from pathlib import Path
 import torch
 from torch.optim import AdamW
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.training.paper_step import maybe_replay
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.training.paper_step import maybe_replay
 
 
 def main() -> None:
@@ -20,7 +20,7 @@ def main() -> None:
     p.add_argument("--data", default="data/skills_real.txt")
     p.add_argument("--steps", type=int, default=800)
     p.add_argument("--lr", type=float, default=3e-3)
-    p.add_argument("--out", default="docs/neurofield_skills.pt")
+    p.add_argument("--out", default="docs/sentinel_skills.pt")
     p.add_argument("--d-model", type=int, default=64)
     args = p.parse_args()
 
@@ -69,7 +69,7 @@ def main() -> None:
     print(f"Done in {time.time() - t0:.1f}s")
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    from neurofield.checkpoint import save_checkpoint
+    from sentinel.checkpoint import save_checkpoint
     cfg_dict = {
         "d_model": cfg.d_model,
         "d_k": cfg.d_k,

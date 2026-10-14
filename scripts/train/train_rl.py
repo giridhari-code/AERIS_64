@@ -30,10 +30,10 @@ import torch
 import torch.nn.functional as F
 from torch.optim import AdamW
 
-from neurofield.checkpoint import load_checkpoint, save_checkpoint
-from neurofield.config import ModelConfig, SafetyConfig, model_preset
-from neurofield.model import SENTINEL
-from neurofield.tokenizer.char import CharTokenizer
+from sentinel.checkpoint import load_checkpoint, save_checkpoint
+from sentinel.config import ModelConfig, SafetyConfig, model_preset
+from sentinel.model import SENTINEL
+from sentinel.tokenizer.char import CharTokenizer
 
 
 def _load_prompts(path: str) -> list[str]:
@@ -72,7 +72,7 @@ def reward_fn(prompt: str, text: str, prefs: list[dict]) -> float:
     # identity
     pl = prompt.lower()
     if any(k in pl for k in ("who are you", "your name", "hello", "hi")):
-        if re.search(r"aeris|neurofield", t, re.I):
+        if re.search(r"aeris|sentinel", t, re.I):
             r += 1.5
     # penalties
     if re.search(r"(?i)\buser\s*:", t):

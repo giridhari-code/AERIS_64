@@ -24,9 +24,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.baselines.transformer_lm import TinyTransformerLM
+from sentinel.config import ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.baselines.transformer_lm import TinyTransformerLM
 
 
 def associative_recall(steps: int = 200, device: str = "cpu") -> dict:

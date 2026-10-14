@@ -2,7 +2,7 @@
 """
 Production contribution ablation for SENTINEL v2.
 
-Uses the real neurofield.model.SENTINEL (Appendix A), not a re-implementation.
+Uses the real sentinel.model.SENTINEL (Appendix A), not a re-implementation.
 Measures eval accuracy on 4-pair associative recall while switching modules via
 AblationConfig (Section 7 protocol).
 
@@ -33,8 +33,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from neurofield.config import AblationConfig, ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
+from sentinel.config import AblationConfig, ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
 
 
 PRESETS: dict[str, AblationConfig] = {

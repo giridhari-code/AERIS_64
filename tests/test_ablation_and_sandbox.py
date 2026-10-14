@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import torch
 
-from neurofield.config import AblationConfig, ModelConfig, SafetyConfig
-from neurofield.model import SENTINEL
-from neurofield.sandbox import SandboxConfig, SandboxExecutor, SandboxRegistry
+from sentinel.config import AblationConfig, ModelConfig, SafetyConfig
+from sentinel.model import SENTINEL
+from sentinel.sandbox import SandboxConfig, SandboxExecutor, SandboxRegistry
 
 
 def _cfg():

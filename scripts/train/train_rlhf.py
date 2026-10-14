@@ -23,13 +23,13 @@ import torch
 import torch.nn.functional as F
 from torch.optim import AdamW
 
-from neurofield.checkpoint import load_checkpoint, save_checkpoint
-from neurofield.config import ModelConfig, SafetyConfig, model_preset
-from neurofield.model import SENTINEL
-from neurofield.rlhf.dpo import dpo_loss
-from neurofield.rlhf.ppo import ppo_policy_loss
-from neurofield.rlhf.rewards import pairwise_reward_loss
-from neurofield.tokenizer.char import CharTokenizer
+from sentinel.checkpoint import load_checkpoint, save_checkpoint
+from sentinel.config import ModelConfig, SafetyConfig, model_preset
+from sentinel.model import SENTINEL
+from sentinel.rlhf.dpo import dpo_loss
+from sentinel.rlhf.ppo import ppo_policy_loss
+from sentinel.rlhf.rewards import pairwise_reward_loss
+from sentinel.tokenizer.char import CharTokenizer
 
 
 def load_prefs(path: str) -> list[dict]:
@@ -165,7 +165,7 @@ def sample_response(model, tok, prompt: str, device, max_new=32, temperature=0.9
 @torch.no_grad()
 def score_with_rm(rm, tok, prompt: str, answer: str, device) -> float:
     x, y = pack_pair(tok, prompt, answer)
-    from neurofield.rlhf.rewards import sequence_logprob
+    from sentinel.rlhf.rewards import sequence_logprob
 
     s = sequence_logprob(rm, x.unsqueeze(0).to(device), y.unsqueeze(0).to(device))
     return float(s.item())
@@ -190,7 +190,7 @@ def stage_ppo(policy, ref, rm, tok, prompts, device, steps, lr, clip_eps, kl_coe
             logp_old = logp_new.detach()
             # ref logprob on same tokens — recompute cheaply via NLL on produced text
             x, y = pack_pair(tok, prompt, text)
-            from neurofield.rlhf.rewards import sequence_logprob
+            from sentinel.rlhf.rewards import sequence_logprob
 
             logp_ref = sequence_logprob(ref, x.unsqueeze(0).to(device), y.unsqueeze(0).to(device)).squeeze()
             reward = score_with_rm(rm, tok, prompt, text, device)
@@ -199,7 +199,7 @@ def stage_ppo(policy, ref, rm, tok, prompts, device, steps, lr, clip_eps, kl_coe
         policy.train()
         # re-evaluate logprob with grad: teacher force on sampled text
         x, y = pack_pair(tok, prompt, text)
-        from neurofield.rlhf.rewards import sequence_logprob
+        from sentinel.rlhf.rewards import sequence_logprob
 
         logp_grad = sequence_logprob(policy, x.unsqueeze(0).to(device), y.unsqueeze(0).to(device)).squeeze()
         loss = ppo_policy_loss(
