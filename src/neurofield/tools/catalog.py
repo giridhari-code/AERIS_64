@@ -78,6 +78,31 @@ def tool_schemas() -> list[dict[str, Any]]:
                 "required": ["amount", "from", "to"],
             },
         },
+        {
+            "name": "git",
+            "description": (
+                "Safe git operations for this repository: status, log, diff, add, "
+                "commit, show, branch. Push is disabled unless NEUROFIELD_GIT_ALLOW_PUSH=1."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Git subcommand, e.g. 'status', 'log', 'diff', 'add src/', 'commit'",
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Commit message (required when command is commit)",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Optional working directory (defaults to repo root)",
+                    },
+                },
+                "required": ["command"],
+            },
+        },
     ]
 
 

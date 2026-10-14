@@ -53,6 +53,7 @@ class AgentConfig:
         "time",
         "wikipedia",
         "currency",
+        "git",
     )
     require_tool_for_live_facts: bool = True
     # If True, always run tool enrichment before generate

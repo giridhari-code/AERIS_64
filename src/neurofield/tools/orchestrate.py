@@ -8,6 +8,7 @@ from typing import Optional
 
 from neurofield.tools.calculator import calculate
 from neurofield.tools.currency import convert_currency
+from neurofield.tools.git_tool import git_report
 from neurofield.tools.timeutil import now_report
 from neurofield.tools.weather import weather_report
 from neurofield.tools.web_search import web_search_report
@@ -38,6 +39,12 @@ _WIKI = re.compile(
 )
 _FX = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(USD|INR|EUR|GBP|JPY|AED)\s*(?:to|in|→|->)\s*(USD|INR|EUR|GBP|JPY|AED)\b",
+    re.I,
+)
+_GIT = re.compile(
+    r"\b(git\s+(status|log|diff|add|commit|branch|show)|"
+    r"repo\s+status|commit\s+(kar|the|this)|push\s+to\s+git|"
+    r"what('?s|\s+is)\s+the\s+(git\s+)?status)\b",
     re.I,
 )
 _PLACE = re.compile(  # preposition is case-insensitive; the place name must be Capitalised
@@ -107,6 +114,17 @@ def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
 
     if _WIKI.search(p) and not _WEATHER.search(p):
         notes.append(wikipedia_summary(_wiki_topic(p)))
+
+    if _GIT.search(p):
+        # Map natural language → safe git subcommand
+        if re.search(r"\b(log|history|commits)\b", p, re.I):
+            notes.append(git_report("log"))
+        elif re.search(r"\b(diff|changes|changed)\b", p, re.I):
+            notes.append(git_report("diff"))
+        elif re.search(r"\b(branch|branches)\b", p, re.I):
+            notes.append(git_report("branch"))
+        else:
+            notes.append(git_report("status"))
 
     if _SEARCH.search(p) and not notes:
         notes.append(web_search_report(p, max_results=4))

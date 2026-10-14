@@ -45,6 +45,7 @@ class SandboxConfig:
     allowed_bins: tuple[str, ...] = (
         "python3",
         "python",
+        "git",
         "cat",
         "head",
         "tail",
