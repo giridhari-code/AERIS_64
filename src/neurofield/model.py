@@ -1,4 +1,4 @@
-"""NeuroField / AESC v2 core model — Parallel Form main path + §7 freeze."""
+"""SENTINEL core model (NeuroField/AESC lineage) — Parallel Form main path + §7 freeze."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def _mean_t(xs: list[Tensor]) -> float:
 
 class NeuroField(nn.Module):
     """
-    NeuroField / AESC — two-speed memory language model.
+    SENTINEL — two-speed memory language model (NeuroField/AESC architecture lineage).
 
     =====================================================================
     PER-TOKEN LOOP (every word / token t = 0 .. T-1)
