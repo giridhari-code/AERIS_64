@@ -67,6 +67,10 @@ class ToolsConfig:
     file_search_max_file_bytes: int = 400_000
     file_search_max_snippet: int = 180
 
+    # Per-request tool surface (API-style limit, not built-in count)
+    # Full catalog may grow beyond this; a single request must not expose more.
+    max_tools_per_request: int = 250
+
     # Tool router / search
     tool_search_top_k: int = 5
     tool_search_min_score: float = 0.35
@@ -100,6 +104,7 @@ class ToolsConfig:
                 "NEUROFIELD_FILE_SEARCH_MAX_FILE", 400_000
             ),
             file_search_max_snippet=_env_int("NEUROFIELD_FILE_SEARCH_SNIPPET", 180),
+            max_tools_per_request=_env_int("NEUROFIELD_MAX_TOOLS_PER_REQUEST", 250),
             tool_search_top_k=_env_int("NEUROFIELD_TOOL_SEARCH_TOP_K", 5),
             tool_search_min_score=_env_float("NEUROFIELD_TOOL_SEARCH_MIN_SCORE", 0.35),
             tool_search_catalog_max_chars=_env_int(

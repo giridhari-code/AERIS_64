@@ -231,4 +231,10 @@ def tool_schemas() -> list[dict[str, Any]]:
 
 
 def list_mcp_tools() -> dict[str, Any]:
-    return {"tools": tool_schemas()}
+    """Full static catalog (may exceed per-request limit).
+
+    For a single model turn use ``tools_for_request`` / ``mcp_list_tools``
+    which enforce ``max_tools_per_request`` (default 250).
+    """
+    schemas = tool_schemas()
+    return {"tools": schemas, "count": len(schemas)}

@@ -13,6 +13,7 @@ from typing import Any, Iterable, Optional
 
 from neurofield.tools.catalog import tool_schemas
 from neurofield.tools.config import load_tools_config
+from neurofield.tools.limits import enforce_tool_limit, max_tools_per_request
 
 # Query tokens mapped to canonical tool names (stable, reviewed vocabulary).
 _ALIASES: dict[str, str] = {
@@ -248,3 +249,26 @@ def format_tool_catalog_for_prompt(
     if len(text) > max_chars:
         text = text[: max_chars - 20].rstrip() + "\n... [truncated]"
     return text
+
+
+def tools_for_request(
+    query: str | None = None,
+    top_k: int | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Schemas safe to attach to a single model/agent turn.
+
+    - With ``query``: ranked subset via ``search_tools`` (recommended at scale).
+    - Without ``query``: full active catalog, still capped by
+      ``max_tools_per_request`` (non-strict truncate if over limit).
+    """
+    if query and query.strip():
+        return get_relevant_schemas(query, top_k=top_k)
+    # Unscoped list: prefer active dispatchable tools, hard-cap for the request.
+    try:
+        from neurofield.tools.mcp_support import active_tool_schemas
+        schemas = active_tool_schemas(strict_limit=False)
+    except Exception:
+        schemas = list(tool_schemas())
+    return enforce_tool_limit(schemas, strict=False)
+

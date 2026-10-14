@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from neurofield.tools.catalog import tool_schemas
+from neurofield.tools.limits import enforce_tool_limit, ToolLimitError
 from neurofield.tools.computer_use import computer_use, computer_use_available
 from neurofield.tools.image_generation import image_generation, image_generation_available
 
@@ -68,14 +69,29 @@ def _build_dispatch() -> dict[str, Callable[..., str]]:
     return table
 
 
-def active_tool_schemas() -> list[dict[str, Any]]:
-    """Schemas for tools that are actually dispatchable right now."""
+def active_tool_schemas(*, strict_limit: bool = True) -> list[dict[str, Any]]:
+    """Schemas for tools that are actually dispatchable right now.
+
+    The returned list is capped by ``max_tools_per_request``. If the active
+    set is larger and ``strict_limit`` is True, ``ToolLimitError`` is raised
+    so callers switch to ranked selection via tool_search.
+    """
     dispatch = _build_dispatch()
-    return [s for s in tool_schemas() if s.get("name") in dispatch]
+    schemas = [s for s in tool_schemas() if s.get("name") in dispatch]
+    return enforce_tool_limit(schemas, strict=strict_limit)
 
 
-def mcp_list_tools() -> dict[str, Any]:
-    return {"tools": active_tool_schemas()}
+def mcp_list_tools(*, strict_limit: bool = True) -> dict[str, Any]:
+    try:
+        tools = active_tool_schemas(strict_limit=strict_limit)
+        return {"tools": tools, "count": len(tools)}
+    except ToolLimitError as e:
+        return {
+            "tools": [],
+            "count": 0,
+            "error": str(e),
+            "hint": "Call tools_for_request(query) or tool_search to rank a subset.",
+        }
 
 
 def mcp_call_tool(name: str, arguments: Optional[dict[str, Any]] = None) -> str:
