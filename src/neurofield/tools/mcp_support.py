@@ -29,6 +29,10 @@ def _build_dispatch() -> dict[str, Callable[..., str]]:
     from neurofield.tools.web_fetch import web_fetch
     from neurofield.tools.web_search import web_search_report
     from neurofield.tools.wikipedia import wikipedia_summary
+    from neurofield.tools.cowork_tools import (
+        cowork_file, cowork_plan, cowork_subagents, cowork_task,
+        cowork_memory, cowork_document, cowork_draft_edit, cowork_skill,
+    )
 
     table: dict[str, Callable[..., str]] = {
         "calculator": lambda expression="": calculate(expression),
@@ -57,6 +61,26 @@ def _build_dispatch() -> dict[str, Callable[..., str]]:
             url, max_chars=int(max_chars)
         ),
         "file_search": lambda query="", path="": file_search(query, path=path or ""),
+        "cowork_file": lambda action="read", path="", content="", old="", new="", allow_delete=False: cowork_file(
+            action, path=path, content=content, old=old, new=new, allow_delete=bool(allow_delete)
+        ),
+        "cowork_plan": lambda objective="", steps_json="[]": cowork_plan(objective, steps_json),
+        "cowork_subagents": lambda tasks_json="[]": cowork_subagents(tasks_json),
+        "cowork_task": lambda action="list", name="", task_id="", schedule="": cowork_task(
+            action, name=name, task_id=task_id, schedule=schedule
+        ),
+        "cowork_memory": lambda action="report", session_id="default", key="", value="", memory_enabled=True: cowork_memory(
+            action, session_id=session_id, key=key, value=value, memory_enabled=bool(memory_enabled)
+        ),
+        "cowork_document": lambda kind="md", path="", title="Document", body="", headers_json="[]", rows_json="[]", slides_json="[]": cowork_document(
+            kind, path, title=title, body=body, headers_json=headers_json, rows_json=rows_json, slides_json=slides_json
+        ),
+        "cowork_draft_edit": lambda path="", selected_text="", replacement="": cowork_draft_edit(
+            path, selected_text, replacement
+        ),
+        "cowork_skill": lambda action="list", name="", instructions="": cowork_skill(
+            action, name=name, instructions=instructions
+        ),
     }
 
     if image_generation_available():

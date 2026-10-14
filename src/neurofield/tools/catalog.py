@@ -227,6 +227,116 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
 
+
+        {
+            "name": "cowork_file",
+            "description": "Read, write, edit, or batch-process local workspace files. Deletes require allow_delete=true.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "description": "read|write|edit|delete|batch"},
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                    "old": {"type": "string"},
+                    "new": {"type": "string"},
+                    "allow_delete": {"type": "boolean", "default": False},
+                },
+                "required": ["action"],
+            },
+        },
+        {
+            "name": "cowork_plan",
+            "description": "Build a structured multi-step plan for a complex objective (autonomous execution when run_step is wired).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "objective": {"type": "string"},
+                    "steps_json": {"type": "string", "description": "JSON list of {id,title,action,args}"},
+                },
+                "required": ["objective"],
+            },
+        },
+        {
+            "name": "cowork_subagents",
+            "description": "Coordinate parallel sub-agent workstreams with shared budgets.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "tasks_json": {"type": "string", "description": "JSON list of {name, ...}"},
+                },
+                "required": ["tasks_json"],
+            },
+        },
+        {
+            "name": "cowork_task",
+            "description": "Background/scheduled task create, status, list (persisted progress and reasoning).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string"},
+                    "name": {"type": "string"},
+                    "task_id": {"type": "string"},
+                    "schedule": {"type": "string"},
+                },
+            },
+        },
+        {
+            "name": "cowork_memory",
+            "description": "Shared memory between chat and cowork sessions (optional per-task off switch).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string"},
+                    "session_id": {"type": "string"},
+                    "key": {"type": "string"},
+                    "value": {"type": "string"},
+                    "memory_enabled": {"type": "boolean", "default": True},
+                },
+            },
+        },
+        {
+            "name": "cowork_document",
+            "description": "Create markdown reports, CSV/Excel-compatible tables, or presentation outlines in the workspace.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string"},
+                    "path": {"type": "string"},
+                    "title": {"type": "string"},
+                    "body": {"type": "string"},
+                    "headers_json": {"type": "string"},
+                    "rows_json": {"type": "string"},
+                    "slides_json": {"type": "string"},
+                },
+                "required": ["kind", "path"],
+            },
+        },
+        {
+            "name": "cowork_draft_edit",
+            "description": "In-place edit of a selected span inside a Markdown/text draft.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "selected_text": {"type": "string"},
+                    "replacement": {"type": "string"},
+                },
+                "required": ["path", "selected_text", "replacement"],
+            },
+        },
+        {
+            "name": "cowork_skill",
+            "description": "Save/load/list reusable skills; call registered external connectors.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string"},
+                    "name": {"type": "string"},
+                    "instructions": {"type": "string"},
+                },
+            },
+        },
+
     ]
 
 
