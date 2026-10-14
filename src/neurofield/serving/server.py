@@ -1,5 +1,10 @@
 """NeuroField inference API (FastAPI).
 
+Designed for inference-at-scale: the underlying two-speed memory (fast delta-rule
+matrix + slow ring) has **constant size** and does not suffer the linear memory
+growth of static KV caching. Session state stays bounded even for long-running
+or highly concurrent workloads.
+
 Features
   - Chat + raw-token completions, SSE streaming
   - Optional API-key auth (NEUROFIELD_API_KEYS, header only)

@@ -1,11 +1,25 @@
 """Fast (delta-rule) and slow (context-window ring) memory — AESC / NeuroField.
 
-Fast memory M  — short segment, written every token (delta rule).
-Slow memory    — ring of slots covering the context window:
-                 n_slots ≈ context_window / segment_len
-                 segment end → snapshot fast M into next slot
-                 read → content-address over ALL filled slots
-                 → long context is handled here, not by stretching fast M
+This module is the architectural answer to **static KV caching memory inefficiency**.
+
+Traditional transformer inference keeps a growing Key-Value cache that scales as O(T)
+(sequence length × layers × heads). Under high concurrency or long sessions this
+explodes GPU memory, forces small batches, and raises cost.
+
+NeuroField replaces that with two fixed-size memories:
+
+  Fast memory M  — short segment, written every token (delta rule).
+                   Shape is always (B, d_k, d_v) — does **not** grow with T.
+  Slow memory    — ring of slots covering the context window:
+                   n_slots ≈ context_window / segment_len
+                   segment end → snapshot fast M into next slot
+                   read → content-address over ALL filled slots
+                   → long context is handled here, not by stretching fast M
+                   Total size is bounded by the number of slots, independent of
+                   how many tokens have been processed overall.
+
+Result: memory footprint stays roughly constant while still supporting long
+continuous inference — the key requirement for inference-at-scale.
 """
 
 from __future__ import annotations
@@ -18,7 +32,11 @@ from torch import Tensor
 
 class FastMemory(nn.Module):
     """
-    Per-sequence fast weight matrix (Appendix A):
+    Per-sequence fast weight matrix (Appendix A).
+
+    Unlike a transformer KV cache (which grows with every new token), this matrix
+    has fixed shape (B, d_k, d_v). Memory cost does not increase with sequence
+    length — critical for high-throughput continuous serving.
 
         k_t = normalize(W_k d_{t-1})
         v_t = W_v o_t
@@ -30,7 +48,7 @@ class FastMemory(nn.Module):
         q_t = normalize(W_q d_t)
         r_t = M_t^T q_t
 
-    M shape: (B, d_k, d_v)
+    M shape: (B, d_k, d_v)   ← constant size, never grows with T
     """
 
     def __init__(self, d_model: int, d_k: int, d_v: int):
@@ -206,6 +224,10 @@ class SlowMemory(nn.Module):
     """
     Context-window handler (slow path) — ring of slots.
 
+    This is the second half of the answer to static KV-cache memory blow-up.
+    Total memory is bounded by ``n_slots × d_k × d_v``; it does **not** grow
+    with the number of tokens processed across a long session or many users.
+
         n_slots ≈ context_window / segment_len
 
     Write (segment end or EOS):
@@ -223,7 +245,8 @@ class SlowMemory(nn.Module):
         (+ small global prior M_s from training replay)
 
     Long context is retrieved from the ring; fast M only covers the
-    current short segment.
+    current short segment. Together they give constant-size memory while
+    still supporting continuous high-throughput inference.
     """
 
     def __init__(self, d_model: int, d_k: int, d_v: int, n_slots: int = 8, compact_overflow: bool = True):

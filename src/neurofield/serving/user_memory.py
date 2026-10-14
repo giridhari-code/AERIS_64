@@ -1,13 +1,19 @@
 """Per-user long-term memory: lossless chat transcripts + a persisted slow-memory ring.
 
+This design deliberately avoids the classic static-KV-cache memory inefficiency.
+There is no growing per-token key/value store that scales with conversation length.
+Instead:
+
 Division of labour (by design):
   * FAST memory (M, h, dendrite history) belongs to the MODEL's own working state. It is never
-    written to disk and starts from zero every turn / session.
+    written to disk and starts from zero every turn / session. Its size is fixed
+    (B, d_k, d_v) regardless of how many tokens have been generated.
   * SLOW memory belongs to the USER. Two parts survive restarts, TTL eviction and new chat windows:
       1. ``chats/<session>.jsonl`` - every turn, verbatim, append-only (never truncated; rotated by
          size into ``<session>.<n>.jsonl``, never deleted except by an explicit delete call);
       2. ``slow.safetensors``      - the slow ring (count-weighted, compacted: old context is
          diluted, not erased) shared by all of the user's chat windows.
+         Ring size is bounded by n_slots; it does not grow with total tokens.
 
 Isolation: everything lives under ``<root>/<sha256(api key)[:16]>/<user>-<digest>/``. Opt-in via
 ``NEUROFIELD_MEMORY_DIR`` and refused without API keys (server side), because transcripts are
