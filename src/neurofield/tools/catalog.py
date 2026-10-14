@@ -118,6 +118,29 @@ def tool_schemas() -> list[dict[str, Any]]:
                 "required": ["query"],
             },
         },
+        {
+            "name": "tool_search",
+            "description": (
+                "Claude-style Tool Search: given a natural-language need, rank and return "
+                "the most relevant tools from the full catalog. Use this when you have many "
+                "tools and want only the best matches instead of loading everything."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What capability or information you need",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "default": 5,
+                        "description": "How many tools to return",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
     ]
 
 
