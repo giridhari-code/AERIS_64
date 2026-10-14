@@ -1,4 +1,4 @@
-# NeuroField v2 default configuration (production)
+# SENTINEL default configuration (production)
 # All values are overridable via CLI or environment.
 
 model:
