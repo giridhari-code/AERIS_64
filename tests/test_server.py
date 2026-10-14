@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from neurofield.checkpoint import save_checkpoint  # noqa: E402
 from neurofield.config import ModelConfig, SafetyConfig  # noqa: E402
-from neurofield.model import NeuroField  # noqa: E402
+from neurofield.model import SENTINEL  # noqa: E402
 from neurofield.serving import chat_history  # noqa: E402
 from neurofield.serving.server import create_app  # noqa: E402
 from neurofield.tokenizer.char import CharTokenizer  # noqa: E402
@@ -29,7 +29,7 @@ def ckpt_dir(tmp_path_factory):
         vocab_size=tok.vocab_size, dendrite_window=2, max_seq_len=256,
     )
     torch.manual_seed(0)
-    model = NeuroField(cfg, SafetyConfig(enable_audit=False))
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=False))
     out = save_checkpoint(
         root, model, config={}, meta={"model_id": "unit-test"},  # config deliberately EMPTY
     )

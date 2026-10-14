@@ -1,22 +1,22 @@
 # SENTINEL
 
-**Two-speed memory architecture** (SENTINEL · formerly NeuroField / AESC / AERIS) for recurrent language models  
+**Two-speed memory architecture** (SENTINEL · formerly SENTINEL / AERIS) for recurrent language models  
 Research code · production-oriented layout · not a finished frontier product
 
 | | |
 |---|---|
 | **Author** | Giridhari Karmakar · giriisdev@gmail.com |
-| **Full research paper (publish draft)** | [docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf](docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf)
-| **Paper (final handoff)** | [docs/paper/AESC_NeuroField_Paper_v2_Giridhari_Karmakar.pdf](docs/paper/AESC_NeuroField_Paper_v2_Giridhari_Karmakar.pdf) · prior: [v3](docs/paper/AESC_v2_Technical_Report_v3.pdf) · code-level report: [v2.3](docs/paper/AESC_v2_3_Technical_Report.pdf) |
+| **Full research paper (publish draft)** | [docs/paper/AESC_SENTINEL_Full_Research_Paper_Giridhari_Karmakar.pdf](docs/paper/AESC_SENTINEL_Full_Research_Paper_Giridhari_Karmakar.pdf)
+| **Paper (final handoff)** | [docs/paper/AESC_SENTINEL_Paper_v2_Giridhari_Karmakar.pdf](docs/paper/AESC_SENTINEL_Paper_v2_Giridhari_Karmakar.pdf) · prior: [v3](docs/paper/AESC_v2_Technical_Report_v3.pdf) · code-level report: [v2.3](docs/paper/AESC_v2_3_Technical_Report.pdf) |
 | **License** | See [LICENSE](LICENSE), [NOTICE](NOTICE), [DATA_POLICY.md](DATA_POLICY.md) |
 
 ---
 
-**Handoff:** [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md) · **Full paper:** [docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf](docs/paper/AESC_NeuroField_Full_Research_Paper_Giridhari_Karmakar.pdf)
+**Handoff:** [docs/PROJECT_HANDOFF.md](docs/PROJECT_HANDOFF.md) · **Full paper:** [docs/paper/AESC_SENTINEL_Full_Research_Paper_Giridhari_Karmakar.pdf](docs/paper/AESC_SENTINEL_Full_Research_Paper_Giridhari_Karmakar.pdf)
 
 ## What this is
 
-SENTINEL is a recurrent LM with two-speed memory (NeuroField/AESC lineage) with:
+SENTINEL is a recurrent LM with two-speed memory (SENTINEL lineage) with:
 
 - k-step neural field  
 - predictive dendrite (delayed error)  

@@ -1,4 +1,4 @@
-"""Per-session sandbox registry bound to NeuroField inference sessions."""
+"""Per-session sandbox registry bound to SENTINEL inference sessions."""
 
 from __future__ import annotations
 

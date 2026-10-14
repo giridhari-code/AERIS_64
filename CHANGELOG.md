@@ -21,7 +21,7 @@
 
 - After the decode-parity fix `forward()` writes the slow ring only at global segment boundaries (no end-of-call flush), so a chat
   turn shorter than `segment_len` left the user's slow memory empty (measured: 0 slots for a 14-token turn).
-  `NeuroField.consolidate_turn(state)` snapshots the final fast memory into the ring once per turn (paper v3, Section 11);
+  `SENTINEL.consolidate_turn(state)` snapshots the final fast memory into the ring once per turn (paper v3, Section 11);
   the server calls it in `_persist` (skipped for anomaly-flagged turns). Training/decode parity is unaffected (it is not part of `forward`).
 
 ## Unreleased — train == generate (decode parity) fix
@@ -54,7 +54,7 @@
   `write_slow=False` so the ring is not flooded; ring overflow now **compacts** (count-weighted fold) instead of overwriting
   (`slow_compact`, default on; `filled` holds counts, `filled.sum()` = total writes). Norm cap, audit log, anomaly gating,
   `GET/DELETE /v1/memory`, `GET /v1/memory/transcript`, `remember=false`.
-- `NeuroField.new_state(..., slow=)`, `export_slow_state()`, `forward(write_slow=)`.
+- `SENTINEL.new_state(..., slow=)`, `export_slow_state()`, `forward(write_slow=)`.
 
 ### Parallel training
 - Token-parallel forward (embedding, dendrite window, readout + head batched over T): exact same outputs, 1.3-1.5x faster
@@ -120,4 +120,4 @@
 
 ## 2.2.0
 
-- Prior NeuroField / AERIS public tree (audits, 1B config recipe, serving stack)
+- Prior SENTINEL / AERIS public tree (audits, 1B config recipe, serving stack)

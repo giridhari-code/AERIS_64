@@ -1,4 +1,4 @@
-"""Full end-to-end task harness for AERIS / NeuroField."""
+"""Full end-to-end task harness for AERIS / SENTINEL."""
 
 from neurofield.tasks.e2e import load_tasks, run_task, run_task_file, TaskResult
 

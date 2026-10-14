@@ -1,5 +1,5 @@
 """
-Isolated subprocess sandbox for NeuroField tool-use (production).
+Isolated subprocess sandbox for SENTINEL tool-use (production).
 
 Limits (aligned with paper Section 6 controls):
   - wall-clock timeout, RLIMIT_CPU / AS / NPROC / FSIZE / NOFILE

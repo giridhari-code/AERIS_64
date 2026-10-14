@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.baselines.transformer_lm import TinyTransformerLM
 
 
@@ -35,7 +35,7 @@ def associative_recall(steps: int = 200, device: str = "cpu") -> dict:
         d_model=64, d_k=32, d_v=32, n_skills=4, top_k=2, k_max=2,
         vocab_size=32, dendrite_window=3, max_seq_len=64, dropout=0.0,
     )
-    model = NeuroField(cfg, SafetyConfig(enable_audit=False)).to(device)
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=False)).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=3e-3)
 
     def make_batch(B=8, pairs=2):
@@ -107,7 +107,7 @@ def text_ce(path: Path, model_name: str, steps: int, device: str) -> dict:
     V = len(chars)
     seq = 32
     if model_name == "aesc":
-        model = NeuroField(
+        model = SENTINEL(
             ModelConfig(
                 d_model=64, d_k=32, d_v=32, n_skills=4, top_k=2, k_max=2,
                 vocab_size=V, dendrite_window=3, max_seq_len=128, dropout=0.0,

@@ -1,4 +1,4 @@
-"""SENTINEL core model (NeuroField/AESC lineage) — Parallel Form main path + §7 freeze."""
+"""SENTINEL core model (two-speed memory architecture) — Parallel Form main path + §7 freeze."""
 
 from __future__ import annotations
 
@@ -47,9 +47,9 @@ def _mean_t(xs: list[Tensor]) -> float:
     return float(torch.stack([x.detach().float().reshape(()) for x in xs]).mean().item())
 
 
-class NeuroField(nn.Module):
+class SENTINEL(nn.Module):
     """
-    SENTINEL — two-speed memory language model (NeuroField/AESC architecture lineage).
+    SENTINEL — two-speed memory language model.
 
     =====================================================================
     PER-TOKEN LOOP (every word / token t = 0 .. T-1)
@@ -659,5 +659,6 @@ class NeuroField(nn.Module):
         )
         return report
 
-
+# Backward-compatible aliases
+NeuroField = SENTINEL
 

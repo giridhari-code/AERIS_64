@@ -6,7 +6,7 @@ import torch
 import pytest
 
 from neurofield.config import AblationConfig, ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.modules.dendrite import Dendrite
 from neurofield.modules.field import NeuralField
 from neurofield.modules.memory import FastMemory, SlowMemory
@@ -92,7 +92,7 @@ def test_full_model_and_ablations(ab):
         d_model=32, d_k=16, d_v=16, n_skills=2, top_k=1, k_max=2,
         vocab_size=40, max_seq_len=64, dendrite_window=2, dropout=0.0,
     )
-    m = NeuroField(cfg, SafetyConfig(truncate_write_window=8, enable_audit=True))
+    m = SENTINEL(cfg, SafetyConfig(truncate_write_window=8, enable_audit=True))
     m.set_ablation(ab)
     out = m(torch.randint(0, 40, (2, 16)), targets=torch.randint(0, 40, (2, 16)), return_audit=True)
     assert out.logits.shape == (2, 16, 40)

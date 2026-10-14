@@ -15,7 +15,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 OUT = Path(__file__).resolve().parents[2] / "docs" / "paper" / "AESC_v2_3_Technical_Report.pdf"
-FOOT = "AESC / NeuroField v2.3 \u2014 Revised Technical Report"
+FOOT = "AESC / SENTINEL.3 \u2014 Revised Technical Report"
 AR = "-&gt;"  # Helvetica has no arrow glyph and the Symbol font rendered as black boxes
 
 ss = getSampleStyleSheet()
@@ -68,14 +68,14 @@ s += [P("AESC v2.3: Two-Speed Memory Architecture", title),
       P("Code: https://github.com/giridhari-code/AERIS_64 (commit 70d54bd)", meta), Spacer(1, 10)]
 
 s += [P("Abstract", h),
-      P("AESC (Adaptive Event-State Computation), also released as NeuroField, is a recurrent language model with a k-step "
+      P("AESC (Adaptive Event-State Computation), also released as SENTINEL, is a recurrent language model with a k-step "
         "neural field, a predictive dendrite, top-k skill routing, and two-speed memory. Fast weights are written token by token "
         "by a surprise-gated delta rule; slow weights are trained by backpropagation and surprise-weighted replay."),
       P("The previous revision (v2 / Oct 2, 2026) fixed eleven failure modes from the first 10M implementation and reported that "
         "a 9.92M reference model solved 4-pair associative recall at 1.000 accuracy after 800 steps. This v2.3 report documents "
         "additional production defects that prevented the public codebase from reproducing that result, the fixes applied, "
         "measured module contributions, a brain-inspired metacognition controller, and a session-isolated tool sandbox. After the "
-        "memory-path fixes, a d_model=64 production NeuroField reaches <b>0.973</b> eval accuracy on 4-pair recall at 800 steps with "
+        "memory-path fixes, a d_model=64 production SENTINEL reaches <b>0.973</b> eval accuracy on 4-pair recall at 800 steps with "
         "fast memory on, versus <b>0.344</b> with fast memory off (chance 0.125).")]
 
 s += [P("1. Introduction and status of claims", h),
@@ -116,7 +116,7 @@ s += [P("4. Additional failure modes fixed in v2.3", h),
         "under a single write with g=1.")]
 
 s += [P("5. Contribution experiments", h),
-      P("Task: 4 key-value pairs, 8 keys and 8 values, answer at the last position (chance 0.125). Model: production NeuroField, "
+      P("Task: 4 key-value pairs, 8 keys and 8 values, answer at the last position (chance 0.125). Model: production SENTINEL, "
         "d_model=64, d_k=d_v=32, 4 skills, top-k=2, AdamW lr=1e-3, batch 8, CPU, single seed unless noted. Ablations use "
         "AblationConfig switches."),
       P("5.1 Before vs after memory-path fix (800 steps)", h2),

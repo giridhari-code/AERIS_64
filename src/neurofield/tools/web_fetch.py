@@ -81,7 +81,7 @@ def web_fetch(
         req = urllib.request.Request(
             raw_url,
             headers={
-                "User-Agent": "AERIS-NeuroField/1.0 (+research; web_fetch)",
+                "User-Agent": "SENTINEL/1.0 (+research; web_fetch)",
                 "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
             },
             method="GET",

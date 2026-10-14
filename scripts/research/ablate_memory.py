@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ablations for NeuroField memory fixes:
+Ablations for SENTINEL memory fixes:
   - target.detach() on prediction error (default on)
   - multi-timescale decay init (linspace log_lambda)
 
@@ -15,7 +15,7 @@ import argparse
 import torch
 
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.modules.memory import FastMemory
 from neurofield.modules.predictor import Predictor
 
@@ -41,7 +41,7 @@ def main() -> None:
         max_seq_len=64,
         tie_embeddings=True,
     )
-    model = NeuroField(cfg, SafetyConfig(enable_audit=True, max_write_norm=5.0))
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=True, max_write_norm=5.0))
     model.train()
 
     # Decay timescales

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate a NeuroField checkpoint on HELD-OUT text.
+"""Evaluate a SENTINEL checkpoint on HELD-OUT text.
 
 --val-data must be text the model never trained on. Without it, validation
 metrics are reported as null (instead of the old train-set split that made

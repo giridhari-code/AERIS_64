@@ -19,7 +19,7 @@ def web_search(query: str, max_results: int = 5, timeout: float = 10.0) -> list[
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "Mozilla/5.0 (compatible; AERIS-NeuroField/1.0; +research)",
+            "User-Agent": "Mozilla/5.0 (compatible; SENTINEL/1.0; +research)",
         },
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -43,7 +43,7 @@ def web_search(query: str, max_results: int = 5, timeout: float = 10.0) -> list[
         # Instant Answer API fallback
         ia = urllib.parse.urlencode({"q": query, "format": "json", "no_html": 1, "skip_disambig": 1})
         ia_url = f"https://api.duckduckgo.com/?{ia}"
-        req2 = urllib.request.Request(ia_url, headers={"User-Agent": "AERIS-NeuroField/1.0"})
+        req2 = urllib.request.Request(ia_url, headers={"User-Agent": "SENTINEL/1.0"})
         with urllib.request.urlopen(req2, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         abstract = (data.get("AbstractText") or "").strip()

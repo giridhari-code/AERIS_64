@@ -1,4 +1,4 @@
-"""NeuroField inference API (FastAPI).
+"""SENTINEL inference API (FastAPI).
 
 Designed for inference-at-scale: the underlying two-speed memory (fast delta-rule
 matrix + slow ring) has **constant size** and does not suffer the linear memory
@@ -22,7 +22,7 @@ Environment (NEUROFIELD_* wins; the short names are kept for compatibility)
   NEUROFIELD_SESSION_TTL                    seconds, default 1800
   NEUROFIELD_MAX_SESSIONS                   default 256
   NEUROFIELD_MAX_CONTEXT                    max prompt tokens, default = model max_seq_len
-  NEUROFIELD_PRODUCT                        display name, default "NeuroField"
+  NEUROFIELD_PRODUCT                        display name, default "SENTINEL"
   NEUROFIELD_METRICS_PUBLIC                 1 (default) / 0 => /metrics needs key
   NEUROFIELD_LOG_JSON / NEUROFIELD_LOG_LEVEL  structured logs (default off / INFO)
   NEUROFIELD_TRUST_PROXY                    1 => rate-limit by X-Forwarded-For
@@ -51,8 +51,8 @@ from pydantic import BaseModel, Field
 
 from neurofield import __version__
 from neurofield.checkpoint.resolve import load_model_from_checkpoint
-from neurofield.config import NeuroFieldConfig
-from neurofield.model import NeuroField
+from neurofield.config import SENTINELConfig
+from neurofield.model import SENTINEL
 from neurofield.safety import SafetyMonitor
 from neurofield.serving.adaptive_length import adaptive_sampling, should_stop_generation
 from neurofield.serving.auth import (
@@ -104,8 +104,8 @@ _lock = threading.Lock()  # serialises model use + session table mutation
 _stats_lock = threading.Lock()
 _stats = {"requests": 0, "errors": 0, "latency_ms": 0.0}
 
-_model: Optional[NeuroField] = None
-_cfg: Optional[NeuroFieldConfig] = None
+_model: Optional[SENTINEL] = None
+_cfg: Optional[SENTINELConfig] = None
 _device: torch.device = torch.device("cpu")
 _monitor: Optional[SafetyMonitor] = None
 _encode = None
@@ -500,7 +500,7 @@ def create_app(
     checkpoint = checkpoint or _env("CHECKPOINT")
     config_path = config_path or _env("CONFIG")
     device = _env("DEVICE", device) or "cpu"
-    product = _env("PRODUCT", "NeuroField") or "NeuroField"
+    product = _env("PRODUCT", "SENTINEL") or "SENTINEL"
 
     # Auto-fallback: if no checkpoint env is set, try the shipped demo weights.
     # Avoids the common "Error: model not loaded" when users just run uvicorn.
@@ -522,7 +522,7 @@ def create_app(
 
     app = FastAPI(
         title=f"{product} API",
-        description=f"{product} — NeuroField two-speed memory architecture.",
+        description=f"{product} — SENTINEL two-speed memory architecture.",
         version=__version__,
         lifespan=lifespan,
     )

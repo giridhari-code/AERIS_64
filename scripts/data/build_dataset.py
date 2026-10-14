@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a train-ready text corpus for AERIS / NeuroField.
+"""Build a train-ready text corpus for AERIS / SENTINEL.
 
 Default (local / CPU-friendly):
   - data/samples/*.txt

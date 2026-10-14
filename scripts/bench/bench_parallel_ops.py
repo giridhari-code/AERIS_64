@@ -10,7 +10,7 @@ import time
 import torch
 
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 
 
 def main() -> None:
@@ -27,7 +27,7 @@ def main() -> None:
     cfg = ModelConfig(d_model=a.d_model, d_k=32, d_v=32, n_skills=a.skills, top_k=2, k_max=2,
                       vocab_size=a.vocab, dendrite_window=3, max_seq_len=a.seq, dropout=0.0)
     torch.manual_seed(0)
-    m = NeuroField(cfg, SafetyConfig(enable_audit=False)).to(dev).train()
+    m = SENTINEL(cfg, SafetyConfig(enable_audit=False)).to(dev).train()
     x = torch.randint(0, a.vocab, (a.batch, a.seq), device=dev)
     y = torch.randint(0, a.vocab, (a.batch, a.seq), device=dev)
     res = {}

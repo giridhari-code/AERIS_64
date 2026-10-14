@@ -21,7 +21,7 @@ from torch.optim import AdamW
 from neurofield.checkpoint import save_checkpoint
 from neurofield.config import ModelConfig, SafetyConfig
 from neurofield.eval.suite import run_eval_suite, save_eval_report
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.tokenizer.bpe import BPETokenizer
 from neurofield.tokenizer.char import CharTokenizer
 from neurofield.utils.split import split_blocks
@@ -58,7 +58,7 @@ def _forward_chunked(model, x, y, chunk_size, **kwargs):
 def main() -> None:
     init_distributed_if_needed()
     rank, world, local = world_info()
-    ap = argparse.ArgumentParser(description="Train AERIS_64 (NeuroField architecture)")
+    ap = argparse.ArgumentParser(description="Train AERIS_64 (SENTINEL architecture)")
     ap.add_argument("--data", nargs="+", default=["data/company_corpus.txt", "data/code_corpus.txt", "data/india_multilang.txt", "data/skills_real.txt"],
                     help="Corpus: .txt .md .jsonl .json .csv .tsv .parquet .html (+.gz) or hf:dataset[:config:split]")
     ap.add_argument("--tokenizer", choices=["char", "bpe"], default="bpe")
@@ -179,7 +179,7 @@ def main() -> None:
         dropout=float(args.dropout) if args.dropout is not None else preset_cfg.dropout,
     )
     print(f"preset={args.preset} d_model={d_model} seq_len={seq_len} max_seq_len={cfg.max_seq_len}")
-    model = NeuroField(cfg, SafetyConfig(enable_audit=False, max_memory_norm=40.0)).to(device)
+    model = SENTINEL(cfg, SafetyConfig(enable_audit=False, max_memory_norm=40.0)).to(device)
     raw_model = model
     if world > 1:
         from torch.nn.parallel import DistributedDataParallel as DDP

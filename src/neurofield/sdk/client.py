@@ -1,4 +1,4 @@
-"""Production HTTP client for a running NeuroField / AERIS server.
+"""Production HTTP client for a running SENTINEL / AERIS server.
 
 Configuration (no hardcoded host in call sites):
 

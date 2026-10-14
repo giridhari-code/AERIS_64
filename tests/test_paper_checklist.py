@@ -7,7 +7,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from neurofield.config import ModelConfig, SafetyConfig  # noqa: E402
-from neurofield.model import NeuroField  # noqa: E402
+from neurofield.model import SENTINEL  # noqa: E402
 
 V = 50
 
@@ -15,7 +15,7 @@ V = 50
 def _model(**kw):
     cfg = ModelConfig(d_model=32, d_k=16, d_v=16, n_skills=4, top_k=2, k_max=3,
                       vocab_size=V, dendrite_window=3, max_seq_len=64, dropout=0.0, **kw)
-    return NeuroField(cfg, SafetyConfig(enable_audit=False))
+    return SENTINEL(cfg, SafetyConfig(enable_audit=False))
 
 
 @pytest.mark.parametrize("batch", [1, 3])

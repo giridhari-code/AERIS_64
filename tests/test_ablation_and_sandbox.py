@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 
 from neurofield.config import AblationConfig, ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.sandbox import SandboxConfig, SandboxExecutor, SandboxRegistry
 
 
@@ -24,7 +24,7 @@ def _cfg():
 
 
 def test_ablation_full_forward_and_grad():
-    m = NeuroField(_cfg(), SafetyConfig(enable_audit=True), AblationConfig())
+    m = SENTINEL(_cfg(), SafetyConfig(enable_audit=True), AblationConfig())
     m.train()
     x = torch.randint(0, 40, (2, 12))
     y = torch.randint(0, 40, (2, 12))
@@ -35,7 +35,7 @@ def test_ablation_full_forward_and_grad():
 
 
 def test_ablation_no_fast_zeros_read_path():
-    m = NeuroField(
+    m = SENTINEL(
         _cfg(),
         SafetyConfig(enable_audit=False),
         AblationConfig(use_fast_memory=False),
@@ -49,7 +49,7 @@ def test_ablation_no_fast_zeros_read_path():
 
 
 def test_ablation_set_hot_swap():
-    m = NeuroField(_cfg())
+    m = SENTINEL(_cfg())
     m.set_ablation(AblationConfig(use_slow_memory=False, use_neuromodulator=False, fixed_gate=0.0))
     out = m(torch.randint(0, 40, (1, 6)))
     assert out.logits.shape[0] == 1

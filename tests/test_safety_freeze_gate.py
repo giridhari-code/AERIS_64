@@ -7,7 +7,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.safety.monitor import SafetyMonitor
 
 
@@ -16,7 +16,7 @@ def _model():
         d_model=32, d_k=16, d_v=16, n_skills=4, top_k=2, k_max=2,
         vocab_size=40, dendrite_window=3, max_seq_len=32, dropout=0.0,
     )
-    return NeuroField(cfg, SafetyConfig(enable_audit=True, freeze_on_anomaly=True)).eval()
+    return SENTINEL(cfg, SafetyConfig(enable_audit=True, freeze_on_anomaly=True)).eval()
 
 
 def test_memory_frozen_zeros_gate_in_audit():

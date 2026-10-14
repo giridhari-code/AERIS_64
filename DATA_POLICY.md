@@ -1,4 +1,4 @@
-# Data policy & removal (AERIS / NeuroField)
+# Data policy & removal (SENTINEL)
 
 **Contact for all data issues:** giriisdev@gmail.com
 

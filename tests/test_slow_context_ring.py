@@ -2,14 +2,14 @@
 
 import torch
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.modules.memory import SlowMemory
 
 
 def test_n_slots_auto():
     cfg = ModelConfig(d_model=32, d_k=8, d_v=8, n_skills=2, top_k=1, k_max=1,
                       vocab_size=20, max_seq_len=64, context_slots=0)
-    m = NeuroField(cfg, SafetyConfig(truncate_write_window=16))
+    m = SENTINEL(cfg, SafetyConfig(truncate_write_window=16))
     assert m.slow_mem.n_slots == 64 // 16
 
 
@@ -36,7 +36,7 @@ def test_ring_write_and_read():
 def test_forward_fills_slots():
     cfg = ModelConfig(d_model=32, d_k=8, d_v=8, n_skills=2, top_k=1, k_max=1,
                       vocab_size=30, max_seq_len=64, dendrite_window=2, context_slots=0)
-    m = NeuroField(cfg, SafetyConfig(truncate_write_window=8, slow_segment_len=8, enable_audit=False))
+    m = SENTINEL(cfg, SafetyConfig(truncate_write_window=8, slow_segment_len=8, enable_audit=False))
     x = torch.randint(0, 30, (1, 24))
     out = m(x)
     filled = out.state["slow_filled"]
@@ -49,7 +49,7 @@ def _small_model(window=8):
     cfg = ModelConfig(d_model=32, d_k=8, d_v=8, n_skills=2, top_k=1, k_max=1,
                       vocab_size=30, max_seq_len=64, dendrite_window=2, context_slots=0)
     # Pin slow_segment_len=window so write cadence matches BPTT tests
-    m = NeuroField(cfg, SafetyConfig(
+    m = SENTINEL(cfg, SafetyConfig(
         truncate_write_window=window, slow_segment_len=window, enable_audit=False,
     ))
     m.eval()
@@ -60,7 +60,7 @@ def test_auto_short_segment_fills_more_slots():
     """Default slow_segment_len is shorter than truncate → more ring contribution."""
     cfg = ModelConfig(d_model=32, d_k=8, d_v=8, n_skills=2, top_k=1, k_max=1,
                       vocab_size=30, max_seq_len=64, dendrite_window=2, context_slots=0)
-    m = NeuroField(cfg, SafetyConfig(truncate_write_window=32, slow_segment_len=0, enable_audit=False))
+    m = SENTINEL(cfg, SafetyConfig(truncate_write_window=32, slow_segment_len=0, enable_audit=False))
     assert m._segment_len <= 16
     x = torch.randint(0, 30, (1, 32))
     out = m(x)

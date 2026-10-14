@@ -1,4 +1,4 @@
-"""Configuration management for NeuroField v2."""
+"""Configuration management for SENTINEL v2."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ class LoggingConfig:
 
 
 @dataclass
-class NeuroFieldConfig:
+class SENTINELConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     data: DataConfig = field(default_factory=DataConfig)
@@ -115,7 +115,7 @@ class NeuroFieldConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "NeuroFieldConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "SENTINELConfig":
         return cls(
             model=ModelConfig(**d.get("model", {})),
             training=TrainingConfig(**d.get("training", {})),
@@ -126,19 +126,19 @@ class NeuroFieldConfig:
         )
 
 
-def load_config(path: str | Path | None = None) -> NeuroFieldConfig:
+def load_config(path: str | Path | None = None) -> SENTINELConfig:
     """Load config from YAML. Falls back to defaults if path is None."""
     if path is None:
-        return NeuroFieldConfig()
+        return SENTINELConfig()
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Config not found: {path}")
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
-    return NeuroFieldConfig.from_dict(raw)
+    return SENTINELConfig.from_dict(raw)
 
 
-def save_config(cfg: NeuroFieldConfig, path: str | Path) -> None:
+def save_config(cfg: SENTINELConfig, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -159,3 +159,7 @@ def model_preset(name: str = "tiny") -> ModelConfig:
     fields = ModelConfig.__dataclass_fields__
     kwargs = {k: block[k] for k in fields if k in block}
     return ModelConfig(**kwargs)
+
+# Backward-compatible alias
+NeuroFieldConfig = SENTINELConfig
+

@@ -6,7 +6,7 @@ Modes:
   --mode soft     KL(student || teacher) on next-token distributions (same architecture family)
   --mode sft      Generate with teacher offline first, then SFT student on text (use train_finetune)
 
-For different-size NeuroField students, soft mode requires same vocab and compatible heads.
+For different-size SENTINEL students, soft mode requires same vocab and compatible heads.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def main() -> None:
     from neurofield.config import ModelConfig
     # train helpers from company if available
     try:
-        from neurofield.model import NeuroField
+        from neurofield.model import SENTINEL
     except ImportError:
         pass
 

@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import torch
 from neurofield.config import ModelConfig, SafetyConfig
-from neurofield.model import NeuroField
+from neurofield.model import SENTINEL
 from neurofield.modules.memory import FastMemory
 
 
@@ -29,7 +29,7 @@ def main() -> int:
             fail += 1
 
     print("AESC v3.1 ↔ code alignment smoke (reference looped form)\n")
-    m = NeuroField(
+    m = SENTINEL(
         ModelConfig(
             d_model=32, d_k=16, d_v=16, n_skills=2, top_k=1, k_max=2,
             vocab_size=40, dendrite_window=2, max_seq_len=32, dropout=0.0,
