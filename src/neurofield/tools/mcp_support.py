@@ -29,6 +29,10 @@ def _build_dispatch() -> dict[str, Callable[..., str]]:
     from neurofield.tools.web_fetch import web_fetch
     from neurofield.tools.web_search import web_search_report
     from neurofield.tools.wikipedia import wikipedia_summary
+    from neurofield.tools.kalofacts_tools import (
+        kalofact_create, kalofact_get, kalofact_list, kalofact_edit,
+        kalofact_export, kalofact_share, kalofact_delete,
+    )
     from neurofield.tools.ajeebwork_tools import (
         ajeebwork_file, ajeebwork_plan, ajeebwork_subagents, ajeebwork_task,
         ajeebwork_memory, ajeebwork_document, ajeebwork_draft_edit, ajeebwork_skill,
@@ -80,6 +84,20 @@ def _build_dispatch() -> dict[str, Callable[..., str]]:
         ),
         "ajeebwork_skill": lambda action="list", name="", instructions="": ajeebwork_skill(
             action, name=name, instructions=instructions
+        ),
+        "kalofact_create": lambda title="", content="", kind="", session_id="default": kalofact_create(
+            title, content, kind=kind, session_id=session_id
+        ),
+        "kalofact_get": lambda artifact_id="", view="": kalofact_get(artifact_id, view=view),
+        "kalofact_list": lambda session_id="", limit=20: kalofact_list(session_id, limit=int(limit)),
+        "kalofact_edit": lambda artifact_id="", action="span", selected="", replacement="", content="", version=0, view_mode="", state_key="", state_value="": kalofact_edit(
+            artifact_id, action=action, selected=selected, replacement=replacement,
+            content=content, version=int(version or 0), view_mode=view_mode,
+            state_key=state_key, state_value=state_value,
+        ),
+        "kalofact_export": lambda artifact_id="", dest_path="": kalofact_export(artifact_id, dest_path),
+        "kalofact_share": lambda artifact_id="", token="", action="create": kalofact_share(
+            artifact_id=artifact_id, token=token, action=action
         ),
     }
 

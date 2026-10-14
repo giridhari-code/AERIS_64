@@ -337,6 +337,88 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
 
+
+        {
+            "name": "kalofact_create",
+            "description": "Create a Kalofact: standalone versioned workspace (markdown, HTML, code, mermaid, etc.).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "content": {"type": "string"},
+                    "kind": {"type": "string"},
+                    "session_id": {"type": "string"},
+                },
+                "required": ["title", "content"],
+            },
+        },
+        {
+            "name": "kalofact_get",
+            "description": "Open a Kalofact in preview or code view.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "artifact_id": {"type": "string"},
+                    "view": {"type": "string", "description": "preview|code"},
+                },
+                "required": ["artifact_id"],
+            },
+        },
+        {
+            "name": "kalofact_list",
+            "description": "List Kalofacts in the library (optional session filter).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+            },
+        },
+        {
+            "name": "kalofact_edit",
+            "description": "Inline span edit, full replace, restore version, toggle view, or set persistent state.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "artifact_id": {"type": "string"},
+                    "action": {"type": "string"},
+                    "selected": {"type": "string"},
+                    "replacement": {"type": "string"},
+                    "content": {"type": "string"},
+                    "version": {"type": "integer"},
+                    "view_mode": {"type": "string"},
+                    "state_key": {"type": "string"},
+                    "state_value": {"type": "string"},
+                },
+                "required": ["artifact_id"],
+            },
+        },
+        {
+            "name": "kalofact_export",
+            "description": "Export Kalofact source to a file path.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "artifact_id": {"type": "string"},
+                    "dest_path": {"type": "string"},
+                },
+                "required": ["artifact_id"],
+            },
+        },
+        {
+            "name": "kalofact_share",
+            "description": "Create or resolve a share token (requires public share enabled).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "artifact_id": {"type": "string"},
+                    "token": {"type": "string"},
+                    "action": {"type": "string"},
+                },
+            },
+        },
+
     ]
 
 
