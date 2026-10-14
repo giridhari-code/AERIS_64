@@ -606,6 +606,25 @@ class NeuroField(nn.Module):
             logits=logits, loss=loss, metrics=metrics, audit=audit, state=new_state
         )
 
+    def consolidate_turn(self, state: Optional[dict], weight: float = 1.0) -> Optional[dict]:
+        """End-of-turn consolidation (paper v3, Section 11): snapshot the final fast memory M into the slow ring.
+
+        forward() writes the ring only at global segment boundaries (so a training call == prefill + decode). A short chat
+        turn may cross no boundary and would leave the user's slow memory empty, so the per-user memory calls this once per
+        turn. Returns a new state dict (the input is not modified).
+        """
+        ab = self.ablation
+        if not state or not (ab.use_slow_memory and ab.use_fast_memory) or state.get("slow_slots") is None:
+            return state
+        M = state.get("M")
+        if M is None:
+            return state
+        w = torch.full((M.size(0),), float(weight), device=M.device)
+        slots, ptr, filled = self.slow_mem.write_slot(
+            state["slow_slots"], int(state.get("slow_ptr") or 0), state["slow_filled"], M, weight=w
+        )
+        return {**state, "slow_slots": slots, "slow_ptr": ptr, "slow_filled": filled}
+
     def replay_slow(self, M: Tensor, surprises: Tensor, eta: float) -> None:
         self.slow_mem.replay(M, surprises, eta)
 

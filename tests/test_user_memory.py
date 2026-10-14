@@ -164,3 +164,15 @@ def test_memory_stays_off_without_api_keys(ckpt_dir, tmp_path, monkeypatch):
     assert r.status_code == 200
     assert not list(tmp_path.rglob("*.jsonl"))            # nothing written to disk
     assert c.get("/v1/memory").status_code == 503
+
+
+def test_short_chat_turns_still_fill_the_users_slow_memory(ckpt_dir, tmp_path, monkeypatch):
+    """A turn shorter than segment_len crosses no ring boundary; the turn-end consolidation must still store it."""
+    chat_history.reset_history()
+    c = _app(ckpt_dir, monkeypatch, tmp_path)
+    _chat(c, "hi", max_new_tokens=3)
+    st = UserMemoryStore(tmp_path)
+    assert float(st.load_slow("key-one", "alice")["slow_filled"].sum()) >= 1
+    first = float(st.load_slow("key-one", "alice")["slow_filled"].sum())
+    _chat(c, "ok", max_new_tokens=3)
+    assert float(st.load_slow("key-one", "alice")["slow_filled"].sum()) > first   # each turn adds to the ring

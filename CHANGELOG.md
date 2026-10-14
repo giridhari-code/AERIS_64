@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — per-user memory: turn-end consolidation
+
+- After the decode-parity fix `forward()` writes the slow ring only at global segment boundaries (no end-of-call flush), so a chat
+  turn shorter than `segment_len` left the user's slow memory empty (measured: 0 slots for a 14-token turn).
+  `NeuroField.consolidate_turn(state)` snapshots the final fast memory into the ring once per turn (paper v3, Section 11);
+  the server calls it in `_persist` (skipped for anomaly-flagged turns). Training/decode parity is unaffected (it is not part of `forward`).
+
 ## Unreleased — train == generate (decode parity) fix
 
 ### Fixed (H1: decode and training were different functions)
