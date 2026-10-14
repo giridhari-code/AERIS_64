@@ -17,73 +17,98 @@ def make_generate_fn(
     """
     Load NeuroField checkpoint once; return prompt -> text.
 
-    If load fails, returns a function that yields empty string (agent falls back to facts).
+    On failure the returned function still runs but yields "" and stores
+    reason on ``fn.load_error`` for diagnostics.
     """
+    load_error: Optional[str] = None
+
+    def _blank(reason: str) -> Callable[[str], str]:
+        nonlocal load_error
+        load_error = reason
+
+        def _fn(_p: str) -> str:
+            return ""
+
+        _fn.load_error = reason  # type: ignore[attr-defined]
+        return _fn
+
     try:
         from neurofield.checkpoint.io import load_checkpoint
         from neurofield.model import NeuroField
-    except Exception:
-        def _empty(_p: str) -> str:
-            return ""
-        return _empty
+    except Exception as e:
+        return _blank(f"import: {e}")
 
     path = Path(checkpoint)
     if not path.exists():
-        def _missing(_p: str) -> str:
-            return ""
-        return _missing
+        return _blank(f"missing path: {path}")
 
     try:
         bundle = load_checkpoint(str(path), map_location=device)
-        model: NeuroField = bundle["model"] if isinstance(bundle, dict) and "model" in bundle else bundle
-        if not isinstance(model, NeuroField):
-            # common layout: object with .model
-            model = getattr(bundle, "model", model)
+        model = None
+        encode = decode = None
+
+        if isinstance(bundle, dict):
+            model = bundle.get("model")
+            encode = bundle.get("encode")
+            decode = bundle.get("decode")
+            tok = bundle.get("tokenizer")
+            if tok is not None and (encode is None or decode is None):
+                encode, decode = tok.encode, tok.decode
+            # some loaders nest
+            if model is None and "state_dict" in bundle:
+                from neurofield.config import ModelConfig, SafetyConfig
+                # cannot rebuild without config — fail clear
+                return _blank("checkpoint dict has state_dict but no model object")
+        else:
+            model = bundle
+
+        if model is not None and not isinstance(model, NeuroField):
+            model = getattr(model, "model", model)
+
+        if model is None:
+            return _blank("no model in checkpoint bundle")
+
         model = model.to(device)
         model.eval()
-        encode = bundle.get("encode") if isinstance(bundle, dict) else None
-        decode = bundle.get("decode") if isinstance(bundle, dict) else None
-        if encode is None or decode is None:
-            tok = bundle.get("tokenizer") if isinstance(bundle, dict) else None
-            if tok is not None:
-                encode, decode = tok.encode, tok.decode
-            else:
-                # char fallback
-                def encode(s: str):
-                    return [ord(c) % 100 for c in s][:256]
 
-                def decode(ids):
-                    return "".join(chr(int(i) % 128) for i in ids)
-    except Exception:
-        def _fail(_p: str) -> str:
-            return ""
-        return _fail
+        if encode is None or decode is None:
+            # try vocab files beside ckpt
+            return _blank("no tokenizer encode/decode in checkpoint (train/save tokenizer with ckpt)")
+
+    except Exception as e:
+        return _blank(f"load: {type(e).__name__}: {e}")
 
     @torch.no_grad()
     def generate(prompt: str) -> str:
-        ids = encode(prompt)
-        if not ids:
-            return ""
-        x = torch.tensor([ids], dtype=torch.long, device=device)
-        state = None
-        out_ids = []
-        for _ in range(max_new_tokens):
-            out = model(x[:, -1:] if state is not None else x, state=state)
-            state = out.state
-            logits = out.logits[:, -1, :]
-            if temperature and temperature > 1e-5:
-                probs = torch.softmax(logits / temperature, dim=-1)
-                nid = int(torch.multinomial(probs, 1).item())
-            else:
-                nid = int(logits.argmax(-1).item())
-            out_ids.append(nid)
-            x = torch.tensor([[nid]], dtype=torch.long, device=device)
-            # soft stop on repeated newline-ish
-            if len(out_ids) > 8 and len(set(out_ids[-6:])) == 1:
-                break
         try:
-            return decode(out_ids)
+            ids = encode(prompt)
+            if hasattr(ids, "tolist"):
+                ids = ids.tolist()
+            if ids and isinstance(ids[0], list):
+                ids = ids[0]
+            if not ids:
+                return ""
+            x = torch.tensor([ids], dtype=torch.long, device=device)
+            state = None
+            out_ids = []
+            for i in range(max_new_tokens):
+                inp = x if state is None else x[:, -1:]
+                out = model(inp, state=state)
+                state = out.state
+                logits = out.logits[:, -1, :]
+                if temperature and temperature > 1e-5:
+                    probs = torch.softmax(logits / max(temperature, 1e-5), dim=-1)
+                    nid = int(torch.multinomial(probs, 1).item())
+                else:
+                    nid = int(logits.argmax(-1).item())
+                out_ids.append(nid)
+                x = torch.tensor([[nid]], dtype=torch.long, device=device)
+                if len(out_ids) > 8 and len(set(out_ids[-6:])) == 1:
+                    break
+            text = decode(out_ids)
+            return text if isinstance(text, str) else str(text)
         except Exception:
             return ""
 
+    generate.load_error = None  # type: ignore[attr-defined]
     return generate

@@ -36,6 +36,8 @@ def main() -> int:
         )
     cfg = AgentConfig(max_steps=args.max_steps)
     result = run_agent(q, generate_fn=gen, config=cfg)
+    if gen is not None and getattr(gen, "load_error", None):
+        print(f"[-- generate load_error: {gen.load_error}]", file=sys.stderr)
     if args.json:
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
     else:
