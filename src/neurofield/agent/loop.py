@@ -1,12 +1,20 @@
 """
 Reliable agent loop (SI_v0 behaviour layer).
 
-Design goals (reliability over cleverness):
-  1. Hard step budget (no infinite loops)
+Model evaluation must match the system. For agentic workloads the relevant
+metrics are (see industry guidance on system-matched evals):
+
+  - Function call validity rate   (tool succeeded vs hallucinated / failed)
+  - Step consistency / reproducibility
+  - Pipeline completion rate      (did the agent finish within budget?)
+
+This loop is instrumented exactly for those metrics:
+  1. Hard step budget (no infinite loops)          → pipeline completion
   2. Allow-listed tools only
-  3. Every tool call timed + success/fail recorded
+  3. Every tool call timed + success/fail recorded → function-call validity
   4. Facts injected; model never trusted alone for live numbers
   5. Deterministic stop: answer | max_steps | tool_fail_budget | empty
+     → step consistency / reproducibility
 
 This does NOT require the LM to emit tool JSON. Routing uses the same
 regex/orchestrator as serving (predictable). Optional generate_fn can
@@ -70,7 +78,24 @@ class AgentResult:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
+        d["metrics"] = self.metrics()
         return d
+
+    def metrics(self) -> dict[str, float | int | str]:
+        """System-matched agent metrics (function validity, step consistency, completion)."""
+        total = len(self.tool_events)
+        ok = sum(1 for e in self.tool_events if e.ok)
+        validity = (ok / total) if total else 1.0
+        completed = self.stopped_reason in ("answer", "done", "final")
+        return {
+            "function_call_validity_rate": round(validity, 4),
+            "tool_calls": total,
+            "tool_successes": ok,
+            "steps": self.steps,
+            "pipeline_completed": int(completed),
+            "stopped_reason": self.stopped_reason,
+            "latency_ms": round(self.latency_ms, 2),
+        }
 
 
 # ---- tool runners with guard rails ----------------------------------------
