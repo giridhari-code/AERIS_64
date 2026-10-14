@@ -96,7 +96,11 @@ class RateLimiter:
             while q and now - q[0] > self.window:
                 q.popleft()
             if len(q) >= self.max_requests:
-                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+                raise HTTPException(
+                    status_code=429,
+                    detail="Rate limit exceeded",
+                    headers={"Retry-After": str(int(self.window))},
+                )
             q.append(now)
 
     def _gc(self, now: float) -> None:
@@ -105,6 +109,6 @@ class RateLimiter:
 
 
 def rate_limit_from_env() -> RateLimiter:
-    max_r = int(os.environ.get("NEUROFIELD_RATE_LIMIT", "120"))
+    max_r = int(os.environ.get("NEUROFIELD_RATE_LIMIT", "60"))
     win = float(os.environ.get("NEUROFIELD_RATE_WINDOW", "60"))
     return RateLimiter(max_requests=max_r, window_seconds=win)

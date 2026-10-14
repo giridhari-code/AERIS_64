@@ -26,6 +26,44 @@ app.use(
   }),
 );
 
+
+// ---- Edge rate limit (per IP, in-memory) ----------------------------------
+const RATE_MAX = Number(process.env.AERIS_RATE_LIMIT || 60);
+const RATE_WINDOW_MS = Number(process.env.AERIS_RATE_WINDOW_MS || 60_000);
+const hits = new Map<string, number[]>();
+
+function rateLimit(ip: string): boolean {
+  const now = Date.now();
+  const q = (hits.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (q.length >= RATE_MAX) {
+    hits.set(ip, q);
+    return false;
+  }
+  q.push(now);
+  hits.set(ip, q);
+  if (hits.size > 10_000) {
+    // crude GC
+    for (const [k, v] of hits) {
+      if (!v.length || now - v[v.length - 1] > RATE_WINDOW_MS) hits.delete(k);
+    }
+  }
+  return true;
+}
+
+app.use("*", async (c, next) => {
+  const path = c.req.path || "";
+  if (path.startsWith("/v1/") || path === "/healthz" || path === "/readyz") {
+    const ip =
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+      c.req.header("x-real-ip") ||
+      "anon";
+    if (path.startsWith("/v1/") && !rateLimit(ip)) {
+      return c.json({ detail: "Rate limit exceeded" }, 429);
+    }
+  }
+  await next();
+});
+
 // ---- API (proxied to Python model server) --------------------------------
 
 app.get("/healthz", async (c) => {
