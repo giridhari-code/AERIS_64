@@ -1,5 +1,13 @@
 """Evaluation suite: held-out loss + generation smoke tests.
 
+Model evaluation must match the system. Different system types need different
+metrics (RAG → context precision / faithfulness; Agents → function-call validity
++ step consistency; MCP / decision pipelines → field extraction + completion rate).
+
+This suite focuses on the core LM (held-out NLL + generation smoke). Agent-level
+metrics (function_call_validity_rate, pipeline completion, step consistency)
+live in ``neurofield.agent.loop.AgentResult.metrics``.
+
 Changes vs the original:
   * Validation loss is computed ONLY on text passed as ``val_text`` (data the
     model never trained on). The old code split the *training* corpus 80/20,

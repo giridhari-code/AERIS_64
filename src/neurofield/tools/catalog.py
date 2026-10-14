@@ -1,4 +1,12 @@
-"""MCP-style tool catalog (schemas for agents / clients)."""
+"""MCP-style tool catalog (schemas for agents / clients).
+
+For MCP / structured-pipeline systems the matching evaluation metrics are:
+  - Field extraction accuracy
+  - Pipeline completion rate
+
+Agent-level validity and completion are measured in
+``neurofield.agent.loop.AgentResult.metrics``.
+"""
 
 from __future__ import annotations
 
