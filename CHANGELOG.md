@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — Auto RAG (metacognition-controlled)
+
+- **Auto RAG** is the default retrieval path. `src/neurofield/rag/meta_rag.py`:
+  - `MetaRAGController` modes: `auto` (default) | `meta` | `always` | `off`
+  - `auto_rag(prompt)` one-call API used by chat server + agent loop
+  - Live metacognition signals when available; prompt heuristic otherwise
+  - Dynamic `top_k`, hysteresis; env: `NEUROFIELD_RAG_MODE`, `NEUROFIELD_META_RAG`,
+    `NEUROFIELD_META_RAG_CONF`
+- Chat: `use_meta_rag` / `force_rag` on request; `meta_rag` block on response
+- Agent: `AgentConfig.use_auto_rag=True` runs retrieval before generate
+- Tests: `tests/test_meta_rag.py`
+
 ## Unreleased — checkpoint compat + per-user memory: turn-end consolidation
 
 - **Demo checkpoint loads again.** `slow_scale` (new param, init 1.5) was missing from `checkpoints/examples/AERIS_main`, so
