@@ -337,7 +337,10 @@ class NeuroField(nn.Module):
         # slow-ring write cadence must match decoding: one snapshot per `segment_len` tokens (counted across calls)
         seg_cnt = int(state.get("seg_pos") or 0)
         snaps: list[tuple] = []  # (ti, M, S)
-        will_write_slow = bool(write_slow and ab.use_slow_memory and ab.use_fast_memory)
+        # Frozen sessions: g=0 already; also skip slow-ring snapshots (paper §7)
+        will_write_slow = bool(
+            write_slow and ab.use_slow_memory and ab.use_fast_memory and not frozen
+        )
 
         for _j in range(k_depth):
             Hin_new.append(H[:, -1].detach())
@@ -551,13 +554,19 @@ class NeuroField(nn.Module):
         if return_audit:
             audit = {
                 "path": "parallel",
-                "gates": [float(g) for g in gates_audit[-T:]] if gates_audit else [],
+                "gates": [float(g) for g in gates_audit[-T:]] if gates_audit else (
+                    [float(G.detach().mean().item())] if T > 0 else []
+                ),
                 "write_norms": [float(x) for x in write_norms[-T:]] if write_norms else [],
-                "mem_norms": [float(x) for x in mem_norms[-T:]] if mem_norms else [],
-                "ks": [float(k_depth)] * T,
-                "router_entropy": [float(e) for e in ent_list],  # last pass, one per position
-                "surprises": [float(s) for s in S.detach().mean(0)],
+                "mem_norms": [float(x) for x in mem_norms[-T:]] if mem_norms else (
+                    [float(M.detach().norm().item())] if isinstance(M, Tensor) else []
+                ),
+                "ks": [float(k_depth)] * max(1, T),
+                "router_entropy": [float(e) for e in ent_list] if ent_list else [],
+                "surprises": [float(s) for s in S.detach().mean(0)] if T > 0 else [],
+                "mean_S": float(S.detach().mean().item()) if T > 0 else 0.0,
                 "final_mem_norm": float(M.detach().norm()) if isinstance(M, Tensor) else 0.0,
+                "memory_frozen": bool(frozen),
             }
 
         # Signals for the *next* call's metacognition (decode T=1 or next train batch)

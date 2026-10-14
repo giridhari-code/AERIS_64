@@ -228,7 +228,12 @@ def load_model(checkpoint: str, config_path: Optional[str], device: str) -> None
         _cfg = full_cfg
         _sessions.clear()
         reset_history()  # no cross-test / cross-reload transcript leak
-        _monitor = SafetyMonitor(z_threshold=full_cfg.safety.anomaly_z_threshold, log_path=None)
+        _monitor = SafetyMonitor(
+            z_threshold=full_cfg.safety.anomaly_z_threshold,
+            log_path=None,
+            freeze_after_alarms=int(getattr(full_cfg.safety, "freeze_after_alarms", 3) or 3),
+            min_history=int(getattr(full_cfg.safety, "anomaly_min_history", 30) or 30),
+        )
         _model_id = str(meta.get("model_id") or meta.get("name") or Path(checkpoint).stem or "model")
         _max_context = int(_env("MAX_CONTEXT", str(full_cfg.model.max_seq_len)) or full_cfg.model.max_seq_len)
     logger.info(
@@ -342,9 +347,10 @@ def _token_stream(
         sess = _claim_session_locked(sid, owner)
         if reset:
             sess["state"] = None
-        sess["anomaly"] = False
-        if reset:
             sess["memory_frozen"] = False
+            if _monitor is not None:
+                _monitor.reset_session(sid)
+        sess["anomaly"] = False
         state = sess["state"]
         if state is None and slow_seed is not None:
             # fast memory/h start from zero; ONLY the user's slow ring is restored
@@ -371,20 +377,23 @@ def _token_stream(
                     state = out.state
                     audit = out.audit
                     if _monitor is not None and audit:
-                        alarms = _monitor.update(audit)
+                        alarms = _monitor.update(audit, session_id=sid)
                         if alarms:
-                            sess["anomaly"] = True  # never persist this turn into a user's slow memory
+                            # Flag the turn: slow ring must not be persisted for this user
+                            sess["anomaly"] = True
                         if (
-                            alarms
-                            and _cfg is not None
+                            _cfg is not None
                             and _cfg.safety.freeze_on_anomaly
-                            and _monitor.should_freeze()
+                            and _monitor.should_freeze(session_id=sid)
                         ):
-                            # Paper §7: freeze memory writes → g=0 (state flag), not permanent weight destroy
+                            # Paper §7: freeze memory writes → g=0 (state flag), not weight destroy
                             sess["memory_frozen"] = True
                             if state is not None:
                                 state["memory_frozen"] = True
-                            logger.warning("Anomaly freeze (g=0): %s", alarms)
+                            if alarms:
+                                logger.warning(
+                                    "Anomaly freeze (g=0) session=%s alarms=%s", sid, alarms
+                                )
                     if state is not None and sess.get("memory_frozen"):
                         state["memory_frozen"] = True
                     nid = _sample(out.logits[:, -1, :], temperature)
