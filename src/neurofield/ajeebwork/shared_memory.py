@@ -1,4 +1,4 @@
-"""Shared memory bridge between chat sessions and Cowork runs.
+"""Shared memory bridge between chat sessions and AjeebWork runs.
 
 When enabled, a session can read/write a small key-value + transcript buffer
 that both the chat path and multi-step agent can see. Per-task opt-out via
@@ -13,14 +13,14 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from neurofield.cowork.config import load_cowork_config
+from neurofield.ajeebwork.config import load_ajeebwork_config
 
 _lock = threading.Lock()
 _STORE: dict[str, dict[str, Any]] = {}
 
 
 def _session_path(session_id: str) -> Path:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     root = Path(cfg.task_store_dir) / "shared_memory"
     root.mkdir(parents=True, exist_ok=True)
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)[:64]
@@ -54,7 +54,7 @@ def save_session(session_id: str, data: dict[str, Any]) -> None:
 
 
 def memory_get(session_id: str, key: str, *, memory_enabled: bool = True) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.shared_memory_enabled or not memory_enabled:
         return "SharedMemory: disabled for this task."
     data = load_session(session_id)
@@ -71,7 +71,7 @@ def memory_set(
     *,
     memory_enabled: bool = True,
 ) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.shared_memory_enabled or not memory_enabled:
         return "SharedMemory: disabled for this task."
     data = load_session(session_id)
@@ -89,7 +89,7 @@ def memory_append_transcript(
     *,
     memory_enabled: bool = True,
 ) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.shared_memory_enabled or not memory_enabled:
         return "SharedMemory: disabled for this task."
     data = load_session(session_id)
@@ -101,7 +101,7 @@ def memory_append_transcript(
 
 
 def memory_report(session_id: str, *, memory_enabled: bool = True) -> str:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     if not cfg.shared_memory_enabled or not memory_enabled:
         return "SharedMemory: disabled."
     data = load_session(session_id)

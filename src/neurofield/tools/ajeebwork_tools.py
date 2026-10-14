@@ -1,11 +1,11 @@
-"""Tool-facing adapters for Cowork capabilities."""
+"""Tool-facing adapters for AjeebWork capabilities."""
 
 from __future__ import annotations
 
 import json
 from typing import Any, Optional
 
-from neurofield.cowork import (
+from neurofield.ajeebwork import (
     read_file,
     write_file,
     edit_file,
@@ -28,7 +28,7 @@ from neurofield.cowork import (
 )
 
 
-def cowork_file(
+def ajeebwork_file(
     action: str,
     path: str = "",
     content: str = "",
@@ -55,30 +55,30 @@ def cowork_file(
             new=new,
             allow_delete=allow_delete,
         )
-    return f"cowork_file: unknown action '{action}'"
+    return f"ajeebwork_file: unknown action '{action}'"
 
 
-def cowork_plan(objective: str, steps_json: str = "[]") -> str:
+def ajeebwork_plan(objective: str, steps_json: str = "[]") -> str:
     try:
         specs = json.loads(steps_json) if steps_json else []
         if not isinstance(specs, list):
-            return "cowork_plan: steps_json must be a JSON list."
+            return "ajeebwork_plan: steps_json must be a JSON list."
     except json.JSONDecodeError as e:
-        return f"cowork_plan: invalid JSON: {e}"
+        return f"ajeebwork_plan: invalid JSON: {e}"
     return plan_execute_report(objective, specs, run_step=None)
 
 
-def cowork_subagents(tasks_json: str = "[]") -> str:
+def ajeebwork_subagents(tasks_json: str = "[]") -> str:
     try:
         tasks = json.loads(tasks_json) if tasks_json else []
         if not isinstance(tasks, list):
-            return "cowork_subagents: tasks_json must be a JSON list."
+            return "ajeebwork_subagents: tasks_json must be a JSON list."
     except json.JSONDecodeError as e:
-        return f"cowork_subagents: invalid JSON: {e}"
+        return f"ajeebwork_subagents: invalid JSON: {e}"
     return subagents_report(tasks, worker=None)
 
 
-def cowork_task(
+def ajeebwork_task(
     action: str = "list",
     name: str = "",
     task_id: str = "",
@@ -95,10 +95,10 @@ def cowork_task(
     if action == "run_inline" and name:
         rec = run_task_inline(name, lambda r: f"inline work for {r.name}")
         return tasks_report(rec.task_id)
-    return f"cowork_task: unknown action '{action}'"
+    return f"ajeebwork_task: unknown action '{action}'"
 
 
-def cowork_memory(
+def ajeebwork_memory(
     action: str = "report",
     session_id: str = "default",
     key: str = "",
@@ -113,7 +113,7 @@ def cowork_memory(
     return memory_report(session_id, memory_enabled=memory_enabled)
 
 
-def cowork_document(
+def ajeebwork_document(
     kind: str,
     path: str,
     title: str = "Document",
@@ -131,15 +131,15 @@ def cowork_document(
         if slides_json:
             kwargs["slides"] = json.loads(slides_json)
     except json.JSONDecodeError as e:
-        return f"cowork_document: invalid JSON: {e}"
+        return f"ajeebwork_document: invalid JSON: {e}"
     return documents_report(kind, path, **kwargs)
 
 
-def cowork_draft_edit(path: str, selected_text: str, replacement: str) -> str:
+def ajeebwork_draft_edit(path: str, selected_text: str, replacement: str) -> str:
     return edit_span(path, selected_text, replacement)
 
 
-def cowork_skill(
+def ajeebwork_skill(
     action: str = "list",
     name: str = "",
     instructions: str = "",
@@ -153,4 +153,4 @@ def cowork_skill(
         return save_skill(name, instructions)
     if action == "connector":
         return call_connector(name)
-    return f"cowork_skill: unknown action '{action}'"
+    return f"ajeebwork_skill: unknown action '{action}'"

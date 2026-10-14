@@ -6,7 +6,7 @@ revision instruction or replacement. No silent whole-file rewrite.
 
 from __future__ import annotations
 
-from neurofield.cowork.workspace_files import edit_file, read_file, resolve_path, WorkspaceError
+from neurofield.ajeebwork.workspace_files import edit_file, read_file, resolve_path, WorkspaceError
 
 
 def edit_span(

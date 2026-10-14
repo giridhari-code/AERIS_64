@@ -15,8 +15,8 @@ import io
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from neurofield.cowork.config import load_cowork_config
-from neurofield.cowork.workspace_files import resolve_path, WorkspaceError, write_file
+from neurofield.ajeebwork.config import load_ajeebwork_config
+from neurofield.ajeebwork.workspace_files import resolve_path, WorkspaceError, write_file
 
 
 def write_markdown_report(path: str, title: str, body: str, *, sections: Optional[list[dict[str, str]]] = None) -> str:

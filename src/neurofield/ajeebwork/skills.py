@@ -11,13 +11,13 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from neurofield.cowork.config import load_cowork_config
+from neurofield.ajeebwork.config import load_ajeebwork_config
 
 _CONNECTORS: dict[str, Callable[..., str]] = {}
 
 
 def _skills_dir() -> Path:
-    cfg = load_cowork_config()
+    cfg = load_ajeebwork_config()
     d = Path(cfg.skills_dir)
     d.mkdir(parents=True, exist_ok=True)
     return d
