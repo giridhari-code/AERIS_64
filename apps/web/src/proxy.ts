@@ -32,11 +32,19 @@ export async function proxyChat(body: unknown): Promise<{
   status: number;
   body: unknown;
 }> {
+  return proxyJson("POST", "/v1/chat", body);
+}
+
+export async function proxyJson(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; body: unknown }> {
   try {
-    const res = await fetch(`${pythonBase()}/v1/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body ?? {}),
+    const res = await fetch(`${pythonBase()}${path}`, {
+      method,
+      headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(120_000),
     });
     const text = await res.text();
@@ -44,7 +52,7 @@ export async function proxyChat(body: unknown): Promise<{
     try {
       parsed = JSON.parse(text);
     } catch {
-      /* keep raw text */
+      /* keep raw */
     }
     return { status: res.status, body: parsed };
   } catch (e) {
@@ -53,7 +61,7 @@ export async function proxyChat(body: unknown): Promise<{
       body: {
         error: "python_backend_unreachable",
         detail: e instanceof Error ? e.message : String(e),
-        hint: `Is the Python server running at ${pythonBase()}?`,
+        hint: `Start Python model server at ${pythonBase()} first`,
       },
     };
   }
