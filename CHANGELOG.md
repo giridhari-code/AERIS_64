@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased — per-user memory: turn-end consolidation
+## Unreleased — checkpoint compat + per-user memory: turn-end consolidation
+
+- **Demo checkpoint loads again.** `slow_scale` (new param, init 1.5) was missing from `checkpoints/examples/AERIS_main`, so
+  `load_model_from_checkpoint` raised "weights missing from checkpoint" and `test_demo_checkpoint_loads_and_generates` failed on `main`.
+  `slow_scale` is now a compat-missing param; a checkpoint without it loads with **1.0** (it was trained with the slow read unscaled),
+  a checkpoint that has it keeps its own value.
 
 - After the decode-parity fix `forward()` writes the slow ring only at global segment boundaries (no end-of-call flush), so a chat
   turn shorter than `segment_len` left the user's slow memory empty (measured: 0 slots for a 14-token turn).

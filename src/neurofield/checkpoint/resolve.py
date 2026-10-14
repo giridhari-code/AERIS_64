@@ -101,6 +101,7 @@ def load_model_from_checkpoint(
         "slow_mem.log_temp",
         "field.R.weight",
         "field.R.bias",
+        "slow_scale",  # added with the slow-path scale; see the legacy default below
     )
     hard_missing = [
         k for k in missing
@@ -112,6 +113,13 @@ def load_model_from_checkpoint(
             "Compat: %d new param(s) not in checkpoint, keeping init values: %s",
             len(soft_missing), soft_missing[:8],
         )
+    if "slow_scale" in soft_missing:
+        # Checkpoints from before `slow_scale` existed were trained with the slow read UNscaled (coefficient 1),
+        # not with the new init 1.5: load them with 1.0 so they keep behaving as they were trained.
+        import torch
+
+        with torch.no_grad():
+            model.slow_scale.fill_(1.0)
     if hard_missing:
         msg = (
             f"{len(hard_missing)} weights missing from checkpoint "
