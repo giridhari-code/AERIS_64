@@ -73,6 +73,8 @@ class SafetyConfig:
     slow_segment_len: int = 0     # 0 => auto max(4, min(16, truncate//4))
     anomaly_z_threshold: float = 4.0
     freeze_on_anomaly: bool = True  # paper §7: anomaly → g=0 (serve path)
+    freeze_after_alarms: int = 3    # consecutive/cumulative z-alarms before freeze
+    anomaly_min_history: int = 30   # samples before z-score is trusted
     per_session_state: bool = True
     truncate_write_window: int = 32
 
