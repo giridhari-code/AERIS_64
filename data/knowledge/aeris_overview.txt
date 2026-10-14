@@ -1,0 +1,8 @@
+AERIS / NeuroField is a recurrent language model with two-speed memory.
+Fast memory uses a surprise-gated delta rule and has fixed size (B, d_k, d_v).
+It does not grow with sequence length, unlike a transformer KV cache.
+Slow memory is a ring of slots that consolidates fast memory snapshots.
+Long context is retrieved from the slow ring via content-addressed reads.
+The architecture targets inference at scale: constant memory, continuous sessions.
+Metacognition monitors the system and can freeze writes on anomaly.
+Skill routing selects top-k skills per token for modular computation.

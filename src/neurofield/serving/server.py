@@ -898,6 +898,35 @@ def create_app(
         """MCP-style tools/list payload for clients and agents."""
         return list_mcp_tools()
 
+    @app.post("/v1/rag/retrieve")
+    def rag_retrieve_api(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        """RAG: retrieve + rank chunks from the domain knowledge base."""
+        from neurofield.rag.pipeline import get_default_rag
+
+        q = str((body or {}).get("query") or "").strip()
+        if not q:
+            raise HTTPException(status_code=400, detail="query required")
+        try:
+            k = max(1, min(20, int((body or {}).get("top_k") or 4)))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail="top_k must be an integer") from e
+        rag = get_default_rag()
+        hits = rag.retrieve(q, top_k=k)
+        return {"query": q[:500], "hits": hits, "store_size": len(rag.store)}
+
+    @app.post("/v1/rag/ingest")
+    def rag_ingest_api(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        """RAG: add text into the vector store (continuous update)."""
+        from neurofield.rag.pipeline import get_default_rag
+
+        text = str((body or {}).get("text") or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="text required")
+        source = str((body or {}).get("source") or "api")[:120]
+        rag = get_default_rag()
+        n = rag.ingest_text(text, source=source)
+        return {"ingested": n, "store_size": len(rag.store), "source": source}
+
     @app.post("/v1/tools/web_search")
     def tools_web_search(body: dict, api_key: Optional[str] = Depends(require_api_key)):
         q = str((body or {}).get("query") or "").strip()

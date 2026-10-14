@@ -13,6 +13,7 @@ from neurofield.tools.timeutil import now_report
 from neurofield.tools.weather import weather_report
 from neurofield.tools.web_search import web_search_report
 from neurofield.tools.wikipedia import wikipedia_summary
+from neurofield.tools.rag_tool import rag_retrieve
 
 _WEATHER = re.compile(
     r"\b(weather|temperature|forecast|barish|mausam|celsius|"
@@ -39,6 +40,10 @@ _WIKI = re.compile(
 )
 _FX = re.compile(
     r"\b(\d+(?:\.\d+)?)\s*(USD|INR|EUR|GBP|JPY|AED)\s*(?:to|in|→|->)\s*(USD|INR|EUR|GBP|JPY|AED)\b",
+    re.I,
+)
+_RAG = re.compile(
+    r"\b(rag|retrieve|knowledge\s*base|from\s+(the\s+)?docs?|according\s+to\s+(our|the)\s+(docs?|kb))\b",
     re.I,
 )
 _GIT = re.compile(
@@ -114,6 +119,9 @@ def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
 
     if _WIKI.search(p) and not _WEATHER.search(p):
         notes.append(wikipedia_summary(_wiki_topic(p)))
+
+    if _RAG.search(p):
+        notes.append(rag_retrieve(p, top_k=4))
 
     if _GIT.search(p):
         # Map natural language → safe git subcommand
