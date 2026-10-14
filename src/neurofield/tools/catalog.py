@@ -141,6 +141,92 @@ def tool_schemas() -> list[dict[str, Any]]:
                 "required": ["query"],
             },
         },
+
+        {
+            "name": "code_execution",
+            "description": "Run Python code in an isolated sandbox and return stdout/stderr (Code Interpreter).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "Python source to execute"},
+                    "language": {"type": "string", "default": "python"},
+                },
+                "required": ["code"],
+            },
+        },
+        {
+            "name": "code_interpreter",
+            "description": "Alias of code_execution — isolated Python interpreter.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string"},
+                    "language": {"type": "string", "default": "python"},
+                },
+                "required": ["code"],
+            },
+        },
+        {
+            "name": "bash",
+            "description": "Run a restricted shell command inside the sandbox (allow-listed binaries only).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Shell command"},
+                },
+                "required": ["command"],
+            },
+        },
+        {
+            "name": "web_fetch",
+            "description": "Fetch a public URL and return readable plain text of the page.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "max_chars": {"type": "integer", "default": 8000},
+                },
+                "required": ["url"],
+            },
+        },
+        {
+            "name": "file_search",
+            "description": "Search file names and content inside the repository (safe paths only).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "path": {"type": "string", "description": "Optional subdirectory to limit search"},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "image_generation",
+            "description": "Generate an image from a text prompt (requires configured image provider).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string"},
+                    "size": {"type": "string", "default": "1024x1024"},
+                },
+                "required": ["prompt"],
+            },
+        },
+        {
+            "name": "computer_use",
+            "description": "Computer-use actions (screenshot, click, type, etc.). Requires a desktop backend.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string"},
+                    "coordinate": {"type": "array", "items": {"type": "integer"}},
+                    "text": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        },
+
     ]
 
 

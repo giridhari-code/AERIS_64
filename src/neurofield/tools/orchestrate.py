@@ -15,6 +15,10 @@ from neurofield.tools.web_search import web_search_report
 from neurofield.tools.wikipedia import wikipedia_summary
 from neurofield.tools.rag_tool import rag_retrieve
 from neurofield.tools.tool_search import tool_search_report, search_tools, format_tool_catalog_for_prompt
+from neurofield.tools.code_execution import code_execution
+from neurofield.tools.bash_tool import bash
+from neurofield.tools.web_fetch import web_fetch
+from neurofield.tools.file_search import file_search
 
 _WEATHER = re.compile(
     r"\b(weather|temperature|forecast|barish|mausam|celsius|"
@@ -47,6 +51,27 @@ _RAG = re.compile(
     r"\b(rag|retrieve|knowledge\s*base|from\s+(the\s+)?docs?|according\s+to\s+(our|the)\s+(docs?|kb))\b",
     re.I,
 )
+
+_CODE_EXEC = re.compile(
+    r"\b(run\s+(this\s+)?(code|python)|execute\s+(this\s+)?(code|python)|"
+    r"code\s+interpreter|python\s+code)\b",
+    re.I,
+)
+_BASH = re.compile(
+    r"\b(bash|shell\s+command|run\s+(this\s+)?(command|shell)|terminal)\b",
+    re.I,
+)
+_WEB_FETCH = re.compile(
+    r"\b(fetch\s+(this\s+)?(url|page|link)|open\s+(this\s+)?(url|link)|"
+    r"read\s+(this\s+)?(page|url|website))\b",
+    re.I,
+)
+_FILE_SEARCH = re.compile(
+    r"\b(find\s+file|search\s+file|file\s+search|where\s+is\s+the\s+file|"
+    r"locate\s+file)\b",
+    re.I,
+)
+
 _TOOL_SEARCH = re.compile(
     r"\b(tool\s*search|search\s*tools|which\s+tools?|available\s+tools?|"
     r"kya\s+tools?\s+(hain|hai)|tools?\s+list)\b",
@@ -149,6 +174,43 @@ def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
         r"\b(news|headline|price|stock|match)\b", p, re.I
     ):
         notes.append(web_search_report(p, max_results=4))
+
+
+    if _CODE_EXEC.search(p):
+        # Extract fenced code if present
+        mcode = re.search(r"```(?:python)?\s*([\s\S]+?)```", p)
+        code = mcode.group(1).strip() if mcode else ""
+        if code:
+            notes.append(code_execution(code))
+        else:
+            notes.append("CodeExecution: provide Python code in a ```python block.")
+
+    if _BASH.search(p) and not _CODE_EXEC.search(p):
+        # Take first backtick command or whole prompt as soft hint
+        mcmd = re.search(r"`([^`]+)`", p)
+        cmd = mcmd.group(1).strip() if mcmd else ""
+        if cmd:
+            notes.append(bash(cmd))
+        else:
+            notes.append("Bash: provide a command in backticks, e.g. `ls -la`.")
+
+    if _WEB_FETCH.search(p):
+        murl = re.search(r"https?://[^\s\]\)]+", p)
+        if murl:
+            notes.append(web_fetch(murl.group(0)))
+        else:
+            notes.append("WebFetch: provide a full http(s) URL.")
+
+    if _FILE_SEARCH.search(p):
+        # Use remaining text after trigger words as query
+        q = re.sub(
+            r"\b(find\s+file|search\s+file|file\s+search|where\s+is\s+the\s+file|locate\s+file)\b",
+            "",
+            p,
+            flags=re.I,
+        ).strip(" :?-")
+        if q:
+            notes.append(file_search(q))
 
     if not notes:
         return prompt, None
