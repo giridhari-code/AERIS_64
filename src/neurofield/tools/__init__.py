@@ -11,6 +11,7 @@ from neurofield.tools.file_search import file_search
 from neurofield.tools.image_generation import image_generation
 from neurofield.tools.computer_use import computer_use
 from neurofield.tools.mcp_support import mcp_list_tools, mcp_call_tool
+from neurofield.tools.config import ToolsConfig, load_tools_config
 
 
 __all__ = [
@@ -30,6 +31,8 @@ __all__ = [
     "computer_use",
     "mcp_list_tools",
     "mcp_call_tool",
+    "ToolsConfig",
+    "load_tools_config",
     "git_report",
     "git_status",
 ]

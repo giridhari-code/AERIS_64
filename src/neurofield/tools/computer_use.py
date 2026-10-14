@@ -1,14 +1,43 @@
-"""Computer Use tool (high-level stub).
+"""Computer-use capability gate.
 
-Full computer-use (screen, mouse, keyboard) requires a controlled desktop
-environment (e.g. Anthropic computer-use, OpenAI computer-use, or a local
-VNC/Playwright stack). This module exposes the interface and clearly reports
-that the runtime is not attached yet.
+Full desktop control requires an attached backend (vendor computer-use API,
+Playwright, or a locked-down VNC session). This module only exposes the
+contract and remains disabled until NEUROFIELD_COMPUTER_USE=1 is set and a
+backend is registered by the serving process.
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Callable, Optional
+
+from neurofield.tools.config import load_tools_config
+
+_BACKEND: Optional[Callable[..., str]] = None
+
+_SUPPORTED_ACTIONS = frozenset(
+    {
+        "screenshot",
+        "click",
+        "double_click",
+        "type",
+        "key",
+        "scroll",
+        "wait",
+        "move",
+        "drag",
+    }
+)
+
+
+def register_computer_backend(fn: Callable[..., str]) -> None:
+    """Serving layer calls this once to attach a real backend."""
+    global _BACKEND
+    _BACKEND = fn
+
+
+def computer_use_available() -> bool:
+    cfg = load_tools_config()
+    return bool(cfg.computer_use_enabled and _BACKEND is not None)
 
 
 def computer_use(
@@ -18,42 +47,33 @@ def computer_use(
     **kwargs: Any,
 ) -> str:
     """
-    Perform a computer-use action.
+    Dispatch a computer-use action to the registered backend.
 
-    Typical actions (when a backend is attached):
-      - screenshot
-      - click / double_click
-      - type / key
-      - scroll
-      - wait
-
-    Current build: no desktop backend attached.
+    Without a backend the call fails closed with a clear status string.
     """
-    action = (action or "").strip().lower()
-    if not action:
+    cfg = load_tools_config()
+    act = (action or "").strip().lower()
+    if not act:
         return "ComputerUse: empty action."
-
-    supported = {
-        "screenshot", "click", "double_click", "type", "key",
-        "scroll", "wait", "move", "drag",
-    }
-    if action not in supported:
+    if act not in _SUPPORTED_ACTIONS:
         return (
-            f"ComputerUse: unknown action '{action}'. "
-            f"Supported (when backend attached): {', '.join(sorted(supported))}"
+            f"ComputerUse: unsupported action '{action}'. "
+            f"Supported: {', '.join(sorted(_SUPPORTED_ACTIONS))}."
         )
 
-    detail = []
-    if coordinate is not None:
-        detail.append(f"coordinate={coordinate}")
-    if text:
-        detail.append(f"text={text[:80]}")
-    for k, v in kwargs.items():
-        detail.append(f"{k}={v}")
+    if not cfg.computer_use_enabled:
+        return (
+            "ComputerUse: disabled. "
+            "Set NEUROFIELD_COMPUTER_USE=1 and register a backend to enable."
+        )
 
-    extra = (", " + ", ".join(detail)) if detail else ""
-    return (
-        f"ComputerUse: action='{action}'{extra}\n"
-        "No desktop / browser backend is attached in this build. "
-        "Wire Playwright, a VNC session, or a vendor computer-use API to enable."
-    )
+    if _BACKEND is None:
+        return (
+            "ComputerUse: enabled in config but no backend is registered. "
+            "Call register_computer_backend() from the serving process."
+        )
+
+    try:
+        return _BACKEND(action=act, coordinate=coordinate, text=text, **kwargs)
+    except Exception as e:
+        return f"ComputerUse backend error: {type(e).__name__}: {e}"
