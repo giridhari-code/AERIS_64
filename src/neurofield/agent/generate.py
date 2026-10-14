@@ -17,64 +17,36 @@ def make_generate_fn(
     """
     Load NeuroField checkpoint once; return prompt -> text.
 
-    On failure the returned function still runs but yields "" and stores
-    reason on ``fn.load_error`` for diagnostics.
+    Uses ``load_model_from_checkpoint`` (same path as the server).
+    On failure, returns a function that yields "" and sets ``fn.load_error``.
     """
-    load_error: Optional[str] = None
 
     def _blank(reason: str) -> Callable[[str], str]:
-        nonlocal load_error
-        load_error = reason
-
         def _fn(_p: str) -> str:
             return ""
 
         _fn.load_error = reason  # type: ignore[attr-defined]
         return _fn
 
-    try:
-        from neurofield.checkpoint.io import load_checkpoint
-        from neurofield.model import NeuroField
-    except Exception as e:
-        return _blank(f"import: {e}")
-
     path = Path(checkpoint)
     if not path.exists():
         return _blank(f"missing path: {path}")
 
     try:
-        bundle = load_checkpoint(str(path), map_location=device)
-        model = None
-        encode = decode = None
+        from neurofield.checkpoint.resolve import load_model_from_checkpoint
+    except Exception as e:
+        return _blank(f"import resolve: {e}")
 
-        if isinstance(bundle, dict):
-            model = bundle.get("model")
-            encode = bundle.get("encode")
-            decode = bundle.get("decode")
-            tok = bundle.get("tokenizer")
-            if tok is not None and (encode is None or decode is None):
-                encode, decode = tok.encode, tok.decode
-            # some loaders nest
-            if model is None and "state_dict" in bundle:
-                from neurofield.config import ModelConfig, SafetyConfig
-                # cannot rebuild without config — fail clear
-                return _blank("checkpoint dict has state_dict but no model object")
-        else:
-            model = bundle
-
-        if model is not None and not isinstance(model, NeuroField):
-            model = getattr(model, "model", model)
-
-        if model is None:
-            return _blank("no model in checkpoint bundle")
-
-        model = model.to(device)
+    try:
+        model, tok, _cfg, _meta = load_model_from_checkpoint(
+            str(path),
+            config_path=None,
+            device=device,
+            strict=False,
+        )
         model.eval()
-
-        if encode is None or decode is None:
-            # try vocab files beside ckpt
-            return _blank("no tokenizer encode/decode in checkpoint (train/save tokenizer with ckpt)")
-
+        encode = tok.encode
+        decode = tok.decode
     except Exception as e:
         return _blank(f"load: {type(e).__name__}: {e}")
 
@@ -88,10 +60,14 @@ def make_generate_fn(
                 ids = ids[0]
             if not ids:
                 return ""
+            # clamp ids into vocab if possible
+            vs = int(getattr(tok, "vocab_size", 0) or 0)
+            if vs > 0:
+                ids = [min(max(0, int(i)), vs - 1) for i in ids]
             x = torch.tensor([ids], dtype=torch.long, device=device)
             state = None
-            out_ids = []
-            for i in range(max_new_tokens):
+            out_ids: list[int] = []
+            for _ in range(max_new_tokens):
                 inp = x if state is None else x[:, -1:]
                 out = model(inp, state=state)
                 state = out.state
@@ -107,8 +83,10 @@ def make_generate_fn(
                     break
             text = decode(out_ids)
             return text if isinstance(text, str) else str(text)
-        except Exception:
+        except Exception as e:
+            generate.last_error = f"{type(e).__name__}: {e}"  # type: ignore[attr-defined]
             return ""
 
     generate.load_error = None  # type: ignore[attr-defined]
+    generate.last_error = None  # type: ignore[attr-defined]
     return generate
