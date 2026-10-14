@@ -1,50 +1,86 @@
-"""Restricted Bash tool (uses NeuroField sandbox allow-list)."""
+"""Restricted shell execution via the production sandbox.
+
+Commands are executed through SandboxExecutor (argv allow-list, resource
+limits, optional network namespace). Shell metacharacters are not expanded
+as a login shell would; pass a single allow-listed binary + args.
+"""
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
-from neurofield.sandbox.session import SessionSandbox
 from neurofield.sandbox.executor import SandboxConfig
+from neurofield.sandbox.session import SessionSandbox
+from neurofield.tools.config import load_tools_config
+
+_lock = threading.Lock()
+_fallback_session: Optional[SessionSandbox] = None
+
+# Defence-in-depth patterns; primary enforcement is SandboxConfig.allowed_bins
+_BLOCKED_SUBSTRINGS = (
+    "rm -rf /",
+    "mkfs",
+    ":(){",
+    "dd if=",
+    ">/dev/sd",
+    "chmod -R 777 /",
+    "curl ",
+    "wget ",
+)
 
 
-_default_session: Optional[SessionSandbox] = None
+def _fallback() -> SessionSandbox:
+    global _fallback_session
+    with _lock:
+        if _fallback_session is None:
+            cfg = load_tools_config()
+            _fallback_session = SessionSandbox(
+                "tool-bash",
+                cfg=SandboxConfig(
+                    timeout_sec=cfg.bash_timeout_sec,
+                    max_output_bytes=cfg.bash_max_output_bytes,
+                    max_memory_mb=cfg.bash_max_memory_mb,
+                    allow_network=False,
+                ),
+                max_calls=256,
+            )
+        return _fallback_session
 
 
-def _get_session() -> SessionSandbox:
-    global _default_session
-    if _default_session is None:
-        cfg = SandboxConfig(
-            timeout_sec=10.0,
-            max_output_bytes=40_000,
-            max_memory_mb=256,
-            allow_network=False,
-        )
-        _default_session = SessionSandbox("tool-bash", cfg=cfg, max_calls=64)
-    return _default_session
-
-
-def bash(command: str) -> str:
+def bash(
+    command: str,
+    session: Optional[SessionSandbox] = None,
+) -> str:
     """
-    Run a single shell command inside the sandbox.
-    Only allow-listed binaries are permitted (see SandboxConfig.allowed_bins).
+    Run a single command string inside the sandbox.
+
+    Parameters
+    ----------
+    command : str
+        Command text. Prefer simple forms such as ``ls -la`` or ``pwd``.
+    session : SessionSandbox, optional
+        Per-tenant sandbox when serving multi-user traffic.
     """
-    command = (command or "").strip()
-    if not command:
+    cfg = load_tools_config()
+    cmd = (command or "").strip()
+    if not cmd:
         return "Bash: empty command."
-    if len(command) > 2_000:
-        return "Bash: command too long."
+    if len(cmd) > cfg.bash_max_command_chars:
+        return (
+            f"Bash: command exceeds limit "
+            f"({len(cmd)} > {cfg.bash_max_command_chars} chars)."
+        )
 
-    # Soft block of obviously dangerous patterns (sandbox also enforces)
-    lowered = command.lower()
-    blocked = ("rm -rf /", "mkfs", ":(){", "dd if=", ">/dev/sd", "chmod 777 /")
-    if any(b in lowered for b in blocked):
-        return "Bash: command blocked by safety filter."
+    lowered = cmd.lower()
+    for blocked in _BLOCKED_SUBSTRINGS:
+        if blocked in lowered:
+            return "Bash: command rejected by safety filter."
 
-    session = _get_session()
-    result = session.run_shell(command)
+    runner = session or _fallback()
+    result = runner.run_shell(cmd)
 
-    parts = []
+    parts: list[str] = []
     if result.stdout.strip():
         parts.append(result.stdout.strip())
     if result.stderr.strip():

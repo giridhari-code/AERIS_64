@@ -1,14 +1,30 @@
-"""Image Generation tool (interface + provider stub).
+"""Image generation capability gate.
 
-Real image models (Flux, SD3, DALL-E, Grok Imagine, etc.) need an API key.
-This module provides a clean interface so the agent can call it; wire a provider
-when credentials are available.
+Providers are never hard-coded. Enable with NEUROFIELD_IMAGE_GEN=1 and set
+NEUROFIELD_IMAGE_PROVIDER plus the provider credential env var. Until then
+the tool reports unavailable and is omitted from the active catalog.
 """
 
 from __future__ import annotations
 
 import os
 from typing import Optional
+
+from neurofield.tools.config import load_tools_config
+
+
+def image_generation_available() -> bool:
+    cfg = load_tools_config()
+    if not cfg.image_generation_enabled:
+        return False
+    provider = cfg.image_provider
+    if provider == "openai":
+        return bool(os.environ.get("OPENAI_API_KEY"))
+    if provider == "fal":
+        return bool(os.environ.get("FAL_KEY"))
+    if provider == "replicate":
+        return bool(os.environ.get("REPLICATE_API_TOKEN"))
+    return False
 
 
 def image_generation(
@@ -17,37 +33,42 @@ def image_generation(
     provider: Optional[str] = None,
 ) -> str:
     """
-    Generate an image from a text prompt.
+    Generate an image from ``prompt`` using the configured provider.
 
-    Returns a status message. When a real provider is configured via env
-    (e.g. OPENAI_API_KEY, FAL_KEY, REPLICATE_API_TOKEN), this can be extended
-    to call the provider and return a URL / local path.
+    Returns a status string. On success a production deployment should return
+    a durable URL or storage key; this module only performs the capability
+    check until a provider client is wired in deployment config.
     """
-    prompt = (prompt or "").strip()
-    if not prompt:
+    cfg = load_tools_config()
+    text = (prompt or "").strip()
+    if not text:
         return "ImageGeneration: empty prompt."
-    if len(prompt) > 2_000:
-        return "ImageGeneration: prompt too long."
+    if len(text) > 2_000:
+        return "ImageGeneration: prompt exceeds 2000 characters."
 
-    provider = (provider or os.environ.get("NEUROFIELD_IMAGE_PROVIDER") or "none").lower()
-
-    # Detect common keys so the message is helpful
-    has_openai = bool(os.environ.get("OPENAI_API_KEY"))
-    has_fal = bool(os.environ.get("FAL_KEY"))
-    has_replicate = bool(os.environ.get("REPLICATE_API_TOKEN"))
-
-    if provider == "none" and not (has_openai or has_fal or has_replicate):
+    if not cfg.image_generation_enabled:
         return (
-            "ImageGeneration: no image provider configured.\n"
-            "Set one of OPENAI_API_KEY / FAL_KEY / REPLICATE_API_TOKEN "
-            "or NEUROFIELD_IMAGE_PROVIDER, then re-call this tool.\n"
-            f"Prompt received: {prompt[:200]}"
+            "ImageGeneration: disabled. "
+            "Set NEUROFIELD_IMAGE_GEN=1 and NEUROFIELD_IMAGE_PROVIDER to enable."
         )
 
-    # Placeholder — real HTTP call would go here
+    chosen = (provider or cfg.image_provider or "").strip().lower()
+    if not chosen:
+        return (
+            "ImageGeneration: NEUROFIELD_IMAGE_PROVIDER is not set "
+            "(expected: openai | fal | replicate)."
+        )
+
+    if not image_generation_available():
+        return (
+            f"ImageGeneration: provider '{chosen}' is selected but credentials "
+            "are missing in the environment."
+        )
+
+    # Provider HTTP clients belong in deployment-specific modules, not in the
+    # core research tree. Fail closed with an explicit contract.
     return (
-        f"ImageGeneration: provider='{provider}' not fully wired in this build.\n"
-        f"Prompt: {prompt[:300]}\n"
-        f"Size: {size}\n"
-        "Add a concrete client (OpenAI images / fal.ai / Replicate) in this module to enable."
+        f"ImageGeneration: provider '{chosen}' is configured but no client "
+        "implementation is loaded in this process. "
+        "Register a client adapter in the serving layer."
     )
