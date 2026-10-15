@@ -20,7 +20,7 @@ class ModelConfig:
     k_max: int = 4
     dendrite_window: int = 3
     vocab_size: int = 32000
-    max_seq_len: int = 2048
+    max_seq_len: int = 2048  # Long-context ceiling (token ids); slow ring sized from this
     context_slots: int = 0  # 0 => auto max_seq_len // truncate_window; slow mem ring size
     slow_compact: bool = True  # ring full => fold the OLDEST slot into its neighbour instead of erasing it
     tie_embeddings: bool = True
@@ -43,7 +43,7 @@ class TrainingConfig:
     lambda_bal: float = 0.01
     replay_every: int = 75
     replay_eta: float = 0.02
-    truncate_write_window: int = 32
+    truncate_write_window: int = 32  # Fast-M segment length before slow-ring snapshot
     device: str = "cuda"
     seed: int = 42
     log_every: int = 50
