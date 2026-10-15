@@ -26,7 +26,7 @@ Decorative only. Does **not** write or debug code.
 ## Web UI (floating)
 
 - Navbar me **Buddy** toggle (◉).
-- On hone par buddy **navbar ke thoda neeche, top-left floating** dikhta hai — thread ke **andar nahi**.
+- On hone par buddy **navbar ke thoda neeche, top-right floating** dikhta hai — thread ke **andar nahi**.
 - Soft **bob animation** + idle blink; **Pet** se short pet animation.
 - Preference `localStorage.sentinel_buddy_on` me save.
 
