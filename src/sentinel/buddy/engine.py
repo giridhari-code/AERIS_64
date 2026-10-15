@@ -174,7 +174,9 @@ def pet_buddy(user_id: str) -> str:
 
 def is_buddy_command(text: str) -> bool:
     t = (text or "").strip().lower()
-    return t == "/buddy" or t.startswith("/buddy ")
+    if t in {"/buddy", "/buddy on", "/buddy off", "/buddyon", "/buddyoff"}:
+        return True
+    return t.startswith("/buddy ")
 
 
 def handle_buddy_command(text: str, user_id: str) -> Optional[str]:
@@ -184,22 +186,22 @@ def handle_buddy_command(text: str, user_id: str) -> Optional[str]:
         return None
     parts = t.split()
     uid = (user_id or "anonymous").strip() or "anonymous"
-    if len(parts) == 1 or (len(parts) >= 2 and parts[1].lower() in {"show", "hatch", "status"}):
-        b = hatch_buddy(uid)
-        note = (
-            "\n\n(Buddy only keeps you company — it does not write or debug code.)"
-        )
-        return b.render(frame=0) + note
-    if parts[1].lower() == "pet":
-        return pet_buddy(uid) + "\n\n*happy wiggle*"
-    if parts[1].lower() in {"help", "?"}:
+    sub = parts[1].lower() if len(parts) >= 2 else "show"
+
+    if sub in {"on", "enable"}:
+        return "BUDDY_ON"
+    if sub in {"off", "hide", "disable"}:
+        return "BUDDY_OFF"
+    if len(parts) == 1 or sub in {"show", "hatch", "status"}:
+        return hatch_buddy(uid).render(frame=0)
+    if sub == "pet":
+        return pet_buddy(uid)
+    if sub in {"help", "?"}:
         return (
             "Buddy commands:\n"
-            "  /buddy       — show your companion (deterministic per user)\n"
-            "  /buddy pet   — pet them (hearts)\n"
-            "Buddy watches only; no coding help."
+            "  /buddy on    — show companion\n"
+            "  /buddy off   — hide companion\n"
+            "  /buddy       — status\n"
+            "Auto mood follows chat."
         )
-    return (
-        "Unknown buddy subcommand. Try `/buddy` or `/buddy pet`.\n"
-        + hatch_buddy(uid).render(frame=0)
-    )
+    return "Unknown. Try `/buddy on` or `/buddy off`."
