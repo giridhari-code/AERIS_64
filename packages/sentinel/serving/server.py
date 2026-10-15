@@ -26,6 +26,7 @@ Environment (NEUROFIELD_* wins; the short names are kept for compatibility)
   NEUROFIELD_METRICS_PUBLIC                 1 (default) / 0 => /metrics needs key
   NEUROFIELD_LOG_JSON / NEUROFIELD_LOG_LEVEL  structured logs (default off / INFO)
   NEUROFIELD_TRUST_PROXY                    1 => rate-limit by X-Forwarded-For
+  NEUROFIELD_LOG_PROBES                     1 => also log auto-probe requests (/health, /readyz, GET /v1/models)
 """
 
 from __future__ import annotations
@@ -99,6 +100,27 @@ _stop_token_ids: set[int] = set()  # <|end|>, <|user|> from tokenizer when prese
 
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     return os.environ.get(f"NEUROFIELD_{name}") or os.environ.get(name) or default
+
+
+class _QuietAccessPaths(logging.Filter):
+    """Drop access-log lines for endpoints that get probed automatically.
+
+    OpenCode discovers local model servers via GET /health + GET /v1/models,
+    the web UI polls /readyz every 30s, and load balancers hit /healthz.
+    Hiding those keeps the console focused on real traffic (LOG_PROBES=1
+    keeps them visible).
+    """
+
+    _EXACT = {"/health", "/healthz", "/readyz"}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = getattr(record, "args", None)
+        if not isinstance(args, tuple) or len(args) < 3:
+            return True
+        method, path = str(args[1]), str(args[2]).split("?", 1)[0]
+        if path in self._EXACT:
+            return False
+        return not (method == "GET" and path == "/v1/models")
 
 
 # --------------------------------------------------------------------------
@@ -514,6 +536,12 @@ def create_app(
     setup_production_logging(
         level=_env("LOG_LEVEL", "INFO") or "INFO", json_logs=_env("LOG_JSON", "0") == "1"
     )
+    # Auto-probe endpoints (health checks, provider discovery) stay out of the
+    # access log; set LOG_PROBES=1 to keep them visible.
+    if _env("LOG_PROBES", "0") != "1":
+        _access_log = logging.getLogger("uvicorn.access")
+        if not any(isinstance(f, _QuietAccessPaths) for f in _access_log.filters):
+            _access_log.addFilter(_QuietAccessPaths())
     checkpoint = checkpoint or _env("CHECKPOINT")
     config_path = config_path or _env("CONFIG")
     device = _env("DEVICE", device) or "cpu"

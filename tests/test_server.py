@@ -124,3 +124,31 @@ def test_sandbox_sessions_are_scoped_per_api_key(ckpt_dir, monkeypatch):
     mine = c.get("/v1/tools/audit?session_id=shared-session-id", headers={"X-API-Key": "key-one"}).json()
     other = c.get("/v1/tools/audit?session_id=shared-session-id", headers={"X-API-Key": "key-two"}).json()
     assert mine["calls"] == 1 and other["calls"] == 0 and other["audit"] == []
+
+
+def test_access_log_quiet_filter():
+    import logging
+
+    from sentinel.serving.server import _QuietAccessPaths
+
+    f = _QuietAccessPaths()
+
+    def rec(method, path):
+        return logging.LogRecord(
+            "uvicorn.access",
+            logging.INFO,
+            "",
+            0,
+            "%s - %s",
+            ("127.0.0.1:1", method, path, "1.1", 200),
+            None,
+        )
+
+    assert f.filter(rec("GET", "/health")) is False
+    assert f.filter(rec("GET", "/healthz")) is False
+    assert f.filter(rec("GET", "/readyz")) is False
+    assert f.filter(rec("GET", "/v1/models")) is False
+    assert f.filter(rec("GET", "/v1/models?detail=1")) is False
+    assert f.filter(rec("POST", "/v1/models")) is True
+    assert f.filter(rec("POST", "/v1/chat")) is True
+    assert f.filter(rec("GET", "/docs")) is True
