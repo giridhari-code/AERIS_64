@@ -51,7 +51,7 @@ See [frontend/README.md](frontend/README.md).
 
 ```text
 AERIS_64/
-├── src/sentinel/          # Library (model, modules, serve, train, sandbox)
+├── packages/sentinel/     # Model library (train, modules, API, tools)
 ├── configs/                 # YAML configs (default, presets, 1B recipe)
 ├── scripts/
 │   ├── train/               # Training entrypoints
