@@ -26,10 +26,10 @@ jobs:
       - name: Lint
         run: |
           # hard-fail on real errors (syntax, undefined names); style stays advisory
-          ruff check src/ tests/ scripts/ --select E9,F63,F7,F82
-          ruff check src/ tests/ scripts/ || true
+          ruff check packages/ tests/ scripts/ --select E9,F63,F7,F82
+          ruff check packages/ tests/ scripts/ || true
       - name: Test
-        run: PYTHONPATH=src pytest tests/ -v --tb=short
+        run: PYTHONPATH=packages pytest tests/ -v --tb=short
 
   docker:
     runs-on: ubuntu-latest
