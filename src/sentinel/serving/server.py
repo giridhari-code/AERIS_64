@@ -86,6 +86,7 @@ from sentinel.tools.wikipedia import wikipedia_summary
 from sentinel.tools.currency import convert_currency
 from sentinel.serving.reply_polish import polish_reply
 from sentinel.utils.logging import setup_production_logging
+from sentinel.serving.production import load_profile, security_headers, is_production
 from sentinel.utils.text_norm import normalize_prompt
 
 logger = logging.getLogger(__name__)
@@ -517,9 +518,9 @@ def create_app(
     device = _env("DEVICE", device) or "cpu"
     product = _env("PRODUCT", "SENTINEL") or "SENTINEL"
 
-    # Auto-fallback: if no checkpoint env is set, try the shipped demo weights.
-    # Avoids the common "Error: model not loaded" when users just run uvicorn.
-    if not checkpoint:
+    profile = load_profile()
+    # Demo weights only in non-production (local dev convenience).
+    if not checkpoint and profile.allow_demo_checkpoint:
         for candidate in (
             Path("checkpoints/examples/AERIS_main"),
             Path(__file__).resolve().parents[3] / "checkpoints" / "examples" / "AERIS_main",
@@ -529,18 +530,33 @@ def create_app(
                 checkpoint = str(candidate)
                 logger.info("No NEUROFIELD_CHECKPOINT set — using demo weights at %s", checkpoint)
                 break
-        if not checkpoint:
-            logger.warning(
-                "No checkpoint configured. Set NEUROFIELD_CHECKPOINT=/path/to/folder "
-                "(folder must contain model.safetensors) or chat will return 503 model not loaded."
+    if not checkpoint:
+        logger.warning(
+            "No checkpoint configured. Set NEUROFIELD_CHECKPOINT=/path/to/folder "
+            "(folder must contain model.safetensors) or chat will return 503 model not loaded."
+        )
+    if profile.production:
+        keys_ok = bool(get_api_keys())
+        issues = profile.issues(has_api_keys=keys_ok, checkpoint_set=bool(checkpoint))
+        for msg in issues:
+            logger.error("PRODUCTION GATE: %s", msg)
+        if issues:
+            logger.error(
+                "Refusing soft-start: fix env before exposing this process. "
+                "Run: PYTHONPATH=src python scripts/ops/production_check.py"
             )
 
+    _prof = load_profile()
     app = FastAPI(
         title=f"{product} API",
         description=f"{product} — SENTINEL two-speed memory architecture.",
         version=__version__,
         lifespan=lifespan,
+        docs_url="/docs" if _prof.expose_docs else None,
+        redoc_url="/redoc" if _prof.expose_docs else None,
+        openapi_url="/openapi.json" if _prof.expose_docs else None,
     )
+    app.state.production_profile = _prof
 
     _sys = _env("SYSTEM_PROMPT") or default_system_prompt()
     set_system_prompt(_sys)
@@ -580,6 +596,17 @@ def create_app(
 
     def _limit(request: Request, api_key: Optional[str]) -> None:
         _limiter.check(api_key or client_ip(request))
+
+    @app.middleware("http")
+    async def security_headers_middleware(request: Request, call_next):
+        response = await call_next(request)
+        for k, v in security_headers().items():
+            response.headers.setdefault(k, v)
+        # request id for support / abuse traces
+        rid = request.headers.get("x-request-id") or request.headers.get("X-Request-ID")
+        if rid:
+            response.headers.setdefault("X-Request-ID", rid[:64])
+        return response
 
     @app.middleware("http")
     async def rate_limit_middleware(request: Request, call_next):
@@ -632,6 +659,11 @@ def create_app(
                 "models": "GET /v1/models",
             },
             "frontend": "http://localhost:3000",
+            "production": is_production(),
+            "limits": {
+                "policy": "Megha+Bhutu block unauthorized cyber activity",
+                "model": "Quality depends on trained checkpoint; not a general frontier LM guarantee",
+            },
         }
 
     @app.get("/healthz")
@@ -640,13 +672,19 @@ def create_app(
 
     @app.get("/readyz")
     async def readyz():
+        prof = load_profile()
         if _model is None:
             raise HTTPException(
                 status_code=503,
                 detail=(
                     "model not loaded — set NEUROFIELD_CHECKPOINT to a folder that contains "
-                    "model.safetensors (e.g. checkpoints/examples/AERIS_main), then restart uvicorn"
+                    "model.safetensors, then restart uvicorn"
                 ),
+            )
+        if prof.production and not get_api_keys():
+            raise HTTPException(
+                status_code=503,
+                detail="production requires NEUROFIELD_API_KEYS",
             )
         return {
             "status": "ready",
@@ -655,6 +693,9 @@ def create_app(
             "checkpoint": _checkpoint_path,
             "has_tokenizer": _encode is not None,
             "params": _model.param_report()["total"],
+            "production": prof.production,
+            "bhutu": True,
+            "megha_policy": True,
         }
 
     @app.get("/metrics", dependencies=[Depends(_metrics_guard)])
