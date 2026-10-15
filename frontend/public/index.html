@@ -615,8 +615,10 @@
       
       const q = (text != null ? text : promptEl.value).trim();
       if (!q) return;
-      // Local buddy on/off — no model wait; runs even while a reply is generating
-      var bm = q.match(/^(?:\/|--)\s*buddy\s*(on|off)?\s*$/i);  /* /buddy or --buddy, on|off */
+      // Local buddy on/off — no model wait; runs even while a reply is generating.
+      // Accepts: /buddy on|off, --buddy on|off, plain "buddy on|off" (+ optional karo/kardo)
+      var bm = q.match(/^(?:\/|--)\s*buddy\s*(on|off)?\s*$/i)
+            || q.match(/^buddy\s+(on|off)(?:\s+(?:karo|kardo|kar\s*do))?\s*$/i);
       if (bm) {
         promptEl.value = "";
         autoGrow();
@@ -908,7 +910,16 @@
     };
 
     if (buddyFloat) {
-      buddyFloat.addEventListener("dblclick", function () { setBuddyVisible(false); });
+      var buddyIsTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+      if (buddyIsTouch) {
+        // Touch: tap = pet; no accidental hide (use /buddy off to hide)
+        buddyFloat.title = "Buddy — tap to pet · /buddy off to hide";
+        buddyFloat.addEventListener("click", function () {
+          if (buddyOn && window.sentinelBuddyPet) window.sentinelBuddyPet();
+        });
+      } else {
+        buddyFloat.addEventListener("dblclick", function () { setBuddyVisible(false); });
+      }
     }
     if (buddyOn) setBuddyVisible(true);
 
