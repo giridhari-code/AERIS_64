@@ -73,6 +73,7 @@ from sentinel.serving.chat_history import (
     set_system_prompt,
     default_system_prompt,
     get_system_prompt,
+    set_use_specials,
 )
 
 from sentinel.serving.user_memory import UserMemoryStore, cap_slow_norm
