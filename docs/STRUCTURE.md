@@ -1,52 +1,47 @@
-# Frontier-style folder structure
-
-Layout mirrors product AI stacks (web client + inference API + model core):
+# Frontier-style structure (enforced)
 
 ```text
-Browser  →  frontend/ (:3000)  →  backend API (:8000)  →  model weights
+Browser → frontend/ (:3000) → backend API (:8000) → packages/sentinel (model)
 ```
 
-| Layer | Path | Port | Like |
-|-------|------|------|------|
-| **Frontend** | `frontend/` | 3000 | ChatGPT/Claude/Grok web UI |
-| **Backend** | `backend/` + `src/sentinel/api` + `serving/` | 8000 | Inference API |
-| **Model** | `src/sentinel/` (model, modules, training, checkpoint) | — | Core LM |
+| Layer | Path | Port |
+|-------|------|------|
+| **Frontend** | `frontend/` | 3000 |
+| **Backend** | `backend/` + `packages/sentinel/api` + `serving/` | 8000 |
+| **Model** | `packages/sentinel/` | — |
 
-## Frontend only — `frontend/`
-
-- HTML/TS/Bun only
-- Proxies `/v1/*` to Python
-- No `.py` model code, no checkpoints
-
-## Backend only — API
-
-- Entry: `uvicorn sentinel.api.app:create_app --factory`
-- Implementation: `src/sentinel/serving/`
-- Default: **JSON only** (`SERVE_UI=0`)
-- Optional debug: `SERVE_UI=1` serves `frontend/public` (same files, not a second copy)
-
-## Model only — `src/sentinel/`
-
-- `model.py`, `modules/`, `training/`, `checkpoint/`
-- Tools, Megha, RAG, safety, sandbox
-- Weights under `checkpoints/` (git keeps side-cars only)
+```text
+/
+├── frontend/                 # Bun web client only
+│   ├── public/
+│   └── src/
+├── backend/                  # API service entry (run.sh)
+├── packages/
+│   └── sentinel/             # Model library (train, modules, tools, API)
+│       ├── api/              # uvicorn entry
+│       ├── serving/          # FastAPI implementation
+│       ├── model.py · modules/
+│       ├── training/ · checkpoint/
+│       └── megha/ · tools/ · safety/
+├── configs/ · checkpoints/ · data/
+├── scripts/ · tests/ · docs/ · deploy/
+└── pyproject.toml            # packages.sentinel
+```
 
 ## Rules
 
-1. UI change → `frontend/` only  
-2. API/auth/session → `src/sentinel/serving/` (+ `api/` entry)  
-3. Architecture / train → `src/sentinel/` model modules  
-4. Never put weights or train loops under `frontend/`  
-5. Never put Bun/HTML under `src/sentinel/serving/static/` (README only)
+1. UI → `frontend/` only  
+2. HTTP service scripts → `backend/`  
+3. All Python model/API code → `packages/sentinel/`  
+4. `PYTHONPATH=packages` (not `src`)  
+5. No HTML under `packages/sentinel/serving/static/`  
 
 ## Run
 
 ```bash
-# Backend
-export PYTHONPATH=src
+export PYTHONPATH=packages
 export NEUROFIELD_CHECKPOINT=checkpoints/examples/AERIS_main
 uvicorn "sentinel.api.app:create_app" --factory --port 8000
 
-# Frontend
-cd frontend && bun install && bun run dev
+cd frontend && bun run dev
 ```

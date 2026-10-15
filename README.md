@@ -32,7 +32,7 @@ The small checkpoints under `checkpoints/examples/` are **side-car configs only*
 
 | Layer | Stack | Role |
 |-------|--------|------|
-| **Model** | Python | Training, neural field, fast/slow memory, inference (`src/sentinel`) |
+| **Model** | Python | Training, neural field, fast/slow memory, inference (`packages/sentinel`) |
 | **Frontend** | TypeScript + Bun | Chat UI only (`frontend`) — proxies to Python API |
 
 ```bash
@@ -91,13 +91,13 @@ pip install -e ".[serve,dev]"
 
 ```bash
 make test
-# or: PYTHONPATH=src pytest tests/ -q
+# or: PYTHONPATH=packages pytest tests/ -q
 ```
 
 ### Train a small local checkpoint (then serve)
 
 ```bash
-export PYTHONPATH=src
+export PYTHONPATH=packages
 python scripts/train/train_company.py \
   --data data/samples/company_corpus.txt data/samples/india_multilang.txt \
   --tokenizer char --steps 500 --d-model 64 \
@@ -113,7 +113,7 @@ Open http://127.0.0.1:8000/
 ### Research ablation (associative recall)
 
 ```bash
-PYTHONPATH=src python scripts/research/contribution_ablation.py \
+PYTHONPATH=packages python scripts/research/contribution_ablation.py \
   --steps 800 --seeds 0 --batch 8 --d-model 64 \
   --ablations full,no_fast_mem,no_slow_mem,no_neuromod,no_metacog,skills_only \
   --device cpu --out artifacts/contrib.json

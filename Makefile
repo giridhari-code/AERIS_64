@@ -10,7 +10,7 @@ install-dev:
 	$(PYTHON) -m pip install -e ".[dev,serve]"
 
 test:
-	PYTHONPATH=src $(PYTHON) -m pytest tests/ -v --tb=short
+	PYTHONPATH=packages $(PYTHON) -m pytest tests/ -v --tb=short
 
 lint:
 	ruff check src/ tests/
@@ -29,23 +29,23 @@ docker-run:
 
 # Requires NEUROFIELD_CHECKPOINT=path/to/dir with model.safetensors
 backend:
-	PYTHONPATH=src uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
+	PYTHONPATH=packages uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
 
 serve:
-	PYTHONPATH=src uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
+	PYTHONPATH=packages uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
 
 frontend:
 	cd frontend && bun install && bun run dev
 
 serve-chat:
 	@test -n "$$NEUROFIELD_CHECKPOINT" || (echo "Set NEUROFIELD_CHECKPOINT to a folder with model.safetensors"; exit 1)
-	PYTHONPATH=src uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
+	PYTHONPATH=packages uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
 
 count-1b:
-	PYTHONPATH=src $(PYTHON) scripts/research/count_params.py configs/aeris_1b.yaml
+	PYTHONPATH=packages $(PYTHON) scripts/research/count_params.py configs/aeris_1b.yaml
 
 ablation:
-	PYTHONPATH=src $(PYTHON) scripts/research/contribution_ablation.py \
+	PYTHONPATH=packages $(PYTHON) scripts/research/contribution_ablation.py \
 		--steps 400 --seeds 0 --device cpu --out artifacts/contrib.json
 
 clean:
@@ -55,10 +55,10 @@ clean:
 # --- quality / scale gates ---
 .PHONY: e2e redteam test-quick
 test-quick:
-	PYTHONPATH=src pytest tests/ -q --tb=no 2>/dev/null || true
+	PYTHONPATH=packages pytest tests/ -q --tb=no 2>/dev/null || true
 
 e2e:
-	PYTHONPATH=src python scripts/eval/run_e2e_tasks.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main} --tasks data/e2e_tasks/full_tasks.jsonl
+	PYTHONPATH=packages python scripts/eval/run_e2e_tasks.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main} --tasks data/e2e_tasks/full_tasks.jsonl
 
 redteam:
-	PYTHONPATH=src python scripts/eval/red_team.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main}
+	PYTHONPATH=packages python scripts/eval/red_team.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main}
