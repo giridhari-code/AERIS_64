@@ -1245,6 +1245,31 @@ def create_app(
         max_steps = int((body or {}).get("max_steps") or 6)
         return run_si_v1(prompt, config=SI_v1Config(max_steps=max_steps)).to_dict()
 
+    # ---- Megha: defensive cybersecurity / authorized testing assistant ----
+    @app.get("/v1/megha/capabilities")
+    def megha_capabilities(api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.megha import list_capabilities
+        return {"product": "Megha", "capabilities": list_capabilities()}
+
+    @app.post("/v1/megha")
+    def megha_run(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.megha import MeghaRequest, run_megha
+        b = body or {}
+        req = MeghaRequest(
+            mode=str(b.get("mode") or "help"),
+            text=str(b.get("text") or b.get("source") or b.get("symptom") or ""),
+            target_type=str(b.get("target_type") or b.get("focus") or "web"),
+            framework=str(b.get("framework") or "general"),
+            authorized=bool(b.get("authorized") or False),
+            scope=str(b.get("scope") or ""),
+            attestor=str(b.get("attestor") or ""),
+        )
+        result = run_megha(req)
+        status = 200 if result.ok else (403 if result.error and "authorized" in (result.error or "").lower() else 400)
+        if status != 200:
+            raise HTTPException(status_code=status, detail=result.to_dict())
+        return result.to_dict()
+
     return app
 
 
