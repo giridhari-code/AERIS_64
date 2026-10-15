@@ -1,0 +1,18 @@
+# Prompts for mini RL — one per line. Model answers; reward function scores.
+hello
+hi
+who are you
+what is your name
+what can you do
+thank you
+namaste
+kaise ho
+aap kaun ho
+shukriya
+bye
+what is 2+2
+calculate 10 divided by 5
+are you chatgpt
+what time is it
+are you honest
+can you access the internet

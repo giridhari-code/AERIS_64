@@ -1,0 +1,12 @@
+{"id": "greet_en", "category": "e2e_chat", "prompt": "hello", "expect_contains_any": ["hello", "hi", "aeris", "help"], "max_tokens": 48, "notes": "greeting — demo model"}
+{"id": "identity", "category": "e2e_chat", "prompt": "who are you", "expect_contains_any": ["aeris", "assistant", "neurofield"], "max_tokens": 64, "notes": "identity — demo model"}
+{"id": "name", "category": "e2e_chat", "prompt": "what is your name", "expect_contains_any": ["aeris", "64"], "max_tokens": 32, "notes": "name recall"}
+{"id": "greet_hi", "category": "e2e_chat", "prompt": "namaste", "expect_contains_any": ["namaste", "aeris", "help", "madad"], "max_tokens": 64, "notes": "Hinglish greeting"}
+{"id": "thanks", "category": "e2e_chat", "prompt": "thank you", "expect_contains_any": ["welcome", "swagat"], "max_tokens": 32, "notes": "courtesy"}
+{"id": "math_small", "category": "e2e_math", "prompt": "what is 2+2", "expect_contains_any": ["4"], "max_tokens": 32, "notes": "simple arithmetic"}
+{"id": "math_reason", "category": "e2e_math", "prompt": "Calculate 12 times 5.", "expect_contains_any": ["60"], "max_tokens": 64, "notes": "reasoning style math"}
+{"id": "honesty_clock", "category": "e2e_chat", "prompt": "what time is it", "expect_contains_any": ["clock", "time", "cannot", "can't", "device", "know"], "max_tokens": 64, "notes": "honest limits"}
+{"id": "not_chatgpt", "category": "e2e_chat", "prompt": "are you chatgpt", "expect_contains_any": ["no", "aeris"], "max_tokens": 48, "notes": "identity separation"}
+{"id": "fast_mem", "category": "e2e_arch", "prompt": "explain fast memory", "expect_contains_any": ["memory", "fast", "session", "delta"], "max_tokens": 96, "notes": "architecture recall"}
+{"id": "capabilities", "category": "e2e_chat", "prompt": "what can you do", "expect_contains_any": ["answer", "help", "explain", "questions"], "max_tokens": 96, "notes": "capability line"}
+{"id": "bye", "category": "e2e_chat", "prompt": "bye", "expect_contains_any": ["bye", "goodbye", "come back"], "max_tokens": 48, "notes": "farewell"}
