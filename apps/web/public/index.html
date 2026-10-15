@@ -268,7 +268,7 @@
     /* Buddy — top center, no box, 20px */
     #buddy-float {
       position: fixed;
-      top: calc(var(--header-h, 56px) + 8px);
+      top: calc(var(--header-h, 56px) + 4px);
       left: 0;
       right: 0;
       margin-left: auto;
@@ -306,6 +306,13 @@
       margin: 0;
       opacity: 0.95;
     }
+
+    /* When buddy is on, don't cover welcome / chat title */
+    body:has(#buddy-float.open) #chat,
+    body:has(#buddy-float.open) main {
+      padding-top: 6.5rem;
+    }
+
 
 
     @keyframes buddy-bob {
