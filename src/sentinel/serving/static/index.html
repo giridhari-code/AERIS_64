@@ -361,6 +361,55 @@
       }
     }
 
+  
+    #buddy-float.anim-float { animation: buddy-bob 2.4s ease-in-out infinite; }
+    #buddy-float.anim-talk { animation: buddy-talk-shake 0.4s ease-in-out infinite; }
+    #buddy-float.anim-think { animation: buddy-think-pulse 2s ease-in-out infinite; }
+    #buddy-float.anim-happy { animation: buddy-happy 0.7s ease-in-out infinite; }
+    #buddy-float.anim-sleep { animation: buddy-sleep 3s ease-in-out infinite; opacity: 0.85; }
+    #buddy-float.anim-excited { animation: buddy-excited 0.35s linear infinite; }
+    #buddy-float.anim-wave { animation: buddy-wave 0.8s ease-in-out infinite; }
+    #buddy-float.anim-pet { animation: buddy-pet 0.55s ease; }
+    @keyframes buddy-talk-shake {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(2px) scale(1.02); }
+    }
+    @keyframes buddy-think-pulse {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.15); }
+    }
+    @keyframes buddy-happy {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-4px) scale(1.05); }
+    }
+    @keyframes buddy-sleep {
+      0%, 100% { transform: translateY(2px); }
+      50% { transform: translateY(5px); }
+    }
+    @keyframes buddy-excited {
+      0%, 100% { transform: rotate(-2deg); }
+      50% { transform: rotate(2deg); }
+    }
+    @keyframes buddy-wave {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-6deg); }
+      75% { transform: rotate(6deg); }
+    }
+    #buddy-float .buddy-actions button.anim-btn {
+      opacity: 0.85;
+      font-size: 9px;
+      padding: 3px 6px;
+    }
+    #buddy-float .buddy-actions button.anim-btn.active {
+      border-color: #2dd4bf;
+      color: #2dd4bf;
+    }
+    #buddy-mood {
+      font-size: 9px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
   </style>
 </head>
 <body>
@@ -658,13 +707,47 @@
       }
     }
 
-    function startBuddyIdle() {
+
+    let buddyAnimMap = {};
+    let buddyAnimName = "idle";
+    const buddyMood = document.getElementById("buddy-mood");
+    const CSS_ANIMS = ["float", "talk", "think", "happy", "sleep", "excited", "wave", "pet"];
+
+    function clearBuddyCssAnim() {
+      if (!buddyFloat) return;
+      CSS_ANIMS.forEach(function (n) { buddyFloat.classList.remove("anim-" + n); });
+      buddyFloat.classList.remove("petting");
+    }
+
+    function setBuddyAnim(name) {
+      buddyAnimName = name || "idle";
+      if (buddyMood) buddyMood.textContent = "mood: " + buddyAnimName;
+      document.querySelectorAll("#buddyActions .anim-btn").forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-anim") === buddyAnimName);
+      });
+      clearBuddyCssAnim();
+      if (buddyFloat && CSS_ANIMS.indexOf(buddyAnimName) >= 0) {
+        buddyFloat.classList.add("anim-" + buddyAnimName);
+      } else if (buddyFloat) {
+        buddyFloat.classList.add("anim-float");
+      }
+      const frames = (buddyAnimMap && buddyAnimMap[buddyAnimName]) || buddyFrames;
+      if (frames && frames.length) {
+        buddyFrames = frames;
+        buddyFrameIdx = 0;
+        if (buddyAscii) buddyAscii.textContent = frames[0];
+      }
+      startBuddyIdle(buddyAnimName === "sleep" ? 1400 : buddyAnimName === "talk" ? 280 : 700);
+    }
+
+    function startBuddyIdle(ms) {
       stopBuddyIdle();
-      buddyIdleTimer = setInterval(() => {
-        if (!buddyFrames || buddyFrames.length < 2) return;
+      var speed = ms || 700;
+      buddyIdleTimer = setInterval(function () {
+        if (!buddyFrames || buddyFrames.length < 1) return;
         buddyFrameIdx = (buddyFrameIdx + 1) % buddyFrames.length;
         if (buddyAscii) buddyAscii.textContent = buddyFrames[buddyFrameIdx];
-      }, 900);
+      }, speed);
     }
     function stopBuddyIdle() {
       if (buddyIdleTimer) clearInterval(buddyIdleTimer);
@@ -739,6 +822,13 @@
         }
         if (buddyAscii) buddyAscii.textContent = art || "( )";
         buddyFrameIdx = 0;
+        if (b.animations && typeof b.animations === "object") {
+          buddyAnimMap = b.animations;
+        } else {
+          buddyAnimMap = { idle: buddyFrames || [art], blink: buddyFrames || [art] };
+        }
+        setBuddyAnim(pet ? "pet" : buddyAnimName || "idle");
+
         if (pet && buddyFloat) {
           buddyFloat.classList.remove("petting");
           void buddyFloat.offsetWidth;
@@ -758,7 +848,22 @@
     }
     const buddyPetBtn = document.getElementById("buddyPet");
     const buddyHideBtn = document.getElementById("buddyHide");
-    if (buddyPetBtn) buddyPetBtn.addEventListener("click", () => loadBuddy(true));
+    if (buddyPetBtn) buddyPetBtn.addEventListener("click", function () {
+      loadBuddy(true).then(function () { setBuddyAnim("pet"); });
+    });
+    document.querySelectorAll("#buddyActions .anim-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setBuddyAnim(btn.getAttribute("data-anim") || "idle");
+      });
+    });
+    // auto-cycle expressions every 12s when idle
+    setInterval(function () {
+      if (!buddyOn || buddyAnimName === "sleep") return;
+      var cycle = ["idle", "blink", "look_left", "look_right", "think", "idle"];
+      var next = cycle[Math.floor(Math.random() * cycle.length)];
+      if (buddyAnimMap[next] || next === "idle") setBuddyAnim(next);
+    }, 12000);
+
     if (buddyHideBtn) buddyHideBtn.addEventListener("click", () => setBuddyVisible(false));
     // restore
     if (buddyOn) setBuddyVisible(true);
@@ -768,9 +873,18 @@
   <!-- Floating Buddy (navbar ke neeche; chat/chart ke andar nahi) -->
   <aside id="buddy-float" aria-label="Buddy companion" aria-hidden="true">
     <div class="buddy-meta" id="buddyMeta">Buddy off</div>
+    <div id="buddy-mood">mood: idle</div>
     <div class="buddy-ascii" id="buddyAscii"></div>
-    <div class="buddy-actions">
+    <div class="buddy-actions" id="buddyActions">
       <button type="button" id="buddyPet" title="Pet">Pet</button>
+      <button type="button" class="anim-btn" data-anim="idle">Idle</button>
+      <button type="button" class="anim-btn" data-anim="blink">Blink</button>
+      <button type="button" class="anim-btn" data-anim="talk">Talk</button>
+      <button type="button" class="anim-btn" data-anim="think">Think</button>
+      <button type="button" class="anim-btn" data-anim="wave">Wave</button>
+      <button type="button" class="anim-btn" data-anim="happy">Happy</button>
+      <button type="button" class="anim-btn" data-anim="sleep">Sleep</button>
+      <button type="button" class="anim-btn" data-anim="excited">Wow</button>
       <button type="button" id="buddyHide" title="Hide">Hide</button>
     </div>
   </aside>

@@ -8,6 +8,7 @@ from dataclasses import dataclass, asdict, field
 from typing import Any, Optional
 
 from sentinel.buddy.species import SPECIES, idle_frames
+from sentinel.buddy.animations import build_animations, animations_as_text
 from sentinel.buddy.cosmetics import EYES, HATS, rarity_rank
 
 # cumulative weights: common 60, uncommon 25, rare 10, epic 4, legendary 1
@@ -63,6 +64,7 @@ class Buddy:
     stats: dict[str, int] = field(default_factory=dict)
     sprite_lines: list[str] = field(default_factory=list)
     idle: list[list[str]] = field(default_factory=list)
+    animations: dict = field(default_factory=dict)
 
     def render(self, *, frame: int = 0, hearts: bool = False) -> str:
         lines = list(self.idle[frame % max(1, len(self.idle))])
@@ -133,6 +135,7 @@ def hatch_buddy(user_id: str) -> Buddy:
         "loyalty": 1 + (_u8(h, 24) % 10),
     }
     frames = idle_frames(sp["id"], sp["sprite"])
+    anims = build_animations(sp["sprite"])
     buddy = Buddy(
         user_id=uid,
         species_id=sp["id"],
@@ -148,6 +151,7 @@ def hatch_buddy(user_id: str) -> Buddy:
         stats=stats,
         sprite_lines=frames[0],
         idle=frames,
+        animations=animations_as_text(anims),
     )
     return buddy
 

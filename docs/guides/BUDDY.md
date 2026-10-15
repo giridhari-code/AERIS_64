@@ -28,3 +28,22 @@ Decorative only. Does **not** write or debug code.
 - Soft **bob animation** + idle blink; **Pet** se short pet animation.
 - Preference `localStorage.sentinel_buddy_on` me save.
 
+## Animation types
+
+ASCII frame sets + CSS motion on the float panel:
+
+| Type | Effect |
+|------|--------|
+| idle | Soft presence |
+| blink | Eyes close |
+| float | Hover bob |
+| talk | Talking frames |
+| think | Thought dots |
+| wave | Wave |
+| happy | Happy eyes |
+| sleep | Zzz |
+| excited | Bounce/shake |
+| look_left / look_right | Glance |
+| pet | Hearts |
+
+UI buttons under the float switch mood; idle auto-cycles expressions about every 12s.
