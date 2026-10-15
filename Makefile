@@ -1,7 +1,7 @@
 .PHONY: install install-dev test lint format build docker-build docker-run serve serve-chat count-1b ablation clean
 
 PYTHON ?= python
-IMAGE  = neurofield:2.3.1
+IMAGE  = sentinel:2.3.1
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -29,11 +29,14 @@ docker-run:
 
 # Requires NEUROFIELD_CHECKPOINT=path/to/dir with model.safetensors
 serve:
-	PYTHONPATH=src uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+	PYTHONPATH=src uvicorn "sentinel.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+
+frontend:
+	cd apps/frontend && bun install && bun run dev
 
 serve-chat:
 	@test -n "$$NEUROFIELD_CHECKPOINT" || (echo "Set NEUROFIELD_CHECKPOINT to a folder with model.safetensors"; exit 1)
-	PYTHONPATH=src uvicorn "neurofield.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+	PYTHONPATH=src uvicorn "sentinel.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
 
 count-1b:
 	PYTHONPATH=src $(PYTHON) scripts/research/count_params.py configs/aeris_1b.yaml

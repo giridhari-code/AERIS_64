@@ -50,7 +50,7 @@ sentinel-train = "sentinel.cli:train_main"
 sentinel-eval  = "sentinel.cli:eval_main"
 
 [tool.setuptools.package-data]
-sentinel = ["serving/static/*"]
+sentinel = ["serving/static/README.md"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

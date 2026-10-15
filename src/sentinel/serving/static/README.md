@@ -1,11 +1,6 @@
-# Backend has **no** UI assets here
+# No UI assets in the backend
 
-Duplicate `index.html` / `product.html` / `logo.svg` were **removed** so frontend and backend do not mix.
+Frontend HTML lives only in **`apps/frontend/public/`**.
 
-| Role | Location |
-|------|----------|
-| **Frontend (only)** | `apps/web/public/` — Bun `:3000` |
-| **Backend** | `src/sentinel/serving/` — JSON API `:8000` |
-
-If `SERVE_UI=1`, Python serves files from **`apps/web/public`** (same folder), not from here.
-Prefer always using Bun for UI. See `docs/STRUCTURE.md`.
+This directory is intentionally empty of HTML so frontend and backend stay unmixed.
+With `SERVE_UI=1`, Python may serve `apps/frontend/public` for local debug only.
