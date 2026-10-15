@@ -5,6 +5,7 @@ Hatch is deterministic from user_id. Commands:
   /buddy pet   pet animation
 """
 
+from sentinel.buddy.animations import list_animation_types, ANIMATION_TYPES
 from sentinel.buddy.engine import (
     Buddy,
     hatch_buddy,
@@ -19,4 +20,6 @@ __all__ = [
     "pet_buddy",
     "handle_buddy_command",
     "is_buddy_command",
+    "list_animation_types",
+    "ANIMATION_TYPES",
 ]
