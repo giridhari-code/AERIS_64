@@ -657,6 +657,7 @@ def create_app(
             "endpoints": {
                 "docs": "/docs",
                 "healthz": "/healthz",
+                "health": "/health",
                 "readyz": "/readyz",
                 "chat": "POST /v1/chat",
                 "completions": "POST /v1/completions",
@@ -673,6 +674,10 @@ def create_app(
     @app.get("/healthz")
     async def healthz():
         return {"status": "ok", "product": product, "version": __version__}
+
+    @app.get("/health")
+    async def health():  # alias — local tools (OpenCode etc.) probe /health for discovery
+        return await healthz()
 
     @app.get("/readyz")
     async def readyz():
