@@ -1,15 +1,38 @@
-"""Multi-turn text context per session using chat special tokens when available."""
+"""Multi-turn text context per session using chat special tokens when available.
+
+Long-context product window is controlled by:
+  NEUROFIELD_MAX_TURNS   (default 24)  — how many user/assistant pairs kept
+  NEUROFIELD_TURN_CHARS  (default 1500) — max chars stored per turn
+
+Neural long context is separate: SlowMemory ring in modules/memory.py
+(bounded slots ≈ max_seq_len / segment). Serving also truncates token
+ids to NEUROFIELD_MAX_CONTEXT / model.max_seq_len.
+"""
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from sentinel.tokenizer.specials import ASSISTANT, END, SYSTEM, USER
 
 _HISTORY: dict[str, list[tuple[str, str]]] = {}
-_MAX_TURNS = 6
 _USE_SPECIALS = True
 _SYSTEM_TEXT: str = ""
+
+
+def _max_turns() -> int:
+    try:
+        return max(2, min(128, int(os.environ.get("NEUROFIELD_MAX_TURNS") or os.environ.get("MAX_TURNS") or "24")))
+    except ValueError:
+        return 24
+
+
+def _turn_chars() -> int:
+    try:
+        return max(200, min(8000, int(os.environ.get("NEUROFIELD_TURN_CHARS") or os.environ.get("TURN_CHARS") or "1500")))
+    except ValueError:
+        return 1500
 
 
 def set_use_specials(flag: bool) -> None:
@@ -49,10 +72,11 @@ def restore_turns(session_id: str, turns: list[tuple[str, str]]) -> None:
     if _HISTORY.get(session_id):
         return
     h = _HISTORY.setdefault(session_id, [])
-    for role, text in turns[-_MAX_TURNS * 2 :]:
+    cap = _max_turns() * 2
+    for role, text in turns[-cap:]:
         t = (text or "").strip()
         if t:
-            h.append((role, t[:500]))
+            h.append((role, t[: _turn_chars()]))
 
 
 def build_user_part(user_prompt: str) -> str:
@@ -71,9 +95,10 @@ def append_turn(session_id: str, role: str, text: str) -> None:
     if not t:
         return
     h = _HISTORY.setdefault(session_id, [])
-    h.append((role, t[:500]))
-    if len(h) > _MAX_TURNS * 2:
-        del h[: len(h) - _MAX_TURNS * 2]
+    h.append((role, t[: _turn_chars()]))
+    cap = _max_turns() * 2
+    if len(h) > cap:
+        del h[: len(h) - cap]
 
 
 def build_prompt(
@@ -81,6 +106,7 @@ def build_prompt(
     user_prompt: str,
     system: Optional[str] = None,
 ) -> str:
+    """Full chat context: [system] + history + user + assistant prefix."""
     sys_text = (system if system is not None else _SYSTEM_TEXT) or ""
     parts: list[str] = []
 
