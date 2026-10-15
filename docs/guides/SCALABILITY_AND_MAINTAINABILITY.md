@@ -84,6 +84,7 @@ preset ladder + cosine + warmup (see SCALE_AND_OPTIMIZE.md)
 ## 4. Reliability checklist
 
 - [ ] `GET /readyz` (or health) before traffic
+- [ ] Auto-probe requests (`/health`, `/healthz`, `/readyz`, `GET /v1/models`) stay out of the access log — set `LOG_PROBES=1` to see them
 - [ ] API keys required in production
 - [ ] Timeouts on web/weather/wiki tools
 - [ ] `NEUROFIELD_WEB_TOOLS=0` if offline deploy
