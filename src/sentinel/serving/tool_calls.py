@@ -1,4 +1,4 @@
-"""Parse model-emitted tool calls (JSON line) and execute via tools package."""
+"""Parse model-emitted tool calls (JSON) and execute via tools package."""
 
 from __future__ import annotations
 
@@ -12,19 +12,12 @@ from sentinel.tools.weather import weather_report
 from sentinel.tools.web_search import web_search_report
 from sentinel.tools.wikipedia import wikipedia_summary
 
-# {"tool": "name", "query": "..."} or {"name": "...", "arguments": {...}}
-_JSON_LINE = re.compile(
-    r"\{\s*"(?:tool|name)"\s*:\s*"([a-zA-Z0-9_]+)"[^}]*\}",
-    re.I,
-)
-
 
 def extract_tool_call(text: str) -> Optional[dict[str, Any]]:
     """Return first tool call dict from model text, or None."""
     if not text or "{" not in text:
         return None
-    # try full JSON objects in text
-    for m in re.finditer(r"\{[^}]+\}", text):
+    for m in re.finditer(r"\{[^{}]+\}", text):
         raw = m.group(0)
         try:
             obj = json.loads(raw)
@@ -39,7 +32,11 @@ def extract_tool_call(text: str) -> Optional[dict[str, Any]]:
         if query is None and isinstance(obj.get("arguments"), dict):
             args = obj["arguments"]
             query = args.get("query") or args.get("expr") or args.get("q") or ""
-        return {"tool": str(name).lower().strip(), "query": str(query or "").strip(), "raw": raw}
+        return {
+            "tool": str(name).lower().strip(),
+            "query": str(query or "").strip(),
+            "raw": raw,
+        }
     return None
 
 
