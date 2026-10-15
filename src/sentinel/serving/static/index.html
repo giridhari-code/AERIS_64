@@ -463,6 +463,11 @@
     </div>
   </footer>
 
+    <aside id="buddy-float" aria-label="Buddy companion" aria-hidden="true" title="Double-click to hide">
+    <div class="buddy-meta" id="buddyMeta"></div>
+    <div class="buddy-ascii" id="buddyAscii"></div>
+  </aside>
+
   <script>
     const chat = document.getElementById("chat");
     const promptEl = document.getElementById("prompt");
@@ -588,11 +593,13 @@
     setInterval(checkHealth, 30000);
 
     async function send(text) {
+      
       const q = (text != null ? text : promptEl.value).trim();
       if (!q || busy) return;
       promptEl.value = "";
       autoGrow();
       addBubble("user", q);
+      try { if (window.sentinelBuddyReact) window.sentinelBuddyReact(q, "user"); } catch (_) {}
       setBusy(true);
       saveSettings();
 
@@ -637,6 +644,7 @@
           const lat = j.latency_ms != null ? fmtMs(j.latency_ms) : "";
           const reply = (j.text || "").trim() || "(empty reply — train with more SFT data)";
           addBubble("bot", reply, lat ? "latency " + lat : "");
+          try { if (window.sentinelBuddyReact) window.sentinelBuddyReact(reply, "assistant"); } catch (_) {}
           latencyEl.textContent = lat ? "last " + lat : "";
         }
       } catch (e) {
@@ -679,7 +687,8 @@
   </script>
 
 
-    /* ---- Buddy float (not in chat thread) ---- */
+
+    /* ---- Buddy float: name + sprite only; mood auto from chat ---- */
     const BUDDY_KEY = "sentinel_buddy_on";
     const buddyFloat = document.getElementById("buddy-float");
     const buddyAscii = document.getElementById("buddyAscii");
@@ -689,29 +698,29 @@
     let buddyFrames = null;
     let buddyFrameIdx = 0;
     let buddyIdleTimer = null;
-    let buddyUserId = localStorage.getItem("sentinel_buddy_uid") || ("web-" + Math.random().toString(36).slice(2, 10));
-    localStorage.setItem("sentinel_buddy_uid", buddyUserId);
-
-    function setBuddyVisible(on) {
-      buddyOn = !!on;
-      localStorage.setItem(BUDDY_KEY, buddyOn ? "1" : "0");
-      if (!buddyFloat) return;
-      buddyFloat.classList.toggle("open", buddyOn);
-      buddyFloat.setAttribute("aria-hidden", buddyOn ? "false" : "true");
-      if (btnBuddy) btnBuddy.setAttribute("aria-pressed", buddyOn ? "true" : "false");
-      if (buddyOn) {
-        loadBuddy();
-        startBuddyIdle();
-      } else {
-        stopBuddyIdle();
-      }
-    }
-
-
     let buddyAnimMap = {};
     let buddyAnimName = "idle";
-    const buddyMood = document.getElementById("buddy-mood");
+    let buddyUserId = localStorage.getItem("sentinel_buddy_uid") || ("web-" + Math.random().toString(36).slice(2, 10));
+    localStorage.setItem("sentinel_buddy_uid", buddyUserId);
     const CSS_ANIMS = ["float", "talk", "think", "happy", "sleep", "excited", "wave", "pet"];
+
+    function moodFromChat(text, role) {
+      const t = (text || "").toLowerCase();
+      if (!t) return "idle";
+      if (role === "assistant") {
+        if (/sorry|error|cannot|can't|unable/.test(t)) return "think";
+        if (/!|great|done|success/.test(t)) return "happy";
+        return "talk";
+      }
+      if (/haha|lol|lmao|😂|hehe/.test(t) || (t.match(/!/g) || []).length > 1) return "happy";
+      if (/\b(why|how|what|explain|kyun|kaise|think)\b/.test(t) || t.indexOf("?") >= 0) return "think";
+      if (/\b(bye|good night|sleep|so ja)\b/.test(t)) return "sleep";
+      if (/\b(hi|hello|hey|namaste|hola)\b/.test(t)) return "wave";
+      if (/\b(wow|amazing|yay)\b/.test(t)) return "excited";
+      if (/\b(pet|love|cute)\b/.test(t)) return "pet";
+      if (t.length > 120) return "think";
+      return "blink";
+    }
 
     function clearBuddyCssAnim() {
       if (!buddyFloat) return;
@@ -721,15 +730,10 @@
 
     function setBuddyAnim(name) {
       buddyAnimName = name || "idle";
-      if (buddyMood) buddyMood.textContent = "mood: " + buddyAnimName;
-      document.querySelectorAll("#buddyActions .anim-btn").forEach(function (btn) {
-        btn.classList.toggle("active", btn.getAttribute("data-anim") === buddyAnimName);
-      });
       clearBuddyCssAnim();
-      if (buddyFloat && CSS_ANIMS.indexOf(buddyAnimName) >= 0) {
-        buddyFloat.classList.add("anim-" + buddyAnimName);
-      } else if (buddyFloat) {
-        buddyFloat.classList.add("anim-float");
+      if (buddyFloat) {
+        if (CSS_ANIMS.indexOf(buddyAnimName) >= 0) buddyFloat.classList.add("anim-" + buddyAnimName);
+        else buddyFloat.classList.add("anim-float");
       }
       const frames = (buddyAnimMap && buddyAnimMap[buddyAnimName]) || buddyFrames;
       if (frames && frames.length) {
@@ -737,14 +741,38 @@
         buddyFrameIdx = 0;
         if (buddyAscii) buddyAscii.textContent = frames[0];
       }
-      startBuddyIdle(buddyAnimName === "sleep" ? 1400 : buddyAnimName === "talk" ? 280 : 700);
+      var speed = 700;
+      if (buddyAnimName === "talk") speed = 280;
+      if (buddyAnimName === "sleep") speed = 1400;
+      if (buddyAnimName === "excited") speed = 320;
+      startBuddyIdle(speed);
+      // soft return to idle after a burst
+      if (buddyAnimName !== "idle" && buddyAnimName !== "sleep") {
+        setTimeout(function () {
+          if (buddyOn && buddyAnimName !== "sleep") setBuddyAnim("idle");
+        }, 4500);
+      }
+    }
+
+    function setBuddyVisible(on) {
+      buddyOn = !!on;
+      localStorage.setItem(BUDDY_KEY, buddyOn ? "1" : "0");
+      if (!buddyFloat) return;
+      buddyFloat.classList.toggle("open", buddyOn);
+      buddyFloat.setAttribute("aria-hidden", buddyOn ? "false" : "true");
+      if (btnBuddy) btnBuddy.setAttribute("aria-pressed", buddyOn ? "true" : "false");
+      if (buddyOn) {
+        loadBuddy().then(function () { setBuddyAnim("wave"); });
+      } else {
+        stopBuddyIdle();
+      }
     }
 
     function startBuddyIdle(ms) {
       stopBuddyIdle();
       var speed = ms || 700;
       buddyIdleTimer = setInterval(function () {
-        if (!buddyFrames || buddyFrames.length < 1) return;
+        if (!buddyFrames || !buddyFrames.length) return;
         buddyFrameIdx = (buddyFrameIdx + 1) % buddyFrames.length;
         if (buddyAscii) buddyAscii.textContent = buddyFrames[buddyFrameIdx];
       }, speed);
@@ -755,19 +783,14 @@
     }
 
     function localBuddyFallback() {
-      // Real newlines — never show literal \n
-      const art = [
-        "  (o o)  ",
-        " <(   )> ",
-        "  ^^ ^^  ",
-      ].join("\n");
+      const art = ["  /\\_/\\  ", " ( . . ) ", "  > ^ <  "].join("\n");
       if (buddyAscii) buddyAscii.textContent = art;
-      if (buddyMeta) buddyMeta.textContent = "Buddy (local)";
-      buddyFrames = [art, art.replace("o", "-")];
-      buddyFrameIdx = 0;
+      if (buddyMeta) buddyMeta.textContent = "Buddy";
+      buddyFrames = [art, art.replace(".", "-")];
+      buddyAnimMap = { idle: buddyFrames, blink: buddyFrames, talk: buddyFrames };
     }
 
-    async function loadBuddy(pet) {
+    async function loadBuddy() {
       try {
         const r = await fetch("/v1/buddy", {
           method: "POST",
@@ -775,119 +798,43 @@
             "Content-Type": "application/json",
             ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}),
           },
-          body: JSON.stringify({
-            command: pet ? "/buddy pet" : "/buddy",
-            user_id: buddyUserId,
-          }),
+          body: JSON.stringify({ command: "/buddy", user_id: buddyUserId }),
         });
-        if (!r.ok) {
-          console.warn("buddy API", r.status);
-          localBuddyFallback();
-          return;
-        }
+        if (!r.ok) { localBuddyFallback(); return; }
         const data = await r.json();
         const b = data.buddy || {};
         if (buddyMeta) {
-          const title = b.name
-            ? (b.name + " the " + (b.species_name || "") + " (" + (b.rarity || "") + (b.shiny ? ", shiny" : "") + ")")
-            : (data.text || "Buddy").split("\n")[0];
-          buddyMeta.textContent = String(title).slice(0, 80);
+          buddyMeta.textContent = b.name
+            ? (b.name + " · " + (b.species_name || ""))
+            : "Buddy";
         }
-        let art = "";
-        if (b.idle && b.idle.length) {
-          buddyFrames = b.idle.map(function (fr) {
-            return Array.isArray(fr) ? fr.join("\n") : String(fr);
-          });
-          art = buddyFrames[0];
-        } else if (b.sprite_lines && b.sprite_lines.length) {
-          art = b.sprite_lines.join("\n");
-          buddyFrames = [art, art.replace(/o/, "-")];
-        } else {
-          const text = String(data.text || data.ascii || "");
-          const lines = text.split("\n").filter(function (l) {
-            return (
-              l.trim() &&
-              l.indexOf("does not write") < 0 &&
-              l.indexOf("*happy") < 0
-            );
-          });
-          if (lines[0] && buddyMeta && !b.name) buddyMeta.textContent = lines[0].slice(0, 80);
-          art = lines
-            .slice(b.name ? 0 : 1)
-            .filter(function (l) {
-              return l.indexOf("—") !== 0 && l.indexOf("- ") !== 0;
-            })
-            .join("\n");
-          buddyFrames = [art, art.replace(/o/, "-")];
-        }
-        if (buddyAscii) buddyAscii.textContent = art || "( )";
-        buddyFrameIdx = 0;
         if (b.animations && typeof b.animations === "object") {
           buddyAnimMap = b.animations;
-        } else {
-          buddyAnimMap = { idle: buddyFrames || [art], blink: buddyFrames || [art] };
+          buddyFrames = b.animations.idle || b.animations.blink || [];
+        } else if (b.sprite_lines) {
+          const art = b.sprite_lines.join("\n");
+          buddyFrames = [art, art.replace(/o/, "-")];
+          buddyAnimMap = { idle: buddyFrames, blink: buddyFrames };
         }
-        setBuddyAnim(pet ? "pet" : buddyAnimName || "idle");
-
-        if (pet && buddyFloat) {
-          buddyFloat.classList.remove("petting");
-          void buddyFloat.offsetWidth;
-          buddyFloat.classList.add("petting");
-          if (buddyAscii && art.indexOf("♥") < 0) {
-            buddyAscii.textContent = art + "\n  ♥  ♥\n   ♥";
-          }
-        }
+        if (buddyAscii && buddyFrames && buddyFrames[0]) buddyAscii.textContent = buddyFrames[0];
       } catch (e) {
-        console.warn("buddy load", e);
         localBuddyFallback();
       }
     }
 
-    if (btnBuddy) {
-      btnBuddy.addEventListener("click", () => setBuddyVisible(!buddyOn));
-    }
-    const buddyPetBtn = document.getElementById("buddyPet");
-    const buddyHideBtn = document.getElementById("buddyHide");
-    if (buddyPetBtn) buddyPetBtn.addEventListener("click", function () {
-      loadBuddy(true).then(function () { setBuddyAnim("pet"); });
-    });
-    document.querySelectorAll("#buddyActions .anim-btn").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        setBuddyAnim(btn.getAttribute("data-anim") || "idle");
-      });
-    });
-    // auto-cycle expressions every 12s when idle
-    setInterval(function () {
-      if (!buddyOn || buddyAnimName === "sleep") return;
-      var cycle = ["idle", "blink", "look_left", "look_right", "think", "idle"];
-      var next = cycle[Math.floor(Math.random() * cycle.length)];
-      if (buddyAnimMap[next] || next === "idle") setBuddyAnim(next);
-    }, 12000);
+    /** Call from chat pipeline so buddy reacts to AERIS conversation */
+    window.sentinelBuddyReact = function (text, role) {
+      if (!buddyOn) return;
+      setBuddyAnim(moodFromChat(text, role || "user"));
+    };
 
-    if (buddyHideBtn) buddyHideBtn.addEventListener("click", () => setBuddyVisible(false));
-    // restore
+    if (btnBuddy) btnBuddy.addEventListener("click", function () { setBuddyVisible(!buddyOn); });
+    if (buddyFloat) {
+      buddyFloat.addEventListener("dblclick", function () { setBuddyVisible(false); });
+    }
     if (buddyOn) setBuddyVisible(true);
 
 </script>
-
-  <!-- Floating Buddy (navbar ke neeche; chat/chart ke andar nahi) -->
-  <aside id="buddy-float" aria-label="Buddy companion" aria-hidden="true">
-    <div class="buddy-meta" id="buddyMeta">Buddy off</div>
-    <div id="buddy-mood">mood: idle</div>
-    <div class="buddy-ascii" id="buddyAscii"></div>
-    <div class="buddy-actions" id="buddyActions">
-      <button type="button" id="buddyPet" title="Pet">Pet</button>
-      <button type="button" class="anim-btn" data-anim="idle">Idle</button>
-      <button type="button" class="anim-btn" data-anim="blink">Blink</button>
-      <button type="button" class="anim-btn" data-anim="talk">Talk</button>
-      <button type="button" class="anim-btn" data-anim="think">Think</button>
-      <button type="button" class="anim-btn" data-anim="wave">Wave</button>
-      <button type="button" class="anim-btn" data-anim="happy">Happy</button>
-      <button type="button" class="anim-btn" data-anim="sleep">Sleep</button>
-      <button type="button" class="anim-btn" data-anim="excited">Wow</button>
-      <button type="button" id="buddyHide" title="Hide">Hide</button>
-    </div>
-  </aside>
 
 </body>
 </html>
