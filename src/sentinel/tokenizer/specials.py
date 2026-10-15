@@ -1,7 +1,7 @@
-"""Chat / control special tokens for AERIS.
+"""Chat / control special tokens for SENTINEL.
 
-Training and serving should prefer these single-token IDs over regex on "User:" text.
-Legacy char checkpoints without these IDs fall back to text stop heuristics.
+Training and serving must use the SAME strings.
+Legacy char checkpoints without these IDs fall back to text heuristics.
 """
 
 from __future__ import annotations
@@ -9,16 +9,19 @@ from __future__ import annotations
 from typing import Iterable
 
 # Canonical strings (also used in datasets)
+SYSTEM = "<|system|>"
 USER = "<|user|>"
 ASSISTANT = "<|assistant|>"
 END = "<|end|>"
 PAD = "<|pad|>"
 UNK = "<|unk|>"
 
-ALL = (PAD, UNK, USER, ASSISTANT, END)
+ALL = (PAD, UNK, SYSTEM, USER, ASSISTANT, END)
 
 # Human-readable aliases still accepted when encoding datasets
 ALIASES = {
+    "System:": SYSTEM,
+    "system:": SYSTEM,
     "User:": USER,
     "Assistant:": ASSISTANT,
     "user:": USER,
@@ -44,7 +47,6 @@ def special_id_map(stoi: dict[str, int]) -> dict[str, int]:
 
 def encode_with_specials(text: str, stoi: dict[str, int], unk_id: int = 0) -> list[int]:
     """Encode text; emit a single id when a special or alias is matched."""
-    # longest-first match
     needles = sorted(list(ALL) + list(ALIASES.keys()), key=len, reverse=True)
     ids: list[int] = []
     i = 0
@@ -59,7 +61,6 @@ def encode_with_specials(text: str, stoi: dict[str, int], unk_id: int = 0) -> li
                     i += len(needle)
                     matched = True
                     break
-                # alias without vocab entry — fall through to chars
         if matched:
             continue
         ch = text[i]
@@ -69,16 +70,17 @@ def encode_with_specials(text: str, stoi: dict[str, int], unk_id: int = 0) -> li
 
 
 def decode_with_specials(ids: Iterable[int], itos: dict[int, str]) -> str:
-    parts = []
+    """Decode ids; special tokens are emitted as their canonical strings."""
+    parts: list[str] = []
     for i in ids:
-        parts.append(itos.get(int(i), "?"))
+        parts.append(itos.get(int(i), ""))
     return "".join(parts)
 
 
 def stop_token_ids(stoi: dict[str, int]) -> set[int]:
-    """Generation should stop when these appear (end or a new user turn)."""
+    """IDs that should stop generation (end-of-turn)."""
     out: set[int] = set()
-    for t in (END, USER):
-        if t in stoi:
-            out.add(stoi[t])
+    for tok in (END, USER, SYSTEM):  # stop if model emits next user/system/end
+        if tok in stoi:
+            out.add(stoi[tok])
     return out

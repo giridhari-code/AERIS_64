@@ -62,6 +62,7 @@ from sentinel.serving.auth import (
     require_api_key,
     require_api_key_strict,
 )
+
 from sentinel.serving.chat_history import (
     append_turn,
     build_prompt,
@@ -69,8 +70,11 @@ from sentinel.serving.chat_history import (
     history_len,
     reset_history,
     restore_turns,
-    set_use_specials,
+    set_system_prompt,
+    default_system_prompt,
+    get_system_prompt,
 )
+
 from sentinel.serving.user_memory import UserMemoryStore, cap_slow_norm
 from sentinel.tools.orchestrate import enrich_prompt_with_tools
 from sentinel.tools.catalog import list_mcp_tools
@@ -527,6 +531,10 @@ def create_app(
         lifespan=lifespan,
     )
 
+    _sys = _env("SYSTEM_PROMPT") or default_system_prompt()
+    set_system_prompt(_sys)
+    logger.info("System prompt set (%d chars)", len(_sys or ""))
+
     # Backend = API only. Chat UI is the Bun frontend on :3000.
     # Opt-in legacy UI: NEUROFIELD_SERVE_UI=1
     static_dir = Path(__file__).parent / "static"
@@ -855,6 +863,20 @@ def create_app(
                 slow_seed=slow_seed, replay_len=replay_len,
             )
             text = _postprocess(prompt, _decode(new_ids), req.postprocess)
+            # Optional: model emitted JSON tool call → execute (Grok-style)
+            _mtc = (_env("MODEL_TOOL_CALLS", "1") or "1").strip().lower() not in {
+                "0", "false", "no", "off",
+            }
+            if _mtc and text:
+                try:
+                    from sentinel.serving.tool_calls import extract_tool_call, run_tool_call
+                    call = extract_tool_call(text)
+                    if call:
+                        tool_out = run_tool_call(call)
+                        text = tool_out.strip() or text
+                        logger.info("model tool call executed: %s", call.get("tool"))
+                except Exception as e:
+                    logger.warning("model tool call failed: %s", e)
             append_turn(sid, "user", prompt)
             append_turn(sid, "assistant", text)
             _persist(sid, _owner(api_key), req, prompt, text)
