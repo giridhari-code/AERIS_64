@@ -13,6 +13,9 @@
     "hono": "^4.13.13"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@highlightjs/cdn-assets": "^11.12.0",
+    "@types/bun": "latest",
+    "dompurify": "^3.4.17",
+    "marked": "^18.1.1"
   }
 }
