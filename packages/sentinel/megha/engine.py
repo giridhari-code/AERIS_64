@@ -9,6 +9,15 @@ from sentinel.megha.authz import require_authorization, AuthorizationError
 from sentinel.megha import playbooks
 from sentinel.megha.policy import evaluate_user_text
 
+# Modes whose `text` is content to review (code, config, logs, symptoms,
+# descriptions) rather than an instruction — the keyword intent gate is
+# skipped for these, and they all run fully local/offline.
+_CONTENT_MODES = frozenset({
+    "help", "capabilities", "list", "checklist", "compliance_map",
+    "code_review", "config_review", "incident_triage", "debug_security",
+    "threat_model", "secret_scan", "log_triage", "report", "sarif", "ioc_extract",
+})
+
 
 @dataclass
 class MeghaRequest:
@@ -50,8 +59,11 @@ def run_megha(req: MeghaRequest) -> MeghaResult:
     ]
 
     try:
-        # Control-layer pre-check on free text (metacognition policy monitor)
-        if text and mode not in ("help", "capabilities", "list", "checklist", "compliance_map"):
+        # Control-layer pre-check on free text (metacognition policy monitor).
+        # Only gate modes whose `text` is the *request*; content-review modes
+        # receive code/config/logs/symptoms as material, and security keywords
+        # there describe the subject, not intent (avoids false refusals).
+        if text and mode not in _CONTENT_MODES:
             pol = evaluate_user_text(
                 text, authorized=req.authorized, scope=req.scope or ""
             )
@@ -73,15 +85,21 @@ def run_megha(req: MeghaRequest) -> MeghaResult:
             )
 
         if mode == "checklist":
-            items = (
-                playbooks.host_checklist()
-                if req.target_type == "host"
-                else playbooks.web_api_checklist()
-            )
+            tt = (req.target_type or "web").strip().lower()
+            if tt == "host":
+                items = playbooks.host_checklist()
+            elif tt in ("cloud", "aws", "azure", "gcp"):
+                items = playbooks.cloud_checklist()
+            elif tt in ("container", "docker", "k8s", "kubernetes"):
+                items = playbooks.container_checklist()
+            elif tt in ("mobile", "android", "ios"):
+                items = playbooks.mobile_checklist()
+            else:
+                items = playbooks.web_api_checklist()
             return MeghaResult(
                 ok=True,
                 mode=mode,
-                summary=f"Hardening checklist ({req.target_type})",
+                summary=f"Hardening checklist ({tt})",
                 items=[{"item": x} for x in items],
                 warnings=warnings,
             )
@@ -154,6 +172,93 @@ def run_megha(req: MeghaRequest) -> MeghaResult:
                 summary="Security debugging hints",
                 items=[{"tip": t} for t in playbooks.debug_security(text)],
                 warnings=warnings,
+            )
+
+        if mode == "threat_model":
+            if not text:
+                return MeghaResult(
+                    ok=False, mode=mode,
+                    error="text (system description) required",
+                    warnings=warnings,
+                )
+            return MeghaResult(
+                ok=True,
+                mode=mode,
+                summary=f"STRIDE threat model ({req.target_type}) — local, offline",
+                items=playbooks.threat_model(text, focus=req.target_type),
+                warnings=warnings,
+            )
+
+        if mode == "secret_scan":
+            if not text:
+                return MeghaResult(ok=False, mode=mode, error="text required", warnings=warnings)
+            return MeghaResult(
+                ok=True,
+                mode=mode,
+                summary="Secret scan of provided text (output redacted) — local, offline",
+                items=playbooks.secret_scan(text),
+                warnings=warnings + [
+                    "Runs fully local — nothing leaves this process. Also scan git history (gitleaks/trufflehog)."
+                ],
+            )
+
+        if mode == "log_triage":
+            if not text:
+                return MeghaResult(ok=False, mode=mode, error="text (log lines) required", warnings=warnings)
+            return MeghaResult(
+                ok=True,
+                mode=mode,
+                summary="Log triage — local, offline",
+                items=playbooks.log_triage(text),
+                warnings=warnings + ["Runs fully local — log text is not uploaded anywhere"],
+            )
+
+        if mode == "report":
+            if not text:
+                return MeghaResult(
+                    ok=False, mode=mode,
+                    error="text required (one finding per line, optional 'severity:' prefix)",
+                    warnings=warnings,
+                )
+            return MeghaResult(
+                ok=True,
+                mode=mode,
+                summary="Findings report (markdown + CSV tracker) — local, offline",
+                items=[
+                    {"markdown": playbooks.build_report(text, scope=req.scope or "")},
+                    {"csv": playbooks.build_findings_csv(text)},
+                ],
+                warnings=warnings,
+            )
+
+        if mode == "sarif":
+            if not text:
+                return MeghaResult(
+                    ok=False, mode=mode,
+                    error="text required (one finding per line, optional 'severity:' prefix)",
+                    warnings=warnings,
+                )
+            return MeghaResult(
+                ok=True,
+                mode=mode,
+                summary="SARIF 2.1.0 export — local, offline",
+                items=[{"sarif": playbooks.build_sarif(text, scope=req.scope or "")}],
+                warnings=warnings,
+            )
+
+        if mode == "ioc_extract":
+            if not text:
+                return MeghaResult(
+                    ok=False, mode=mode,
+                    error="text required (paste notes/logs/email headers)",
+                    warnings=warnings,
+                )
+            return MeghaResult(
+                ok=True,
+                mode=mode,
+                summary="Indicator extraction (defanged) — local, offline",
+                items=playbooks.ioc_extract(text),
+                warnings=warnings + ["Values defanged for safe sharing; extraction runs fully local"],
             )
 
         return MeghaResult(

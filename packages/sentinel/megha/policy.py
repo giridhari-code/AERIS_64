@@ -33,14 +33,32 @@ _BLOCK_PATTERNS: list[tuple[str, str]] = [
     (r"\b(binas\s+permission|bina\s+permission|unauthorized\s+hack)\b", "unauthorized_access"),
 ]
 
-# Defensive / legitimate educational cues → prefer Megha, do not block
+# Defensive / legitimate educational cues → prefer Megha, do not block.
+# Security-specific on purpose: generic words ("patch", "legal", "my server",
+# "my app") used to hijack normal chat into Megha checklists.
 _ALLOW_HINTS = re.compile(
     r"\b("
     r"owasp|hardening|checklist|secure\s+code|code\s+review|incident\s+response|"
     r"authorized\s+(pentest|assessment|test)|bug\s*bounty|responsible\s+disclosure|"
-    r"defend|defensive|blue\s*team|soc\s+alert|patch|cve\s+mitigation|"
-    r"my\s+(app|api|server|website)|our\s+(production|staging)|"
-    r"legal|compliance|gdpr|iso\s*27001|pci"
+    r"defend|defensive|blue\s*team|soc\s+alert|cve\s+mitigation|"
+    r"pen(?:etration)?\s*test|vulnerability\s+(scan|review|assessment)|threat\s+model|"
+    r"security\s+(review|audit|checklist|testing|headers)|"
+    r"secret\s+scan|log\s+triage|"
+    r"iocs?|indicators?\s+of\s+compromise|defang|"
+    r"compliance\s+(map|checklist|review)|gdpr|iso\s*27001|pci\s*dss"
+    r")\b",
+    re.I,
+)
+
+# Legit defensive work *mentions* attack keywords: detection rules, incident
+# triage, protection/hardening. When these cues are present, route to Megha
+# playbooks instead of refusing (Megha never outputs attack steps anyway).
+_DEFENSIVE_CONTEXT = re.compile(
+    r"\b("
+    r"triage|incident|breach|postmortem|forensic[s]?|"
+    r"detect(?:ion|or)?|yara|sigma|ids|ips|siem|monitor(?:ing)?|alert[s]?|"
+    r"mitigat\w*|protect\w*|defen[cs]e|defensive|harden\w*|prevent\w*|"
+    r"recover\w*|remediation|backup[s]?|response|redact\w*|quarantin\w*"
     r")\b",
     re.I,
 )
@@ -78,6 +96,23 @@ def evaluate_user_text(text: str, *, authorized: bool = False, scope: str = "") 
         cat, _ = blocked
         # Even with authorized=true, malware/fraud/phishing kits stay refused
         hard = cat in {"malware", "fraud", "social_engineering", "piracy", "availability_attack"}
+        # Defensive framing (detect / triage / protect / prevent): the user is
+        # defending, not attacking → Megha playbooks, never a refusal.
+        if _DEFENSIVE_CONTEXT.search(raw):
+            low = raw.lower()
+            mode = (
+                "incident_triage"
+                if re.search(r"triage|incident|breach|ransom|forensic|postmortem", low)
+                else "checklist"
+            )
+            return PolicyDecision(
+                allow=True,
+                action="route_megha",
+                category=cat,
+                reason="defensive_context_route_megha",
+                megha_mode=mode,
+                metacognition={"policy_route": "megha", "defensive_override": True},
+            )
         if hard or not authorized:
             msg = (
                 "Megha policy + metacognition control: ye request **block** hai. "
@@ -121,6 +156,12 @@ def evaluate_user_text(text: str, *, authorized: bool = False, scope: str = "") 
             mode = "incident_triage"
         elif "compliance" in low or "gdpr" in low or "iso" in low:
             mode = "compliance_map"
+        elif "threat" in low or "stride" in low:
+            mode = "threat_model"
+        elif "defang" in low or "ioc" in low:
+            mode = "ioc_extract"
+        elif "secret" in low and "scan" in low:
+            mode = "secret_scan"
         elif "pentest" in low or "assessment" in low or "scope" in low:
             mode = "assess_plan" if authorized else "checklist"
         return PolicyDecision(
