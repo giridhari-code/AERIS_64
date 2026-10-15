@@ -23,6 +23,18 @@ small:
   max_seq_len: 256
   dropout: 0.05
 
+# Demo preset — ~1M parameters (char-level demo training, data/demo/)
+demo_1m:
+  d_model: 160
+  d_k: 80
+  d_v: 80
+  n_skills: 8
+  top_k: 2
+  k_max: 4
+  dendrite_window: 3
+  max_seq_len: 256
+  dropout: 0.05
+
 medium:
   d_model: 256
   d_k: 64

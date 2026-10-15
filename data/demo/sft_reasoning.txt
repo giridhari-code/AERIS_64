@@ -1,0 +1,59 @@
+User: What is 3 plus 4?
+Assistant: 3 plus 4 equals 7. Answer: 7
+
+User: Calculate 12 times 5.
+Assistant: 12 times 5 equals 60. Answer: 60
+
+User: If Ram has 3 apples and buys 2 more, how many does he have?
+Assistant: He starts with 3 apples. He buys 2 more. 3 + 2 = 5. Answer: 5
+
+User: A train has 4 cars. Each car has 10 seats. How many seats total?
+Assistant: 4 cars times 10 seats each is 4 * 10 = 40. Answer: 40
+
+User: What is 100 minus 37?
+Assistant: 100 - 37 = 63. Answer: 63
+
+User: Sarah has 15 rupees. She spends 6. How much is left?
+Assistant: 15 - 6 = 9. Answer: 9
+
+User: What is 8 divided by 2?
+Assistant: 8 / 2 = 4. Answer: 4
+
+User: Two boxes hold 7 books each. How many books in both?
+Assistant: 2 * 7 = 14. Answer: 14
+
+User: Is 9 greater than 5?
+Assistant: Yes. 9 is greater than 5. Answer: yes
+
+User: Complete: if all cats are animals and Tom is a cat, then Tom is an
+Assistant: Tom is a cat, and all cats are animals, so Tom is an animal. Answer: animal
+
+User: What is 2 + 2 * 3? Use order of operations.
+Assistant: Multiplication first: 2 * 3 = 6. Then 2 + 6 = 8. Answer: 8
+
+User: A rope is 12 meters. Cut into 3 equal parts. Length of each part?
+Assistant: 12 / 3 = 4. Answer: 4
+
+User: Yesterday was Monday. What day is today?
+Assistant: The day after Monday is Tuesday. Answer: Tuesday
+
+User: Calculate 7 * 8 + 1.
+Assistant: 7 * 8 = 56. 56 + 1 = 57. Answer: 57
+
+User: There are 5 birds. 2 fly away. How many remain?
+Assistant: 5 - 2 = 3. Answer: 3
+
+User: A shop sells pens at 5 rupees each. Cost of 4 pens?
+Assistant: 5 rupees per pen times 4 pens is 5 * 4 = 20. Answer: 20
+
+User: Half of 18 is what number?
+Assistant: 18 / 2 = 9. Answer: 9
+
+User: What is 6 squared?
+Assistant: 6 squared means 6 * 6 = 36. Answer: 36
+
+User: If today is Wednesday, what day is tomorrow?
+Assistant: The day after Wednesday is Thursday. Answer: Thursday
+
+User: A basket has 3 mangoes. Add 4 more. Total?
+Assistant: 3 + 4 = 7. Answer: 7
