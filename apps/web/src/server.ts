@@ -146,6 +146,20 @@ app.post("/v1/si/v1", async (c) => {
   return c.json(r.body, r.status as 200);
 });
 
+// ---- Buddy companion (float UI; proxy to Python) -------------------------
+app.get("/v1/buddy", async (c) => {
+  const q = c.req.query("user_id") || "";
+  const path = q ? `/v1/buddy?user_id=${encodeURIComponent(q)}` : "/v1/buddy";
+  const r = await proxyJson("GET", path);
+  return c.json(r.body, r.status as 200);
+});
+
+app.post("/v1/buddy", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/buddy", body);
+  return c.json(r.body, r.status as 200);
+});
+
 // ---- Static chat UI (same look as Python frontend) ------------------------
 
 app.use("/static/*", serveStatic({ root: "./public" }));

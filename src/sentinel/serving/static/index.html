@@ -671,45 +671,85 @@
       buddyIdleTimer = null;
     }
 
+    function localBuddyFallback() {
+      // Real newlines — never show literal \n
+      const art = [
+        "  (o o)  ",
+        " <(   )> ",
+        "  ^^ ^^  ",
+      ].join("\n");
+      if (buddyAscii) buddyAscii.textContent = art;
+      if (buddyMeta) buddyMeta.textContent = "Buddy (local)";
+      buddyFrames = [art, art.replace("o", "-")];
+      buddyFrameIdx = 0;
+    }
+
     async function loadBuddy(pet) {
       try {
         const r = await fetch("/v1/buddy", {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}) },
+          headers: {
+            "Content-Type": "application/json",
+            ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}),
+          },
           body: JSON.stringify({
             command: pet ? "/buddy pet" : "/buddy",
             user_id: buddyUserId,
           }),
         });
         if (!r.ok) {
-          // fallback: local minimal sprite if API key required
-          if (buddyAscii) buddyAscii.textContent = "  (o o)\\n <(  )>\\n  ^^ ^^";
-          if (buddyMeta) buddyMeta.textContent = "Buddy (offline)";
+          console.warn("buddy API", r.status);
+          localBuddyFallback();
           return;
         }
         const data = await r.json();
-        const text = data.text || data.ascii || "";
-        const lines = String(text).split("\\n");
-        // strip disclaimer lines for float
-        const body = lines.filter(l => !l.includes("does not write") && !l.startsWith("*happy") && l.trim() !== "");
-        if (buddyMeta && body[0]) buddyMeta.textContent = body[0].slice(0, 80);
-        const art = body.slice(1).filter(l => !l.startsWith("—") && !l.startsWith("-")).join("\\n");
-        if (buddyAscii) buddyAscii.textContent = art || body.slice(1).join("\\n");
-        // simple 2-frame idle from ascii blink
-        const frame0 = buddyAscii ? buddyAscii.textContent : "";
-        const frame1 = frame0.replace(/o/, "-").replace(/O/, "-");
-        buddyFrames = [frame0, frame1];
-        buddyFrameIdx = 0;
-        if (data.buddy && data.buddy.idle && data.buddy.idle.length) {
-          buddyFrames = data.buddy.idle.map(fr => (Array.isArray(fr) ? fr.join("\\n") : String(fr)));
+        const b = data.buddy || {};
+        if (buddyMeta) {
+          const title = b.name
+            ? (b.name + " the " + (b.species_name || "") + " (" + (b.rarity || "") + (b.shiny ? ", shiny" : "") + ")")
+            : (data.text || "Buddy").split("\n")[0];
+          buddyMeta.textContent = String(title).slice(0, 80);
         }
+        let art = "";
+        if (b.idle && b.idle.length) {
+          buddyFrames = b.idle.map(function (fr) {
+            return Array.isArray(fr) ? fr.join("\n") : String(fr);
+          });
+          art = buddyFrames[0];
+        } else if (b.sprite_lines && b.sprite_lines.length) {
+          art = b.sprite_lines.join("\n");
+          buddyFrames = [art, art.replace(/o/, "-")];
+        } else {
+          const text = String(data.text || data.ascii || "");
+          const lines = text.split("\n").filter(function (l) {
+            return (
+              l.trim() &&
+              l.indexOf("does not write") < 0 &&
+              l.indexOf("*happy") < 0
+            );
+          });
+          if (lines[0] && buddyMeta && !b.name) buddyMeta.textContent = lines[0].slice(0, 80);
+          art = lines
+            .slice(b.name ? 0 : 1)
+            .filter(function (l) {
+              return l.indexOf("—") !== 0 && l.indexOf("- ") !== 0;
+            })
+            .join("\n");
+          buddyFrames = [art, art.replace(/o/, "-")];
+        }
+        if (buddyAscii) buddyAscii.textContent = art || "( )";
+        buddyFrameIdx = 0;
         if (pet && buddyFloat) {
           buddyFloat.classList.remove("petting");
           void buddyFloat.offsetWidth;
           buddyFloat.classList.add("petting");
+          if (buddyAscii && art.indexOf("♥") < 0) {
+            buddyAscii.textContent = art + "\n  ♥  ♥\n   ♥";
+          }
         }
       } catch (e) {
-        if (buddyMeta) buddyMeta.textContent = "Buddy unavailable";
+        console.warn("buddy load", e);
+        localBuddyFallback();
       }
     }
 
