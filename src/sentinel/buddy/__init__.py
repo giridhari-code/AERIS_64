@@ -6,6 +6,7 @@ Hatch is deterministic from user_id. Commands:
 """
 
 from sentinel.buddy.animations import list_animation_types, ANIMATION_TYPES
+from sentinel.buddy.mood import mood_from_text
 from sentinel.buddy.engine import (
     Buddy,
     hatch_buddy,
@@ -22,4 +23,5 @@ __all__ = [
     "is_buddy_command",
     "list_animation_types",
     "ANIMATION_TYPES",
+    "mood_from_text",
 ]

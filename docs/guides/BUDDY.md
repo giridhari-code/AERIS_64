@@ -47,3 +47,14 @@ ASCII frame sets + CSS motion on the float panel:
 | pet | Hearts |
 
 UI buttons under the float switch mood; idle auto-cycles expressions about every 12s.
+
+## Auto mood (chat-linked)
+
+Float shows **only name + sprite** (no manual mood buttons).
+Animation follows AERIS chat:
+
+- User question → think / blink
+- Greeting → wave
+- Model reply → talk
+- Funny / excited text → happy / excited
+- Double-click float to hide; topbar ◉ toggles on/off
