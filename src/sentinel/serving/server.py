@@ -795,10 +795,34 @@ def create_app(
         api_key: Optional[str] = Depends(require_api_key),
     ):
         _limit(request, api_key)
-        _need_model()
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         try:
+            # --- Tool-first path (Grok-style live facts) ---
+            # Time / calc / weather / search / wiki answer from tools, not weak LM decode.
+            # Disable: NEUROFIELD_CHAT_TOOLS_DIRECT=0
+            direct = (_env("CHAT_TOOLS_DIRECT", "1") or "1").strip().lower() not in {
+                "0", "false", "no", "off",
+            }
+            if direct:
+                t0 = time.perf_counter()
+                raw = normalize_prompt(req.prompt)
+                _enriched, tool_note = enrich_prompt_with_tools(raw)
+                if tool_note and str(tool_note).strip():
+                    text = str(tool_note).strip()
+                    lat = (time.perf_counter() - t0) * 1000.0
+                    append_turn(sid, "user", raw)
+                    append_turn(sid, "assistant", text)
+                    _persist(sid, _owner(api_key), req, raw, text)
+                    return ChatResponse(
+                        text=text,
+                        session_id=sid,
+                        latency_ms=lat,
+                        model="tools",
+                        meta_rag=None,
+                    )
+
+            _need_model()
             prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = _prepare_chat(
                 req, sid, _owner(api_key)
             )
