@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from sentinel.megha.authz import require_authorization, AuthorizationError
 from sentinel.megha import playbooks
+from sentinel.megha.policy import evaluate_user_text
 
 
 @dataclass
@@ -49,6 +50,19 @@ def run_megha(req: MeghaRequest) -> MeghaResult:
     ]
 
     try:
+        # Control-layer pre-check on free text (metacognition policy monitor)
+        if text and mode not in ("help", "capabilities", "list", "checklist", "compliance_map"):
+            pol = evaluate_user_text(
+                text, authorized=req.authorized, scope=req.scope or ""
+            )
+            if not pol.allow:
+                return MeghaResult(
+                    ok=False,
+                    mode=mode,
+                    error=pol.user_message or pol.reason,
+                    warnings=warnings + [f"policy:{pol.category}"],
+                )
+
         if mode in ("help", "capabilities", "list"):
             return MeghaResult(
                 ok=True,

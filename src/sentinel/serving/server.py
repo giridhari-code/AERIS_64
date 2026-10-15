@@ -817,6 +817,25 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         try:
+            # Always-on Megha/Metacognition policy gate (even if tools-direct is off)
+            _raw0 = normalize_prompt(req.prompt)
+            try:
+                from sentinel.megha.policy import evaluate_user_text
+                _pol0 = evaluate_user_text(_raw0)
+                if not _pol0.allow:
+                    msg = _pol0.user_message or "Request blocked by Megha security policy."
+                    append_turn(sid, "user", _raw0)
+                    append_turn(sid, "assistant", msg)
+                    return ChatResponse(
+                        text=msg,
+                        session_id=sid,
+                        latency_ms=0.0,
+                        model="megha-policy",
+                        meta_rag={"policy": _pol0.to_dict()},
+                    )
+            except Exception as e:
+                logger.warning("policy precheck: %s", e)
+
             # --- Tool-first path (Grok-style live facts) ---
             # Time / calc / weather / search / wiki answer from tools, not weak LM decode.
             # Disable: NEUROFIELD_CHAT_TOOLS_DIRECT=0
@@ -826,6 +845,54 @@ def create_app(
             if direct:
                 t0 = time.perf_counter()
                 raw = normalize_prompt(req.prompt)
+                # Metacognition + Megha policy monitor: refuse illegal/unauthorized cyber activity
+                try:
+                    from sentinel.megha.policy import evaluate_user_text
+                    _pol = evaluate_user_text(raw)
+                    if not _pol.allow:
+                        lat = (time.perf_counter() - t0) * 1000.0
+                        append_turn(sid, "user", raw)
+                        msg = _pol.user_message or "Request blocked by Megha security policy."
+                        append_turn(sid, "assistant", msg)
+                        return ChatResponse(
+                            text=msg,
+                            session_id=sid,
+                            latency_ms=lat,
+                            model="megha-policy",
+                            meta_rag={"policy": _pol.to_dict()},
+                        )
+                    if _pol.action == "route_megha" and _pol.megha_mode:
+                        from sentinel.megha import MeghaRequest, run_megha
+                        _mr = run_megha(
+                            MeghaRequest(
+                                mode=_pol.megha_mode,
+                                text=raw,
+                                authorized=False,
+                            )
+                        )
+                        if _mr.ok and _mr.items:
+                            lat = (time.perf_counter() - t0) * 1000.0
+                            lines = [ _mr.summary or "Megha", "" ]
+                            for it in _mr.items[:20]:
+                                if isinstance(it, dict):
+                                    lines.append("- " + "; ".join(f"{k}: {v}" for k, v in it.items() if v is not None))
+                                else:
+                                    lines.append(f"- {it}")
+                            if _mr.warnings:
+                                lines.append("")
+                                lines.extend(f"Note: {w}" for w in _mr.warnings[:3])
+                            text = "\n".join(lines)
+                            append_turn(sid, "user", raw)
+                            append_turn(sid, "assistant", text)
+                            return ChatResponse(
+                                text=text,
+                                session_id=sid,
+                                latency_ms=lat,
+                                model="megha+meta-control",
+                                meta_rag={"policy": _pol.to_dict(), "megha": _mr.to_dict()},
+                            )
+                except Exception as e:
+                    logger.warning("Megha policy monitor failed open to tools/model: %s", e)
                 # Prefer SI_v1 plan→tool→verify (Grok-style agent loop)
                 text = None
                 try:

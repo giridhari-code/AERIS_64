@@ -19,6 +19,7 @@ from sentinel.megha.engine import (
     list_capabilities,
 )
 from sentinel.megha.authz import require_authorization, AuthorizationError
+from sentinel.megha.policy import evaluate_user_text, PolicyDecision, apply_meta_overrides
 
 __all__ = [
     "MeghaRequest",
@@ -27,4 +28,7 @@ __all__ = [
     "list_capabilities",
     "require_authorization",
     "AuthorizationError",
+    "evaluate_user_text",
+    "PolicyDecision",
+    "apply_meta_overrides",
 ]
