@@ -5,6 +5,7 @@ from .router import SkillRouter
 from .memory import FastMemory, SlowMemory
 from .predictor import Predictor
 from .metacognition import Metacognition
+from .bhutu import Bhutu, BhutuDecision, bhutu_decide, get_bhutu
 
 __all__ = [
     "Dendrite",
@@ -15,4 +16,8 @@ __all__ = [
     "SlowMemory",
     "Predictor",
     "Metacognition",
+    "Bhutu",
+    "BhutuDecision",
+    "bhutu_decide",
+    "get_bhutu",
 ]

@@ -817,24 +817,26 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         try:
-            # Always-on Megha/Metacognition policy gate (even if tools-direct is off)
+            # Bhutu (Metacognition manager) + Megha policy — full tool/agent control gate
             _raw0 = normalize_prompt(req.prompt)
             try:
-                from sentinel.megha.policy import evaluate_user_text
-                _pol0 = evaluate_user_text(_raw0)
-                if not _pol0.allow:
-                    msg = _pol0.user_message or "Request blocked by Megha security policy."
+                from sentinel.modules.bhutu import bhutu_decide
+                _b0 = bhutu_decide(_raw0)
+                if not _b0.allow:
+                    msg = _b0.user_message or "Request blocked by Bhutu."
                     append_turn(sid, "user", _raw0)
                     append_turn(sid, "assistant", msg)
                     return ChatResponse(
                         text=msg,
                         session_id=sid,
                         latency_ms=0.0,
-                        model="megha-policy",
-                        meta_rag={"policy": _pol0.to_dict()},
+                        model="bhutu-policy",
+                        meta_rag={"bhutu": _b0.to_dict()},
                     )
+                # stash for SI_v1 path (same process)
+                request.state.bhutu = _b0
             except Exception as e:
-                logger.warning("policy precheck: %s", e)
+                logger.warning("bhutu precheck: %s", e)
 
             # --- Tool-first path (Grok-style live facts) ---
             # Time / calc / weather / search / wiki answer from tools, not weak LM decode.

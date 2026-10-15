@@ -24,6 +24,7 @@ from sentinel.tools.weather import weather_report
 from sentinel.tools.web_search import web_search_report
 from sentinel.tools.wikipedia import wikipedia_summary
 from sentinel.tools.currency import convert_currency
+from sentinel.modules.bhutu import bhutu_decide
 
 GenerateFn = Callable[[str], str]
 
@@ -172,7 +173,50 @@ def run_si_v1(
             latency_ms=0.0,
         )
 
-    plan = build_plan(text)
+    # Bhutu (metacognition manager): which tools + step budget
+    bhutu = bhutu_decide(text)
+    if not bhutu.allow:
+        return SI_v1Result(
+            answer=bhutu.user_message or "Request blocked by Bhutu.",
+            plan=[],
+            stopped_reason="bhutu_refuse",
+            latency_ms=(time.perf_counter() - t0) * 1000.0,
+        )
+    if bhutu.action == "route_megha":
+        try:
+            from sentinel.megha import MeghaRequest, run_megha
+            mr = run_megha(MeghaRequest(mode=bhutu.route_megha_mode or "checklist", text=text))
+            ans = mr.summary or "Megha"
+            if mr.items:
+                ans += "\n" + "\n".join(
+                    ("- " + ("; ".join(f"{k}:{v}" for k, v in it.items()) if isinstance(it, dict) else str(it)))
+                    for it in mr.items[:12]
+                )
+            return SI_v1Result(
+                answer=ans,
+                plan=[{"id": "megha", "action": "megha", "arg": bhutu.route_megha_mode or ""}],
+                stopped_reason="bhutu_megha",
+                latency_ms=(time.perf_counter() - t0) * 1000.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            return SI_v1Result(
+                answer=f"Megha route failed: {e}",
+                plan=[],
+                stopped_reason="bhutu_megha_fail",
+                latency_ms=(time.perf_counter() - t0) * 1000.0,
+            )
+
+    plan = bhutu.filter_plan(build_plan(text))
+    if bhutu.action == "no_tool":
+        plan = [s for s in plan if str(s.get("action")) == "compose_answer"] or [
+            {"id": "s1", "action": "compose_answer", "arg": ""}
+        ]
+    # respect Bhutu step budget
+    cfg = SI_v1Config(
+        max_steps=min(cfg.max_steps, max(1, bhutu.max_agent_steps)),
+        max_failures=cfg.max_failures,
+        tool_timeout_s=cfg.tool_timeout_s,
+    )
     results: dict[str, str] = {}
     step_logs: list[StepResult] = []
     facts: list[str] = []
@@ -260,6 +304,12 @@ def run_si_v1(
 
         # tool step
         ts = time.perf_counter()
+        if not bhutu.may_run_tool(action):
+            step_logs.append(
+                StepResult(sid, action, False, "bhutu_denied", 0.0)
+            )
+            failures += 1
+            continue
         ok, detail = _run_tool(action, arg)
         ms = (time.perf_counter() - ts) * 1000
         if ms > cfg.tool_timeout_s * 1000:
