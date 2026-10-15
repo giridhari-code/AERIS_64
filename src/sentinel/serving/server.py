@@ -858,8 +858,27 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         try:
-            # Bhutu (Metacognition manager) + Megha policy — full tool/agent control gate
+            # Buddy companion commands (decorative only — no tools/model)
             _raw0 = normalize_prompt(req.prompt)
+            try:
+                from sentinel.buddy import is_buddy_command, handle_buddy_command
+                if is_buddy_command(_raw0):
+                    owner = _owner(api_key) or (api_key or sid)
+                    text = handle_buddy_command(_raw0, str(owner))
+                    if text:
+                        append_turn(sid, "user", _raw0)
+                        append_turn(sid, "assistant", text)
+                        return ChatResponse(
+                            text=text,
+                            session_id=sid,
+                            latency_ms=0.0,
+                            model="buddy",
+                            meta_rag={"buddy": True},
+                        )
+            except Exception as e:
+                logger.warning("buddy command: %s", e)
+
+            # Bhutu (Metacognition manager) + Megha policy — full tool/agent control gate
             try:
                 from sentinel.modules.bhutu import bhutu_decide
                 _b0 = bhutu_decide(_raw0)
@@ -1356,6 +1375,24 @@ def create_app(
         return run_si_v1(prompt, config=SI_v1Config(max_steps=max_steps)).to_dict()
 
     # ---- Megha: defensive cybersecurity / authorized testing assistant ----
+    @app.get("/v1/buddy")
+    def buddy_get(api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.buddy import hatch_buddy
+        owner = _owner(api_key) if api_key else "anonymous"
+        b = hatch_buddy(str(owner or "anonymous"))
+        return {"product": "Buddy", "buddy": b.to_dict(), "ascii": b.render()}
+
+    @app.post("/v1/buddy")
+    def buddy_post(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        from sentinel.buddy import hatch_buddy, pet_buddy, handle_buddy_command
+        owner = _owner(api_key) if api_key else str((body or {}).get("user_id") or "anonymous")
+        cmd = str((body or {}).get("command") or "/buddy").strip()
+        if "pet" in cmd.lower():
+            return {"product": "Buddy", "text": pet_buddy(str(owner))}
+        text = handle_buddy_command(cmd if cmd.startswith("/") else "/buddy", str(owner))
+        b = hatch_buddy(str(owner))
+        return {"product": "Buddy", "text": text, "buddy": b.to_dict()}
+
     @app.get("/v1/megha/capabilities")
     def megha_capabilities(api_key: Optional[str] = Depends(require_api_key)):
         from sentinel.megha import list_capabilities
