@@ -19,6 +19,7 @@ from sentinel.tools.code_execution import code_execution
 from sentinel.tools.bash_tool import bash
 from sentinel.tools.web_fetch import web_fetch
 from sentinel.tools.file_search import file_search
+from sentinel.tools.megha_tool import megha_report, megha_capabilities_text
 
 _WEATHER = re.compile(
     r"\b(weather|temperature|forecast|barish|mausam|celsius|"
@@ -84,6 +85,12 @@ _GIT = re.compile(
     r"\b(git\s+(status|log|diff|add|commit|branch|show)|"
     r"repo\s+status|commit\s+(kar|the|this)|push\s+to\s+git|"
     r"what('?s|\s+is)\s+the\s+(git\s+)?status)\b",
+    re.I,
+)
+_MEGHA = re.compile(
+    r"\b(megha|security\s+(checklist|scan|review|harden|hardening)|"
+    r"owasp|secure\s+code\s+review|incident\s+triage|"
+    r"authorized\s+(pentest|assessment)|defensive\s+monitor)\b",
     re.I,
 )
 _PLACE = re.compile(  # preposition is case-insensitive; the place name must be Capitalised
@@ -156,6 +163,12 @@ def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
 
     if _RAG.search(p):
         notes.append(rag_retrieve(p, top_k=4))
+
+    if _MEGHA.search(p):
+        if re.search(r"\b(capabilities|modes|help)\b", p, re.I):
+            notes.append(megha_capabilities_text())
+        else:
+            notes.append(megha_report(p, mode="auto"))
 
     if _TOOL_SEARCH.search(p):
         notes.append(tool_search_report(p, top_k=6))
