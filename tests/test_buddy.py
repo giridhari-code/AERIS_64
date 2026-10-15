@@ -27,6 +27,9 @@ def test_commands():
     assert is_buddy_command("/buddy pet")
     assert not is_buddy_command("hello")
     text = handle_buddy_command("/buddy", "u1")
-    assert "Buddy only keeps you company" in text
+    b = hatch_buddy("u1")
+    assert b.name in text and b.species_name in text
+    assert handle_buddy_command("/buddy on", "u1") == "BUDDY_ON"
+    assert handle_buddy_command("/buddy off", "u1") == "BUDDY_OFF"
     pet = handle_buddy_command("/buddy pet", "u1")
     assert "♥" in pet or "heart" in pet.lower() or "*" in pet

@@ -5,6 +5,8 @@ Decorative only. Does **not** write or debug code.
 ## Commands (chat)
 
 - `/buddy` — hatch/show your buddy (deterministic from user id)
+- `/buddy on` — show the floating companion
+- `/buddy off` — hide it
 - `/buddy pet` — pet animation with hearts
 - `/buddy help` — short help
 
@@ -24,7 +26,7 @@ Decorative only. Does **not** write or debug code.
 ## Web UI (floating)
 
 - Navbar me **Buddy** toggle (◉).
-- On hone par buddy **navbar ke thoda neeche, right side floating** dikhta hai — chat/thread/chart ke **andar nahi**.
+- On hone par buddy **navbar ke thoda neeche, top-center floating** dikhta hai — thread ke **andar nahi**.
 - Soft **bob animation** + idle blink; **Pet** se short pet animation.
 - Preference `localStorage.sentinel_buddy_on` me save.
 
@@ -46,7 +48,7 @@ ASCII frame sets + CSS motion on the float panel:
 | look_left / look_right | Glance |
 | pet | Hearts |
 
-UI buttons under the float switch mood; idle auto-cycles expressions about every 12s.
+Koi manual mood buttons nahi — float shows **name + sprite only**; mood chat se auto (neeche dekho). Burst ke ~4.5s baad idle pe wapas.
 
 ## Auto mood (chat-linked)
 
@@ -60,11 +62,10 @@ Animation follows AERIS chat:
 - Double-click float to hide; topbar ◉ toggles on/off
 
 
-## Two HTML files (not both needed at once)
+## One HTML file (single source)
 
 | File | Used when |
 |------|-----------|
-| `apps/web/public/index.html` | **Bun UI** on `:3000` (normal) |
-| `src/sentinel/serving/static/index.html` | Python serves UI if `NEUROFIELD_SERVE_UI=1` |
+| `frontend/public/index.html` | **Bun UI** on `:3000` (normal) |
 
-Same buddy behaviour is copied to both so either path works. Prefer Bun `:3000` for chat.
+Python backend (API-only) bhi yahi file serve karta hai jab `SERVE_UI=1` (ya `NEUROFIELD_SERVE_UI=1`) ho — koi duplicate copy nahi. Prefer Bun `:3000` for chat.
