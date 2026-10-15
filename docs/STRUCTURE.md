@@ -69,19 +69,17 @@ Weights live under `checkpoints/` (examples in git are side-cars only; large `.s
 
 ---
 
-## Dual HTML (why it feels “mixed”)
+## No dual HTML (fixed in tree)
 
-| Copy | Role |
+| Path | Role |
 |------|------|
-| **`apps/web/public/*.html`** | **Canonical frontend** — always use this |
-| **`src/sentinel/serving/static/*.html`** | **Legacy** — only if `NEUROFIELD_SERVE_UI=1` or `SERVE_UI=1` |
+| **`apps/web/public/*.html`** | **Only** UI assets (chat + product) |
+| **`src/sentinel/serving/static/`** | **No HTML** — README only; duplicates removed |
 
-They can drift. **Prefer Bun :3000.** Do not develop against Python-served HTML unless debugging legacy.
-
-To force API-only backend:
+If `SERVE_UI=1` for local debug, Python serves **`apps/web/public`** (same files). Default backend is API-only:
 
 ```bash
-export NEUROFIELD_SERVE_UI=0   # or SERVE_UI=0 (default)
+export SERVE_UI=0
 ```
 
 ---
