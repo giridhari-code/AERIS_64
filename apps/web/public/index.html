@@ -261,39 +261,43 @@
     }
   
     /* Buddy float — below navbar, NOT inside chat/chart */
-    #buddy-float {
+#buddy-float {
       position: fixed;
       top: calc(var(--header-h, 56px) + 10px);
-      right: 16px;
+      right: 14px;
       z-index: 40;
-      width: min(200px, 42vw);
+      width: auto;
+      max-width: min(180px, 40vw);
       pointer-events: auto;
       display: none;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 11px;
-      line-height: 1.25;
+      font-size: 12px;
+      line-height: 1.2;
       color: var(--text, #e2e8f0);
-      background: rgba(15, 23, 42, 0.92);
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      border-radius: 12px;
-      padding: 10px 12px 8px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
       animation: buddy-bob 3.2s ease-in-out infinite;
       user-select: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.85);
     }
     #buddy-float.open { display: block; }
     #buddy-float .buddy-ascii {
       white-space: pre;
-      margin: 4px 0 6px;
-      min-height: 3.5em;
+      margin: 2px 0 0;
+      min-height: 3.2em;
       transition: opacity 0.25s ease;
     }
     #buddy-float .buddy-meta {
       font-size: 10px;
       color: var(--muted, #94a3b8);
-      margin: 0 0 6px;
+      margin: 0;
       word-break: break-word;
+      opacity: 0.9;
     }
+
     #buddy-float .buddy-actions {
       display: flex;
       gap: 6px;
