@@ -317,7 +317,8 @@
       user-select: none;
       text-shadow: 0 1px 3px rgba(0,0,0,0.85);
     }
-    #buddy-float.open { display: block; }
+    #buddy-float.open { display: block !important; }
+    #buddy-float:not(.open) { display: none !important; }
     #buddy-float .buddy-ascii {
       white-space: pre;
       margin: 2px 0 0;
@@ -606,7 +607,7 @@
       const q = (text != null ? text : promptEl.value).trim();
       if (!q || busy) return;
       // Local buddy on/off — no model wait
-      var bm = q.match(/^\/buddy\s*(on|off)?\s*$/i);
+      var bm = q.match(/^\/\s*buddy\s*(on|off)?\s*$/i);
       if (bm) {
         promptEl.value = "";
         autoGrow();
@@ -784,21 +785,28 @@
 
     function setBuddyVisible(on) {
       buddyOn = !!on;
-      localStorage.setItem(BUDDY_KEY, buddyOn ? "1" : "0");
-      if (!buddyFloat) return;
-      buddyFloat.classList.toggle("open", buddyOn);
-      buddyFloat.setAttribute("aria-hidden", buddyOn ? "false" : "true");
-      if (btnBuddy) {
-        btnBuddy.setAttribute("aria-pressed", buddyOn ? "true" : "false");
-        btnBuddy.classList.toggle("active", !!buddyOn);
-        btnBuddy.title = buddyOn ? "Buddy on (click or /buddy off)" : "Buddy off (click or /buddy on)";
+      try { localStorage.setItem(BUDDY_KEY, buddyOn ? "1" : "0"); } catch (e) {}
+      // Navbar ALWAYS syncs (even if float node missing)
+      var btn = document.getElementById("btnBuddy") || btnBuddy;
+      if (btn) {
+        btn.setAttribute("aria-pressed", buddyOn ? "true" : "false");
+        btn.classList.toggle("active", !!buddyOn);
+        btn.title = buddyOn ? "Buddy on — /buddy off" : "Buddy off — /buddy on";
+      }
+      var panel = document.getElementById("buddy-float") || buddyFloat;
+      var ascii = document.getElementById("buddyAscii") || buddyAscii;
+      var meta = document.getElementById("buddyMeta") || buddyMeta;
+      if (panel) {
+        panel.classList.toggle("open", buddyOn);
+        panel.setAttribute("aria-hidden", buddyOn ? "false" : "true");
+        panel.style.display = buddyOn ? "block" : "none";
       }
       if (buddyOn) {
         loadBuddy().then(function () { setBuddyAnim("wave"); });
       } else {
         stopBuddyIdle();
-        if (buddyAscii) buddyAscii.textContent = "";
-        if (buddyMeta) buddyMeta.textContent = "";
+        if (ascii) ascii.textContent = "";
+        if (meta) meta.textContent = "";
         clearBuddyCssAnim();
       }
     }
