@@ -58,3 +58,13 @@ Animation follows AERIS chat:
 - Model reply → talk
 - Funny / excited text → happy / excited
 - Double-click float to hide; topbar ◉ toggles on/off
+
+
+## Two HTML files (not both needed at once)
+
+| File | Used when |
+|------|-----------|
+| `apps/web/public/index.html` | **Bun UI** on `:3000` (normal) |
+| `src/sentinel/serving/static/index.html` | Python serves UI if `NEUROFIELD_SERVE_UI=1` |
+
+Same buddy behaviour is copied to both so either path works. Prefer Bun `:3000` for chat.
