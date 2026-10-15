@@ -172,8 +172,16 @@ def pet_buddy(user_id: str) -> str:
     return b.render(frame=1, hearts=True)
 
 
+def _norm_buddy_text(text: str) -> str:
+    """Accept both `/buddy ...` and `--buddy ...` spellings."""
+    t = (text or "").strip()
+    if t.lower().startswith("--buddy"):
+        t = "/" + t[2:]
+    return t
+
+
 def is_buddy_command(text: str) -> bool:
-    t = (text or "").strip().lower()
+    t = _norm_buddy_text(text).lower()
     if t in {"/buddy", "/buddy on", "/buddy off", "/buddyon", "/buddyoff"}:
         return True
     return t.startswith("/buddy ")
@@ -181,7 +189,7 @@ def is_buddy_command(text: str) -> bool:
 
 def handle_buddy_command(text: str, user_id: str) -> Optional[str]:
     """Return reply text if this is a buddy command, else None."""
-    t = (text or "").strip()
+    t = _norm_buddy_text(text)
     if not is_buddy_command(t):
         return None
     parts = t.split()
@@ -202,6 +210,7 @@ def handle_buddy_command(text: str, user_id: str) -> Optional[str]:
             "  /buddy on    — show companion\n"
             "  /buddy off   — hide companion\n"
             "  /buddy       — status\n"
+            "(--buddy on|off bhi chalta hai)\n"
             "Auto mood follows chat."
         )
     return "Unknown. Try `/buddy on` or `/buddy off`."
