@@ -1377,22 +1377,44 @@ def create_app(
 
     # ---- Megha: defensive cybersecurity / authorized testing assistant ----
     @app.get("/v1/buddy")
-    def buddy_get(api_key: Optional[str] = Depends(require_api_key)):
+    def buddy_get(
+        api_key: Optional[str] = Depends(require_api_key),
+        user_id: Optional[str] = None,
+    ):
         from sentinel.buddy import hatch_buddy
-        owner = _owner(api_key) if api_key else "anonymous"
+        owner = (user_id or "").strip() or (_owner(api_key) if api_key else "anonymous")
         b = hatch_buddy(str(owner or "anonymous"))
-        return {"product": "Buddy", "buddy": b.to_dict(), "ascii": b.render()}
+        return {
+            "product": "Buddy",
+            "buddy": b.to_dict(),
+            "ascii": b.render(),
+            "placement": "float_below_navbar",
+        }
 
     @app.post("/v1/buddy")
     def buddy_post(body: dict, api_key: Optional[str] = Depends(require_api_key)):
         from sentinel.buddy import hatch_buddy, pet_buddy, handle_buddy_command
-        owner = _owner(api_key) if api_key else str((body or {}).get("user_id") or "anonymous")
-        cmd = str((body or {}).get("command") or "/buddy").strip()
-        if "pet" in cmd.lower():
-            return {"product": "Buddy", "text": pet_buddy(str(owner))}
-        text = handle_buddy_command(cmd if cmd.startswith("/") else "/buddy", str(owner))
+        body = body or {}
+        # Prefer explicit user_id from UI so hatch stays stable per browser
+        owner = str(body.get("user_id") or "").strip() or (
+            _owner(api_key) if api_key else "anonymous"
+        )
+        cmd = str(body.get("command") or "/buddy").strip()
         b = hatch_buddy(str(owner))
-        return {"product": "Buddy", "text": text, "buddy": b.to_dict()}
+        if "pet" in cmd.lower():
+            return {
+                "product": "Buddy",
+                "text": pet_buddy(str(owner)),
+                "buddy": b.to_dict(),
+                "placement": "float_below_navbar",
+            }
+        text = handle_buddy_command(cmd if cmd.startswith("/") else "/buddy", str(owner))
+        return {
+            "product": "Buddy",
+            "text": text,
+            "buddy": b.to_dict(),
+            "placement": "float_below_navbar",
+        }
 
     @app.get("/v1/megha/capabilities")
     def megha_capabilities(api_key: Optional[str] = Depends(require_api_key)):

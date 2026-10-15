@@ -259,6 +259,79 @@
       .msg { max-width: 96%; }
       .welcome h2 { font-size: 1.15rem; }
     }
+  
+    /* Buddy float — below navbar, NOT inside chat/chart */
+    #buddy-float {
+      position: fixed;
+      top: calc(var(--header-h, 56px) + 10px);
+      right: 16px;
+      z-index: 40;
+      width: min(200px, 42vw);
+      pointer-events: auto;
+      display: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.25;
+      color: var(--text, #e2e8f0);
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 12px;
+      padding: 10px 12px 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      animation: buddy-bob 3.2s ease-in-out infinite;
+      user-select: none;
+    }
+    #buddy-float.open { display: block; }
+    #buddy-float .buddy-ascii {
+      white-space: pre;
+      margin: 4px 0 6px;
+      min-height: 3.5em;
+      transition: opacity 0.25s ease;
+    }
+    #buddy-float .buddy-meta {
+      font-size: 10px;
+      color: var(--muted, #94a3b8);
+      margin: 0 0 6px;
+      word-break: break-word;
+    }
+    #buddy-float .buddy-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    #buddy-float button {
+      font: inherit;
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(148,163,184,0.4);
+      background: rgba(30,41,59,0.9);
+      color: inherit;
+      cursor: pointer;
+    }
+    #buddy-float button:hover { border-color: #2dd4bf; }
+    #buddy-float.petting {
+      animation: buddy-pet 0.55s ease;
+    }
+    @keyframes buddy-bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(6px); }
+    }
+    @keyframes buddy-pet {
+      0% { transform: scale(1) rotate(0deg); }
+      30% { transform: scale(1.06) rotate(-3deg); }
+      60% { transform: scale(1.04) rotate(3deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    @media (max-width: 640px) {
+      #buddy-float {
+        right: 8px;
+        left: auto;
+        width: min(160px, 48vw);
+        font-size: 10px;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -279,6 +352,7 @@
         <span class="dot" aria-hidden="true"></span>
         <span id="statusText">…</span>
       </div>
+      <button type="button" class="icon-btn" id="btnBuddy" title="Buddy on/off" aria-label="Toggle Buddy" aria-pressed="false">◉</button>
       <button type="button" class="icon-btn" id="btnNew" title="New chat" aria-label="New chat">↻</button>
     </div>
   </header>
@@ -297,6 +371,17 @@
       </div>
     </div>
   </main>
+
+  
+  <!-- Floating Buddy (navbar ke neeche; chat/chart ke andar nahi) -->
+  <aside id="buddy-float" aria-label="Buddy companion" aria-hidden="true">
+    <div class="buddy-meta" id="buddyMeta">Buddy off</div>
+    <div class="buddy-ascii" id="buddyAscii"></div>
+    <div class="buddy-actions">
+      <button type="button" id="buddyPet" title="Pet">Pet</button>
+      <button type="button" id="buddyHide" title="Hide">Hide</button>
+    </div>
+  </aside>
 
   <footer class="composer-wrap">
     <div class="composer-inner">
@@ -525,6 +610,101 @@
     }
     document.getElementById("btnNew").addEventListener("click", resetSession);
     document.getElementById("btnClear").addEventListener("click", resetSession);
-  </script>
+  
+
+    /* ---- Buddy float (not in chat thread) ---- */
+    const BUDDY_KEY = "sentinel_buddy_on";
+    const buddyFloat = document.getElementById("buddy-float");
+    const buddyAscii = document.getElementById("buddyAscii");
+    const buddyMeta = document.getElementById("buddyMeta");
+    const btnBuddy = document.getElementById("btnBuddy");
+    let buddyOn = localStorage.getItem(BUDDY_KEY) === "1";
+    let buddyFrames = null;
+    let buddyFrameIdx = 0;
+    let buddyIdleTimer = null;
+    let buddyUserId = localStorage.getItem("sentinel_buddy_uid") || ("web-" + Math.random().toString(36).slice(2, 10));
+    localStorage.setItem("sentinel_buddy_uid", buddyUserId);
+
+    function setBuddyVisible(on) {
+      buddyOn = !!on;
+      localStorage.setItem(BUDDY_KEY, buddyOn ? "1" : "0");
+      if (!buddyFloat) return;
+      buddyFloat.classList.toggle("open", buddyOn);
+      buddyFloat.setAttribute("aria-hidden", buddyOn ? "false" : "true");
+      if (btnBuddy) btnBuddy.setAttribute("aria-pressed", buddyOn ? "true" : "false");
+      if (buddyOn) {
+        loadBuddy();
+        startBuddyIdle();
+      } else {
+        stopBuddyIdle();
+      }
+    }
+
+    function startBuddyIdle() {
+      stopBuddyIdle();
+      buddyIdleTimer = setInterval(() => {
+        if (!buddyFrames || buddyFrames.length < 2) return;
+        buddyFrameIdx = (buddyFrameIdx + 1) % buddyFrames.length;
+        if (buddyAscii) buddyAscii.textContent = buddyFrames[buddyFrameIdx];
+      }, 900);
+    }
+    function stopBuddyIdle() {
+      if (buddyIdleTimer) clearInterval(buddyIdleTimer);
+      buddyIdleTimer = null;
+    }
+
+    async function loadBuddy(pet) {
+      try {
+        const r = await fetch("/v1/buddy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}) },
+          body: JSON.stringify({
+            command: pet ? "/buddy pet" : "/buddy",
+            user_id: buddyUserId,
+          }),
+        });
+        if (!r.ok) {
+          // fallback: local minimal sprite if API key required
+          if (buddyAscii) buddyAscii.textContent = "  (o o)\\n <(  )>\\n  ^^ ^^";
+          if (buddyMeta) buddyMeta.textContent = "Buddy (offline)";
+          return;
+        }
+        const data = await r.json();
+        const text = data.text || data.ascii || "";
+        const lines = String(text).split("\\n");
+        // strip disclaimer lines for float
+        const body = lines.filter(l => !l.includes("does not write") && !l.startsWith("*happy") && l.trim() !== "");
+        if (buddyMeta && body[0]) buddyMeta.textContent = body[0].slice(0, 80);
+        const art = body.slice(1).filter(l => !l.startsWith("—") && !l.startsWith("-")).join("\\n");
+        if (buddyAscii) buddyAscii.textContent = art || body.slice(1).join("\\n");
+        // simple 2-frame idle from ascii blink
+        const frame0 = buddyAscii ? buddyAscii.textContent : "";
+        const frame1 = frame0.replace(/o/, "-").replace(/O/, "-");
+        buddyFrames = [frame0, frame1];
+        buddyFrameIdx = 0;
+        if (data.buddy && data.buddy.idle && data.buddy.idle.length) {
+          buddyFrames = data.buddy.idle.map(fr => (Array.isArray(fr) ? fr.join("\\n") : String(fr)));
+        }
+        if (pet && buddyFloat) {
+          buddyFloat.classList.remove("petting");
+          void buddyFloat.offsetWidth;
+          buddyFloat.classList.add("petting");
+        }
+      } catch (e) {
+        if (buddyMeta) buddyMeta.textContent = "Buddy unavailable";
+      }
+    }
+
+    if (btnBuddy) {
+      btnBuddy.addEventListener("click", () => setBuddyVisible(!buddyOn));
+    }
+    const buddyPetBtn = document.getElementById("buddyPet");
+    const buddyHideBtn = document.getElementById("buddyHide");
+    if (buddyPetBtn) buddyPetBtn.addEventListener("click", () => loadBuddy(true));
+    if (buddyHideBtn) buddyHideBtn.addEventListener("click", () => setBuddyVisible(false));
+    // restore
+    if (buddyOn) setBuddyVisible(true);
+
+</script>
 </body>
 </html>
