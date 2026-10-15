@@ -563,10 +563,10 @@ def create_app(
     set_system_prompt(_sys)
     logger.info("System prompt set (%d chars)", len(_sys or ""))
 
-    # Backend = API only. Canonical UI is apps/frontend (Bun :3000).
+    # Backend = API only. Canonical UI is frontend (Bun :3000).
     # SERVE_UI=1 may serve THAT same frontend folder for local debug — No HTML under serving/.
     _repo_root = Path(__file__).resolve().parents[3]
-    frontend_public = _repo_root / "apps" / "frontend" / "public"
+    frontend_public = _repo_root / "frontend" / "public"
     static_dir = frontend_public if frontend_public.is_dir() else (Path(__file__).parent / "static")
     serve_ui = _env("SERVE_UI", "0") == "1"
     if serve_ui and static_dir.is_dir():
@@ -1315,7 +1315,7 @@ def create_app(
             )
         path = static_dir / "product.html"
         if not path.is_file():
-            raise HTTPException(status_code=404, detail="product.html missing under apps/frontend/public")
+            raise HTTPException(status_code=404, detail="product.html missing under frontend/public")
         return FileResponse(str(path))
 
     @app.get("/v1/kalofacts")

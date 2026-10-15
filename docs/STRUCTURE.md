@@ -1,134 +1,52 @@
-# SENTINEL / AERIS_64 — folder roles (frontend · backend · model)
+# Frontier-style folder structure
 
-**Problem this fixes:** UI HTML, TypeScript edge, and Python model code were easy to mix.
-Use **one place per role**. Do not put model weights or training code under `apps/frontend`.
-
----
-
-## Three layers (strict)
-
-| Layer | Path | Port | Responsibility |
-|-------|------|------|----------------|
-| **Frontend** | `apps/frontend/` | **:3000** | Chat UI, product pages, Buddy UI, proxy to Python |
-| **Backend (API)** | `src/sentinel/serving/` | **:8000** | JSON API only (`/v1/chat`, tools, health). **No primary UI** |
-| **Model core** | `src/sentinel/` (modules, model, checkpoint, training, …) | — | Neural field, memory, train, load weights |
+Layout mirrors product AI stacks (web client + inference API + model core):
 
 ```text
-Browser  →  :3000 apps/frontend (Bun)  →  proxy  →  :8000 Python API  →  model weights
+Browser  →  frontend/ (:3000)  →  backend API (:8000)  →  model weights
 ```
 
----
+| Layer | Path | Port | Like |
+|-------|------|------|------|
+| **Frontend** | `frontend/` | 3000 | ChatGPT/Claude/Grok web UI |
+| **Backend** | `backend/` + `src/sentinel/api` + `serving/` | 8000 | Inference API |
+| **Model** | `src/sentinel/` (model, modules, training, checkpoint) | — | Core LM |
 
-## What goes where
+## Frontend only — `frontend/`
 
-### Frontend only — `apps/frontend/`
+- HTML/TS/Bun only
+- Proxies `/v1/*` to Python
+- No `.py` model code, no checkpoints
 
-```text
-apps/frontend/
-├── public/           # HTML/CSS/assets served by Bun (SOURCE OF TRUTH for UI)
-│   ├── index.html    # chat UI
-│   ├── product.html  # Kalofacts / AjeebWork product shell
-│   └── logo.svg
-├── src/
-│   ├── server.ts     # Bun edge server
-│   ├── proxy.ts      # forwards /v1/* to Python :8000
-│   ├── buddy.ts      # Buddy float / navbar
-│   └── git.ts
-├── package.json
-└── README.md
-```
+## Backend only — API
 
-- Edit UI here only.
-- Run: `cd apps/frontend && bun install && bun run dev`
+- Entry: `uvicorn sentinel.api.app:create_app --factory`
+- Implementation: `src/sentinel/serving/`
+- Default: **JSON only** (`SERVE_UI=0`)
+- Optional debug: `SERVE_UI=1` serves `frontend/public` (same files, not a second copy)
 
-### Backend API only — `src/sentinel/serving/`
+## Model only — `src/sentinel/`
 
-```text
-src/sentinel/serving/
-├── server.py         # FastAPI app factory
-├── auth.py, user_memory.py, …
-└── static/           # LEGACY optional copy of HTML (see below)
-```
+- `model.py`, `modules/`, `training/`, `checkpoint/`
+- Tools, Megha, RAG, safety, sandbox
+- Weights under `checkpoints/` (git keeps side-cars only)
 
-- Default: **API JSON only** (`SERVE_UI=0`).
-- Do **not** add new product UI here; add under `apps/frontend/public/`.
+## Rules
 
-### Model only — rest of `src/sentinel/`
+1. UI change → `frontend/` only  
+2. API/auth/session → `src/sentinel/serving/` (+ `api/` entry)  
+3. Architecture / train → `src/sentinel/` model modules  
+4. Never put weights or train loops under `frontend/`  
+5. Never put Bun/HTML under `src/sentinel/serving/static/` (README only)
 
-```text
-src/sentinel/
-├── model.py, config.py, modules/   # architecture
-├── checkpoint/                     # load/save weights
-├── training/, data/, eval/         # train / data / metrics
-├── rag/, tools/, megha/, safety/   # retrieval, tools, defense
-├── buddy/, kalofacts/, ajeebwork/  # product features (server-side)
-└── sandbox/, sdk/, tokenizer/
-```
-
-Weights live under `checkpoints/` (examples in git are side-cars only; large `.safetensors` stay local / not mixed into frontend).
-
----
-
-## No dual HTML (fixed in tree)
-
-| Path | Role |
-|------|------|
-| **`apps/frontend/public/*.html`** | **Only** UI assets (chat + product) |
-| **`src/sentinel/serving/static/`** | **No HTML** — README only; duplicates removed |
-
-If `SERVE_UI=1` for local debug, Python serves **`apps/frontend/public`** (same files). Default backend is API-only:
+## Run
 
 ```bash
-export SERVE_UI=0
-```
-
----
-
-## Removed / do not revive
-
-| Path | Status |
-|------|--------|
-| `src/neurofield/` | **Retired** — package renamed to `sentinel`. Stale `__pycache__` should be deleted. |
-| Mixing model files into `apps/frontend/` | **Forbidden** |
-
-Import style:
-
-```python
-# correct
-from sentinel.model import SENTINEL
-from sentinel.serving.server import create_app
-
-# wrong (old)
-from neurofield...
-```
-
-```bash
-uvicorn "sentinel.serving.server:create_app" --factory --port 8000
-```
-
----
-
-## Quick run (clean split)
-
-```bash
-# Terminal 1 — model backend (JSON only)
-cd /path/to/AERIS_64   # or SENTINEL repo root
+# Backend
 export PYTHONPATH=src
-export NEUROFIELD_CHECKPOINT=checkpoints/examples/AERIS_main   # or your frontier ckpt
-uvicorn "sentinel.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+export NEUROFIELD_CHECKPOINT=checkpoints/examples/AERIS_main
+uvicorn "sentinel.api.app:create_app" --factory --port 8000
 
-# Terminal 2 — frontend
-cd apps/frontend
-bun install && bun run dev
-# open http://localhost:3000
+# Frontend
+cd frontend && bun install && bun run dev
 ```
-
----
-
-## Checklist before commit
-
-1. UI change → only under `apps/frontend/`
-2. API / auth / session → `src/sentinel/serving/`
-3. Model math / train → `src/sentinel/modules|training|model.py`
-4. No new files under `src/neurofield/`
-5. If you must update legacy static, also update `apps/frontend/public/` (or delete legacy path later)
