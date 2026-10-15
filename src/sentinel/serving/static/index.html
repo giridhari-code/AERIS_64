@@ -305,7 +305,7 @@
       pointer-events: auto;
       display: none;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 16px;
+      font-size: 18px;
       line-height: 1.25;
       color: var(--text, #e2e8f0);
       background: transparent;
@@ -797,6 +797,9 @@
         loadBuddy().then(function () { setBuddyAnim("wave"); });
       } else {
         stopBuddyIdle();
+        if (buddyAscii) buddyAscii.textContent = "";
+        if (buddyMeta) buddyMeta.textContent = "";
+        clearBuddyCssAnim();
       }
     }
 
