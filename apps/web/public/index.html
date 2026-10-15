@@ -105,6 +105,11 @@
       display: grid; place-items: center; font-size: 1rem;
     }
     .icon-btn:hover { color: var(--text); border-color: var(--accent); }
+    #btnBuddy[aria-pressed="true"], #btnBuddy.active {
+      color: var(--accent, #2dd4bf);
+      border-color: var(--accent, #2dd4bf);
+      box-shadow: 0 0 0 1px var(--accent, #2dd4bf);
+    }
 
     /* Main */
     #chat {
@@ -271,7 +276,7 @@
       pointer-events: auto;
       display: none;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 14px;
+      font-size: 16px;
       line-height: 1.25;
       color: var(--text, #e2e8f0);
       background: transparent;
@@ -291,7 +296,7 @@
       transition: opacity 0.25s ease;
     }
     #buddy-float .buddy-meta {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted, #94a3b8);
       margin: 0;
       word-break: break-word;
@@ -756,7 +761,11 @@
       if (!buddyFloat) return;
       buddyFloat.classList.toggle("open", buddyOn);
       buddyFloat.setAttribute("aria-hidden", buddyOn ? "false" : "true");
-      if (btnBuddy) btnBuddy.setAttribute("aria-pressed", buddyOn ? "true" : "false");
+      if (btnBuddy) {
+        btnBuddy.setAttribute("aria-pressed", buddyOn ? "true" : "false");
+        btnBuddy.classList.toggle("active", !!buddyOn);
+        btnBuddy.title = buddyOn ? "Buddy on (click or /buddy off)" : "Buddy off (click or /buddy on)";
+      }
       if (buddyOn) {
         loadBuddy().then(function () { setBuddyAnim("wave"); });
       } else {
