@@ -66,7 +66,11 @@ _CALC_EXPR = re.compile(
 _CALC_BARE = re.compile(r"^\s*([0-9]+(?:\s*[\+\-\*\/]\s*[0-9]+)+)\s*$")
 _WEATHER = re.compile(r"\b(weather|temperature|mausam|forecast)\b", re.I)
 _TIME = re.compile(r"\b(what\s+time|current\s+time|time\s+now|aaj\s+(ki\s+)?tarikh|date\s+today)\b", re.I)
-_SEARCH = re.compile(r"\b(search|google|look\s*up|latest\s+news)\b", re.I)
+_SEARCH = re.compile(
+    r"\b(search|google|look\s*up|latest\s+news|current\s+news|headline|news|khabar|"
+    r"trending|twitter|what.?s\s+happening|kya\s+chal\s+raha)\b",
+    re.I,
+)
 _WIKI = re.compile(r"\b(who\s+is|what\s+is|wikipedia|explain)\b", re.I)
 _FX = re.compile(
     r"\b(?:convert|change)\s+([0-9.]+)\s*([A-Za-z]{3})\s+(?:to|in)\s+([A-Za-z]{3})\b",
