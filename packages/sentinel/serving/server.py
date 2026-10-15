@@ -927,6 +927,18 @@ def create_app(
                     _pol = evaluate_user_text(raw)
                     if not _pol.allow:
                         lat = (time.perf_counter() - t0) * 1000.0
+                        # Apply metacognition overrides (e.g. freeze memory writes)
+                        try:
+                            from sentinel.megha.policy import apply_meta_overrides
+                            _meta = apply_meta_overrides(_pol)
+                            if _meta.get("freeze_writes"):
+                                with _lock:
+                                    sess = _sessions.get(sid)
+                                    if sess is not None:
+                                        sess["memory_frozen"] = True
+                                        sess["anomaly"] = True
+                        except Exception:
+                            pass
                         append_turn(sid, "user", raw)
                         msg = _pol.user_message or "Request blocked by Megha security policy."
                         append_turn(sid, "assistant", msg)

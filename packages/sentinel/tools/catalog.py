@@ -418,6 +418,28 @@ def tool_schemas() -> list[dict[str, Any]]:
                 },
             },
         },
+        {
+            "name": "megha",
+            "description": (
+                "Megha defensive security assistant: checklists, secure code/config review, "
+                "incident triage, authorized assessment plans. Defense only — no exploits."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "description": "checklist|code_review|config_review|assess_plan|incident_triage|compliance_map|debug_security|help|auto",
+                    },
+                    "text": {"type": "string"},
+                    "target_type": {"type": "string", "description": "web|api|host"},
+                    "authorized": {"type": "boolean"},
+                    "scope": {"type": "string"},
+                    "attestor": {"type": "string"},
+                    "framework": {"type": "string"},
+                },
+            },
+        },
 
     ]
 
