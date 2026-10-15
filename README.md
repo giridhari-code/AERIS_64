@@ -32,18 +32,18 @@ The small checkpoints under `checkpoints/examples/` are **side-car configs only*
 
 | Layer | Stack | Role |
 |-------|--------|------|
-| **Model** | Python | Training, neural field, fast/slow memory, inference (`src/neurofield`) |
-| **Edge** | TypeScript + Bun | API gateway, git helpers, future UI/agent orchestration (`apps/web`) |
+| **Model** | Python | Training, neural field, fast/slow memory, inference (`src/sentinel`) |
+| **Frontend** | TypeScript + Bun | Chat UI only (`apps/frontend`) — proxies to Python API |
 
 ```bash
 # Python model server
 uvicorn "sentinel.serving.server:create_app" --factory --port 8000
 
 # Bun edge (proxies chat → Python, exposes /v1/git/*)
-cd apps/web && bun install && bun run dev   # :3000
+cd apps/frontend && bun install && bun run dev   # :3000
 ```
 
-See [apps/web/README.md](apps/web/README.md).
+See [apps/frontend/README.md](apps/frontend/README.md).
 
 ---
 
@@ -71,7 +71,7 @@ AERIS_64/
 │   ├── audits/              # Engineering audits & patch notes
 │   └── archive/             # Historical notes
 ├── deploy/                  # Docker, k8s, systemd
-├── apps/web/                # TypeScript + Bun edge (API gateway, git helpers)
+├── apps/frontend/           # TypeScript + Bun UI only (proxies to :8000)
 ├── artifacts/               # Local outputs (gitignored content)
 └── pyproject.toml
 ```
