@@ -25,7 +25,7 @@ Decorative only. Does **not** write or debug code.
 
 ## Web UI (floating)
 
-- Navbar me **Buddy** toggle (◉).
+- Navbar me koi buddy icon **nahi** — chat me **`/buddy on`** (ya `--buddy on`) se show, **`/buddy off`** (ya `--buddy off`) se hide.
 - On hone par buddy **navbar ke thoda neeche, top-right floating** dikhta hai — content ke **upar overlay** (display push nahi hota), thread ke **andar nahi**.
 - Soft **bob animation** + idle blink; **Pet** se short pet animation.
 - Preference `localStorage.sentinel_buddy_on` me save.
@@ -59,7 +59,7 @@ Animation follows AERIS chat:
 - Greeting → wave
 - Model reply → talk
 - Funny / excited text → happy / excited
-- Double-click float to hide; topbar ◉ toggles on/off
+- Double-click float to hide; chat `/buddy on` / `/buddy off` toggles on/off
 
 
 ## One HTML file (single source)

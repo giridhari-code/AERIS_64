@@ -25,11 +25,15 @@ def test_different_users_may_differ():
 def test_commands():
     assert is_buddy_command("/buddy")
     assert is_buddy_command("/buddy pet")
+    assert is_buddy_command("--buddy on")
+    assert is_buddy_command("--Buddy off")
     assert not is_buddy_command("hello")
     text = handle_buddy_command("/buddy", "u1")
     b = hatch_buddy("u1")
     assert b.name in text and b.species_name in text
     assert handle_buddy_command("/buddy on", "u1") == "BUDDY_ON"
     assert handle_buddy_command("/buddy off", "u1") == "BUDDY_OFF"
+    assert handle_buddy_command("--buddy on", "u1") == "BUDDY_ON"
+    assert handle_buddy_command("--Buddy off", "u1") == "BUDDY_OFF"
     pet = handle_buddy_command("/buddy pet", "u1")
     assert "♥" in pet or "heart" in pet.lower() or "*" in pet

@@ -1437,7 +1437,7 @@ def create_app(
 
     @app.post("/v1/buddy")
     def buddy_post(body: dict, api_key: Optional[str] = Depends(require_api_key)):
-        from sentinel.buddy import hatch_buddy, pet_buddy, handle_buddy_command
+        from sentinel.buddy import hatch_buddy, pet_buddy, handle_buddy_command, is_buddy_command
         body = body or {}
         # Prefer explicit user_id from UI so hatch stays stable per browser
         owner = str(body.get("user_id") or "").strip() or (
@@ -1452,7 +1452,7 @@ def create_app(
                 "buddy": b.to_public_dict(),
                 "placement": "float_below_navbar",
             }
-        text = handle_buddy_command(cmd if cmd.startswith("/") else "/buddy", str(owner))
+        text = handle_buddy_command(cmd if is_buddy_command(cmd) else "/buddy", str(owner))
         return {
             "product": "Buddy",
             "text": text,

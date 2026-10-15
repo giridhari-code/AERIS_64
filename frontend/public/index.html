@@ -106,11 +106,6 @@
       display: grid; place-items: center; font-size: 1rem;
     }
     .icon-btn:hover { color: var(--text); border-color: var(--accent); }
-    #btnBuddy[aria-pressed="true"], #btnBuddy.active {
-      color: var(--accent, #2dd4bf);
-      border-color: var(--accent, #2dd4bf);
-      box-shadow: 0 0 0 1px var(--accent, #2dd4bf);
-    }
 
     /* Main */
     #chat {
@@ -383,7 +378,6 @@
         <span class="dot" aria-hidden="true"></span>
         <span id="statusText">…</span>
       </div>
-      <button type="button" class="icon-btn" id="btnBuddy" title="Buddy on/off" aria-label="Toggle Buddy" aria-pressed="false">◉</button>
       <button type="button" class="icon-btn" id="btnNew" title="New chat" aria-label="New chat">↻</button>
     </div>
   </header>
@@ -672,7 +666,6 @@
     const buddyFloat = document.getElementById("buddy-float");
     const buddyAscii = document.getElementById("buddyAscii");
     const buddyMeta = document.getElementById("buddyMeta");
-    const btnBuddy = document.getElementById("btnBuddy");
     let buddyOn = localStorage.getItem(BUDDY_KEY) === "1";
     let buddyFrames = null;
     let buddyFrameIdx = 0;
@@ -737,15 +730,7 @@
     function setBuddyVisible(on) {
       buddyOn = !!on;
       try { localStorage.setItem(BUDDY_KEY, buddyOn ? "1" : "0"); } catch (e) {}
-      // 1) Navbar — always
-      var btn = document.getElementById("btnBuddy");
-      if (btn) {
-        btn.setAttribute("aria-pressed", buddyOn ? "true" : "false");
-        if (buddyOn) btn.classList.add("active");
-        else btn.classList.remove("active");
-        btn.title = buddyOn ? "Buddy on — /buddy off" : "Buddy off — /buddy on";
-      }
-      // 2) Float — always
+      // Float — always
       var panel = document.getElementById("buddy-float");
       var ascii = document.getElementById("buddyAscii");
       var meta = document.getElementById("buddyMeta");
@@ -849,7 +834,6 @@
       setBuddyAnim("pet");
     };
 
-    if (btnBuddy) btnBuddy.addEventListener("click", function () { setBuddyVisible(!buddyOn); });
     if (buddyFloat) {
       buddyFloat.addEventListener("dblclick", function () { setBuddyVisible(false); });
     }
