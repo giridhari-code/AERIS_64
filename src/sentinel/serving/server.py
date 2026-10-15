@@ -867,14 +867,24 @@ def create_app(
                     owner = _owner(api_key) or (api_key or sid)
                     text = handle_buddy_command(_raw0, str(owner))
                     if text:
+                        # Control tokens for UI; short human message for transcript
+                        if text == "BUDDY_ON":
+                            msg = "Buddy on."
+                            meta = {"buddy": True, "buddy_ui": "on"}
+                        elif text == "BUDDY_OFF":
+                            msg = "Buddy off."
+                            meta = {"buddy": True, "buddy_ui": "off"}
+                        else:
+                            msg = text
+                            meta = {"buddy": True}
                         append_turn(sid, "user", _raw0)
-                        append_turn(sid, "assistant", text)
+                        append_turn(sid, "assistant", msg)
                         return ChatResponse(
-                            text=text,
+                            text=msg,
                             session_id=sid,
                             latency_ms=0.0,
                             model="buddy",
-                            meta_rag={"buddy": True},
+                            meta_rag=meta,
                         )
             except Exception as e:
                 logger.warning("buddy command: %s", e)
@@ -1386,7 +1396,7 @@ def create_app(
         b = hatch_buddy(str(owner or "anonymous"))
         return {
             "product": "Buddy",
-            "buddy": b.to_dict(),
+            "buddy": b.to_public_dict(),
             "ascii": b.render(),
             "placement": "float_below_navbar",
         }
@@ -1405,14 +1415,14 @@ def create_app(
             return {
                 "product": "Buddy",
                 "text": pet_buddy(str(owner)),
-                "buddy": b.to_dict(),
+                "buddy": b.to_public_dict(),
                 "placement": "float_below_navbar",
             }
         text = handle_buddy_command(cmd if cmd.startswith("/") else "/buddy", str(owner))
         return {
             "product": "Buddy",
             "text": text,
-            "buddy": b.to_dict(),
+            "buddy": b.to_public_dict(),
             "placement": "float_below_navbar",
         }
 

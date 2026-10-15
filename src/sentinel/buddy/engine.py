@@ -98,6 +98,17 @@ class Buddy:
         d = asdict(self)
         return d
 
+    def to_public_dict(self) -> dict[str, Any]:
+        """Smaller payload for UI float (faster over wire)."""
+        return {
+            "name": self.name,
+            "species_name": self.species_name,
+            "rarity": self.rarity,
+            "shiny": self.shiny,
+            "sprite_lines": self.sprite_lines,
+            "animations": self.animations,
+        }
+
 
 def hatch_buddy(user_id: str) -> Buddy:
     """Same user_id → same buddy forever (deterministic)."""

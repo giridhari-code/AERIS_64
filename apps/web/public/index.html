@@ -271,8 +271,8 @@
       pointer-events: auto;
       display: none;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12px;
-      line-height: 1.2;
+      font-size: 14px;
+      line-height: 1.25;
       color: var(--text, #e2e8f0);
       background: transparent;
       border: none;
@@ -291,7 +291,7 @@
       transition: opacity 0.25s ease;
     }
     #buddy-float .buddy-meta {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted, #94a3b8);
       margin: 0;
       word-break: break-word;
@@ -575,6 +575,24 @@
       
       const q = (text != null ? text : promptEl.value).trim();
       if (!q || busy) return;
+      // Local buddy on/off — no model wait
+      var bm = q.match(/^\/buddy\s*(on|off)?\s*$/i);
+      if (bm) {
+        promptEl.value = "";
+        autoGrow();
+        var onOff = (bm[1] || "on").toLowerCase();
+        if (onOff === "off") {
+          setBuddyVisible(false);
+          if (typeof addMessage === "function") addMessage("assistant", "Buddy off.");
+          else if (typeof addBubble === "function") addBubble("bot", "Buddy off.");
+        } else {
+          setBuddyVisible(true);
+          if (typeof addMessage === "function") addMessage("assistant", "Buddy on.");
+          else if (typeof addBubble === "function") addBubble("bot", "Buddy on.");
+        }
+        return;
+      }
+
       promptEl.value = "";
       autoGrow();
       addMessage("user", q);
@@ -676,6 +694,7 @@
     let buddyFrameIdx = 0;
     let buddyIdleTimer = null;
     let buddyAnimMap = {};
+    let buddyCache = null;
     let buddyAnimName = "idle";
     let buddyUserId = localStorage.getItem("sentinel_buddy_uid") || ("web-" + Math.random().toString(36).slice(2, 10));
     localStorage.setItem("sentinel_buddy_uid", buddyUserId);
@@ -767,7 +786,30 @@
       buddyAnimMap = { idle: buddyFrames, blink: buddyFrames, talk: buddyFrames };
     }
 
+    function applyBuddyData(b) {
+      if (!b) return;
+      if (buddyMeta) {
+        buddyMeta.textContent = b.name
+          ? (b.name + " · " + (b.species_name || ""))
+          : "Buddy";
+      }
+      if (b.animations && typeof b.animations === "object") {
+        buddyAnimMap = b.animations;
+        buddyFrames = b.animations.idle || b.animations.blink || [];
+      } else if (b.sprite_lines) {
+        const art = b.sprite_lines.join("\n");
+        buddyFrames = [art, art.replace(/o/, "-")];
+        buddyAnimMap = { idle: buddyFrames, blink: buddyFrames };
+      }
+      if (buddyAscii && buddyFrames && buddyFrames[0]) buddyAscii.textContent = buddyFrames[0];
+    }
+
     async function loadBuddy() {
+
+      if (buddyCache && buddyCache.animations) {
+        applyBuddyData(buddyCache);
+        return;
+      }
       try {
         const r = await fetch("/v1/buddy", {
           method: "POST",
@@ -780,20 +822,9 @@
         if (!r.ok) { localBuddyFallback(); return; }
         const data = await r.json();
         const b = data.buddy || {};
-        if (buddyMeta) {
-          buddyMeta.textContent = b.name
-            ? (b.name + " · " + (b.species_name || ""))
-            : "Buddy";
-        }
-        if (b.animations && typeof b.animations === "object") {
-          buddyAnimMap = b.animations;
-          buddyFrames = b.animations.idle || b.animations.blink || [];
-        } else if (b.sprite_lines) {
-          const art = b.sprite_lines.join("\n");
-          buddyFrames = [art, art.replace(/o/, "-")];
-          buddyAnimMap = { idle: buddyFrames, blink: buddyFrames };
-        }
-        if (buddyAscii && buddyFrames && buddyFrames[0]) buddyAscii.textContent = buddyFrames[0];
+        buddyCache = b;
+        applyBuddyData(b);
+        return;
       } catch (e) {
         localBuddyFallback();
       }
