@@ -26,12 +26,15 @@ _WEATHER = re.compile(
     re.I,
 )
 _SEARCH = re.compile(
-    r"\b(search|google|look\s*up|latest\s+news|current\s+news|headline)\b",
+    r"\b(search|google|look\s*up|latest\s+news|current\s+news|headline|"
+    r"news|khabar|kya\s+chal\s+raha|trending|twitter|\bx\b\s+(pe|par|on)|"
+    r"what.?s\s+happening|break(?:ing)?\s+news)\b",
     re.I,
 )
 _TIME = re.compile(
     r"\b(what\s+time|current\s+time|aaj\s+(ki\s+)?tarikh|today'?s?\s+date|"
-    r"kitne\s+baje|date\s+today|time\s+now)\b",
+    r"kitne\s+baje|date\s+today|time\s+now|abhi\s+kitne|samay\s+kya|"
+    r"clock|timezone)\b",
     re.I,
 )
 _CALC = re.compile(
@@ -211,6 +214,14 @@ def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
         ).strip(" :?-")
         if q:
             notes.append(file_search(q))
+
+    # Open "give me news" without other tools
+    if not notes and re.search(
+        r"\b(news|khabar|headlines?|kya\s+chal\s+raha|update\s+do|batao\s+news)\b",
+        p,
+        re.I,
+    ):
+        notes.append(web_search_report(p, max_results=5))
 
     if not notes:
         return prompt, None

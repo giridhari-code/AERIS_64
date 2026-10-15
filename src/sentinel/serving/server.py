@@ -807,9 +807,30 @@ def create_app(
             if direct:
                 t0 = time.perf_counter()
                 raw = normalize_prompt(req.prompt)
-                _enriched, tool_note = enrich_prompt_with_tools(raw)
-                if tool_note and str(tool_note).strip():
-                    text = str(tool_note).strip()
+                # Prefer SI_v1 plan→tool→verify (Grok-style agent loop)
+                text = None
+                try:
+                    from sentinel.agent.si_v1 import run_si_v1, SI_v1Config, build_plan
+                    plan = build_plan(raw)
+                    # Only short-circuit when plan actually uses a tool (not compose-only)
+                    uses_tool = any(
+                        s.get("action") not in ("compose_answer", "verify_nonempty", "")
+                        for s in plan
+                    )
+                    if uses_tool:
+                        result = run_si_v1(raw, config=SI_v1Config(max_steps=6))
+                        if result.answer and result.stopped_reason not in (
+                            "empty_input",
+                            "no_tools",
+                        ):
+                            text = result.answer.strip()
+                except Exception as e:
+                    logger.warning("SI_v1 chat path failed, falling back to enrich: %s", e)
+                if not text:
+                    _enriched, tool_note = enrich_prompt_with_tools(raw)
+                    if tool_note and str(tool_note).strip():
+                        text = str(tool_note).strip()
+                if text:
                     lat = (time.perf_counter() - t0) * 1000.0
                     append_turn(sid, "user", raw)
                     append_turn(sid, "assistant", text)
@@ -818,7 +839,7 @@ def create_app(
                         text=text,
                         session_id=sid,
                         latency_ms=lat,
-                        model="tools",
+                        model="tools+si_v1",
                         meta_rag=None,
                     )
 
