@@ -563,12 +563,15 @@ def create_app(
     set_system_prompt(_sys)
     logger.info("System prompt set (%d chars)", len(_sys or ""))
 
-    # Backend = API only. Chat UI is the Bun frontend on :3000.
-    # Opt-in legacy UI: NEUROFIELD_SERVE_UI=1
-    static_dir = Path(__file__).parent / "static"
+    # Backend = API only. Canonical UI is apps/web (Bun :3000).
+    # SERVE_UI=1 may serve THAT same frontend folder for local debug — no second copy under serving/static.
+    _repo_root = Path(__file__).resolve().parents[3]
+    frontend_public = _repo_root / "apps" / "web" / "public"
+    static_dir = frontend_public if frontend_public.is_dir() else (Path(__file__).parent / "static")
     serve_ui = _env("SERVE_UI", "0") == "1"
     if serve_ui and static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        logger.info("SERVE_UI=1 — serving frontend from %s (prefer Bun :3000 in production)", static_dir)
 
     global _memory
     _memory = None
@@ -1304,11 +1307,16 @@ def create_app(
     # ------------------------------------------------------------------
     @app.get("/product")
     def product_page():
-        from fastapi.responses import FileResponse
-        path = Path(__file__).resolve().parent / "static" / "product.html"
+        """Product shell HTML — only when SERVE_UI=1; canonical host is Bun :3000/product."""
+        if not serve_ui:
+            raise HTTPException(
+                status_code=404,
+                detail="Product UI is on the frontend (:3000/product). Backend is API-only (set SERVE_UI=1 only for local debug).",
+            )
+        path = static_dir / "product.html"
         if not path.is_file():
-            raise HTTPException(status_code=404, detail="product.html missing")
-        return FileResponse(path)
+            raise HTTPException(status_code=404, detail="product.html missing under apps/web/public")
+        return FileResponse(str(path))
 
     @app.get("/v1/kalofacts")
     def kalofacts_list(api_key: Optional[str] = Depends(require_api_key)):
