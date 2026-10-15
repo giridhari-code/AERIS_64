@@ -294,64 +294,49 @@
       header h1 { font-size: 0.9rem; }
     }
   
-    /* Buddy float — below navbar, NOT inside chat/chart */
-#buddy-float {
+    /* Buddy — top center, no box, 20px */
+    #buddy-float {
       position: fixed;
-      top: calc(var(--header-h, 56px) + 10px);
-      right: 14px;
+      top: calc(var(--header-h, 56px) + 8px);
+      left: 0;
+      right: 0;
+      margin-left: auto;
+      margin-right: auto;
+      width: max-content;
+      max-width: 90vw;
       z-index: 40;
-      width: auto;
-      max-width: min(180px, 40vw);
       pointer-events: auto;
       display: none;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 18px;
-      line-height: 1.25;
+      font-size: 20px;
+      line-height: 1.2;
       color: var(--text, #e2e8f0);
       background: transparent;
       border: none;
-      border-radius: 0;
       padding: 0;
       box-shadow: none;
-      animation: buddy-bob 3.2s ease-in-out infinite;
+      text-align: center;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.9);
       user-select: none;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+      animation: buddy-bob 3.2s ease-in-out infinite;
     }
     #buddy-float.open { display: block !important; }
     #buddy-float:not(.open) { display: none !important; }
     #buddy-float .buddy-ascii {
       white-space: pre;
       margin: 2px 0 0;
-      min-height: 3.2em;
-      transition: opacity 0.25s ease;
+      min-height: 3.5em;
+      display: inline-block;
+      text-align: left;
     }
     #buddy-float .buddy-meta {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--muted, #94a3b8);
       margin: 0;
-      word-break: break-word;
-      opacity: 0.9;
+      opacity: 0.95;
     }
 
-    #buddy-float .buddy-actions {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    #buddy-float button {
-      font: inherit;
-      font-size: 10px;
-      padding: 4px 8px;
-      border-radius: 6px;
-      border: 1px solid rgba(148,163,184,0.4);
-      background: rgba(30,41,59,0.9);
-      color: inherit;
-      cursor: pointer;
-    }
-    #buddy-float button:hover { border-color: #2dd4bf; }
-    #buddy-float.petting {
-      animation: buddy-pet 0.55s ease;
-    }
+
     @keyframes buddy-bob {
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(6px); }
@@ -362,14 +347,7 @@
       60% { transform: scale(1.04) rotate(3deg); }
       100% { transform: scale(1) rotate(0deg); }
     }
-    @media (max-width: 640px) {
-      #buddy-float {
-        right: 8px;
-        left: auto;
-        width: min(160px, 48vw);
-        font-size: 10px;
-      }
-    }
+
 
   
     #buddy-float.anim-float { animation: buddy-bob 2.4s ease-in-out infinite; }
@@ -405,15 +383,8 @@
       25% { transform: rotate(-6deg); }
       75% { transform: rotate(6deg); }
     }
-    #buddy-float .buddy-actions button.anim-btn {
-      opacity: 0.85;
-      font-size: 9px;
-      padding: 3px 6px;
-    }
-    #buddy-float .buddy-actions button.anim-btn.active {
-      border-color: #2dd4bf;
-      color: #2dd4bf;
-    }
+
+
     #buddy-mood {
       font-size: 9px;
       color: #94a3b8;
@@ -607,7 +578,7 @@
       const q = (text != null ? text : promptEl.value).trim();
       if (!q || busy) return;
       // Local buddy on/off — no model wait
-      var bm = q.match(/^\/\s*buddy\s*(on|off)?\s*$/i);
+      var bm = q.match(/^\/\s*buddy\s*(on|off)?\s*$/i);  /* on|off only */
       if (bm) {
         promptEl.value = "";
         autoGrow();
@@ -786,28 +757,36 @@
     function setBuddyVisible(on) {
       buddyOn = !!on;
       try { localStorage.setItem(BUDDY_KEY, buddyOn ? "1" : "0"); } catch (e) {}
-      // Navbar ALWAYS syncs (even if float node missing)
-      var btn = document.getElementById("btnBuddy") || btnBuddy;
+      // 1) Navbar — always
+      var btn = document.getElementById("btnBuddy");
       if (btn) {
         btn.setAttribute("aria-pressed", buddyOn ? "true" : "false");
-        btn.classList.toggle("active", !!buddyOn);
+        if (buddyOn) btn.classList.add("active");
+        else btn.classList.remove("active");
         btn.title = buddyOn ? "Buddy on — /buddy off" : "Buddy off — /buddy on";
       }
-      var panel = document.getElementById("buddy-float") || buddyFloat;
-      var ascii = document.getElementById("buddyAscii") || buddyAscii;
-      var meta = document.getElementById("buddyMeta") || buddyMeta;
+      // 2) Float — always
+      var panel = document.getElementById("buddy-float");
+      var ascii = document.getElementById("buddyAscii");
+      var meta = document.getElementById("buddyMeta");
       if (panel) {
-        panel.classList.toggle("open", buddyOn);
-        panel.setAttribute("aria-hidden", buddyOn ? "false" : "true");
-        panel.style.display = buddyOn ? "block" : "none";
+        if (buddyOn) {
+          panel.classList.add("open");
+          panel.style.display = "block";
+          panel.setAttribute("aria-hidden", "false");
+        } else {
+          panel.classList.remove("open");
+          panel.style.display = "none";
+          panel.setAttribute("aria-hidden", "true");
+        }
       }
-      if (buddyOn) {
-        loadBuddy().then(function () { setBuddyAnim("wave"); });
-      } else {
+      if (!buddyOn) {
         stopBuddyIdle();
         if (ascii) ascii.textContent = "";
         if (meta) meta.textContent = "";
         clearBuddyCssAnim();
+      } else {
+        loadBuddy().then(function () { setBuddyAnim("wave"); });
       }
     }
 
