@@ -1,4 +1,4 @@
-.PHONY: install install-dev test lint format build docker-build docker-run serve serve-chat count-1b ablation clean
+.PHONY: install install-dev test lint format build docker-build docker-run backend frontend serve serve-chat count-1b ablation clean
 
 PYTHON ?= python
 IMAGE  = sentinel:2.3.1
@@ -28,15 +28,18 @@ docker-run:
 	docker compose -f deploy/docker/docker-compose.yml up --build
 
 # Requires NEUROFIELD_CHECKPOINT=path/to/dir with model.safetensors
+backend:
+	PYTHONPATH=src uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
+
 serve:
-	PYTHONPATH=src uvicorn "sentinel.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+	PYTHONPATH=src uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
 
 frontend:
-	cd apps/frontend && bun install && bun run dev
+	cd frontend && bun install && bun run dev
 
 serve-chat:
 	@test -n "$$NEUROFIELD_CHECKPOINT" || (echo "Set NEUROFIELD_CHECKPOINT to a folder with model.safetensors"; exit 1)
-	PYTHONPATH=src uvicorn "sentinel.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+	PYTHONPATH=src uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
 
 count-1b:
 	PYTHONPATH=src $(PYTHON) scripts/research/count_params.py configs/aeris_1b.yaml

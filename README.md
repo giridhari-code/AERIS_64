@@ -33,17 +33,17 @@ The small checkpoints under `checkpoints/examples/` are **side-car configs only*
 | Layer | Stack | Role |
 |-------|--------|------|
 | **Model** | Python | Training, neural field, fast/slow memory, inference (`src/sentinel`) |
-| **Frontend** | TypeScript + Bun | Chat UI only (`apps/frontend`) — proxies to Python API |
+| **Frontend** | TypeScript + Bun | Chat UI only (`frontend`) — proxies to Python API |
 
 ```bash
 # Python model server
-uvicorn "sentinel.serving.server:create_app" --factory --port 8000
+uvicorn "sentinel.api.app:create_app" --factory --port 8000
 
 # Bun edge (proxies chat → Python, exposes /v1/git/*)
-cd apps/frontend && bun install && bun run dev   # :3000
+cd frontend && bun install && bun run dev   # :3000
 ```
 
-See [apps/frontend/README.md](apps/frontend/README.md).
+See [frontend/README.md](frontend/README.md).
 
 ---
 
@@ -71,7 +71,7 @@ AERIS_64/
 │   ├── audits/              # Engineering audits & patch notes
 │   └── archive/             # Historical notes
 ├── deploy/                  # Docker, k8s, systemd
-├── apps/frontend/           # TypeScript + Bun UI only (proxies to :8000)
+├── frontend/           # TypeScript + Bun UI only (proxies to :8000)
 ├── artifacts/               # Local outputs (gitignored content)
 └── pyproject.toml
 ```
@@ -105,7 +105,7 @@ python scripts/train/train_company.py \
 
 # Serve (folder must contain model.safetensors)
 export NEUROFIELD_CHECKPOINT=checkpoints/local_run
-uvicorn "sentinel.serving.server:create_app" --factory --host 0.0.0.0 --port 8000
+uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
 ```
 
 Open http://127.0.0.1:8000/
