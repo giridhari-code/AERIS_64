@@ -624,6 +624,12 @@
           const reply = (j.text || "").trim() || "(empty reply — train with more SFT data)";
           addMessage("assistant", reply, lat ? "latency " + lat : "");
           try { if (window.sentinelBuddyReact) window.sentinelBuddyReact(reply, "assistant"); } catch (_) {}
+          const bmeta = j.meta_rag || {};
+          if (bmeta.buddy_ui === "on" || bmeta.buddy_ui === "off") {
+            try { if (window.sentinelBuddySetVisible) window.sentinelBuddySetVisible(bmeta.buddy_ui === "on"); } catch (_) {}
+          } else if (bmeta.buddy && /♥/.test(reply)) {
+            try { if (window.sentinelBuddyPet) window.sentinelBuddyPet(); } catch (_) {}
+          }
           latencyEl.textContent = lat ? "last " + lat : "";
         }
       } catch (e) {
@@ -841,6 +847,13 @@
     window.sentinelBuddyReact = function (text, role) {
       if (!buddyOn) return;
       setBuddyAnim(moodFromChat(text, role || "user"));
+    };
+
+    /** Chat commands (/buddy on|off|pet) drive the float through meta_rag */
+    window.sentinelBuddySetVisible = function (on) { setBuddyVisible(!!on); };
+    window.sentinelBuddyPet = function () {
+      if (!buddyOn) return;
+      setBuddyAnim("pet");
     };
 
     if (btnBuddy) btnBuddy.addEventListener("click", function () { setBuddyVisible(!buddyOn); });
