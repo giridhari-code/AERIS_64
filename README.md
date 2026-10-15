@@ -1,5 +1,7 @@
 # SENTINEL
 
+*Think Smarter. Do More*
+
 **Two-speed memory architecture** (SENTINEL · formerly SENTINEL / AERIS) for recurrent language models  
 Research code · production-oriented layout · not a finished frontier product
 
