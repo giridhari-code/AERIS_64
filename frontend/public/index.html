@@ -3,30 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0c0f" />
-  <meta name="description" content="SENTINEL — local research model chat" />
+  <meta name="theme-color" content="#0a0a0b" />
+  <meta name="description" content="SENTINEL — direct, honest local research chat" />
   <title>SENTINEL</title>
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <style>
     :root {
-      --bg: #0b0c0f;
-      --surface: #12141a;
-      --surface-elevated: #181b24;
-      --border: #2a2f3d;
-      --border-subtle: #1e222d;
-      --text: #f0f2f5;
-      --text-secondary: #9aa3b2;
-      --accent: #6b8cff;
-      --accent-hover: #8aa4ff;
-      --accent-soft: rgba(107, 140, 255, 0.12);
-      --user: #1a2235;
-      --assistant: #141820;
+      /* Honesty amber theme (Idea 2) */
+      --bg: #0a0a0b;
+      --surface: #12110f;
+      --surface-elevated: #1a1814;
+      --border: #3d3428;
+      --border-subtle: #2a241c;
+      --text: #f5f0e8;
+      --text-secondary: #a89a86;
+      --accent: #e8a838;
+      --accent-hover: #f0c060;
+      --accent-soft: rgba(232, 168, 56, 0.14);
+      --user: #2a2216;
+      --assistant: #161410;
       --success: #3dd68c;
       --danger: #ff6b7a;
+      /* Buddy = mockup cute orb (cyan) — pairs with honesty amber UI */
+      --buddy: #4ecbff;
+      --buddy-deep: #1a7aad;
+      --buddy-glow: rgba(78, 203, 255, 0.5);
       --radius: 12px;
       --radius-lg: 16px;
       --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      --shadow: 0 8px 32px rgba(0,0,0,0.35);
+      --shadow: 0 8px 32px rgba(0,0,0,0.4);
       --safe-b: env(safe-area-inset-bottom, 0px);
       --header-h: 56px;
     }
@@ -265,52 +270,121 @@
       .welcome h2 { font-size: 1.15rem; }
     }
   
-    /* Buddy — top center, no box, 20px */
+    /* Buddy — mockup cute smiling orb + orbit ring (red-mark design) */
     #buddy-float {
       position: fixed;
-      top: calc(var(--header-h, 56px) + 4px);
-      left: 0;
-      right: 0;
-      margin-left: auto;
-      margin-right: auto;
-      width: max-content;
-      max-width: 90vw;
+      right: 18px;
+      bottom: calc(92px + var(--safe-b));
       z-index: 40;
       pointer-events: auto;
       display: none;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 20px;
-      line-height: 1.2;
-      color: var(--text, #e2e8f0);
       background: transparent;
       border: none;
       padding: 0;
-      box-shadow: none;
       text-align: center;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.9);
       user-select: none;
       animation: buddy-bob 3.2s ease-in-out infinite;
     }
     #buddy-float.open { display: block !important; }
     #buddy-float:not(.open) { display: none !important; }
-    #buddy-float .buddy-ascii {
-      white-space: pre;
-      margin: 2px 0 0;
-      min-height: 3.5em;
-      display: inline-block;
-      text-align: left;
-    }
+    #buddy-float .buddy-ascii { display: none !important; }
     #buddy-float .buddy-meta {
-      font-size: 13px;
-      color: var(--muted, #94a3b8);
-      margin: 0;
+      font-size: 11px;
+      color: var(--accent);
+      margin-top: 8px;
       opacity: 0.95;
+      font-weight: 500;
+      letter-spacing: 0.02em;
     }
-
-    /* When buddy is on, don't cover welcome / chat title */
-    body:has(#buddy-float.open) #chat,
-    body:has(#buddy-float.open) main {
-      padding-top: 6.5rem;
+    .buddy-stage {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      margin: 0 auto;
+    }
+    /* Orbit ring (mockup) */
+    .buddy-orbit {
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(78, 203, 255, 0.35);
+      box-shadow: 0 0 12px rgba(78, 203, 255, 0.25);
+      animation: buddy-orbit-spin 8s linear infinite;
+      pointer-events: none;
+    }
+    .buddy-orbit::before {
+      content: "";
+      position: absolute;
+      top: -3px;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      margin-left: -3px;
+      border-radius: 50%;
+      background: var(--buddy);
+      box-shadow: 0 0 8px var(--buddy-glow);
+    }
+    .buddy-orb {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 72px;
+      height: 72px;
+      margin: -36px 0 0 -36px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 32% 28%, #c8f4ff 0%, var(--buddy) 42%, var(--buddy-deep) 78%, #0a3048 100%);
+      box-shadow:
+        0 0 28px var(--buddy-glow),
+        0 0 56px rgba(78, 203, 255, 0.22),
+        inset 0 -10px 18px rgba(0,0,0,0.28),
+        inset 0 8px 14px rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    .buddy-orb::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -14px;
+      width: 40px;
+      height: 12px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: transparent;
+      box-shadow: 0 0 16px 3px var(--buddy-glow);
+      opacity: 0.65;
+    }
+    .buddy-face {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 11px;
+      padding-bottom: 10px;
+    }
+    .buddy-eye {
+      width: 9px;
+      height: 13px;
+      border-radius: 50%;
+      background: #0a1a28;
+      box-shadow: 0 0 0 1.5px rgba(255,255,255,0.2);
+    }
+    .buddy-mouth {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      width: 16px;
+      height: 9px;
+      margin-left: -8px;
+      border: 2.5px solid #0a1a28;
+      border-top: none;
+      border-radius: 0 0 12px 12px;
+      opacity: 0.9;
+    }
+    @keyframes buddy-orbit-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
 
 
@@ -377,7 +451,7 @@
       <img src="/logo.svg" alt="" width="28" height="28" />
       <div class="brand-text">
         <strong>SENTINEL</strong>
-        <span>Research model · local</span>
+        <span>Direct · Honest</span>
       </div>
     </div>
     <nav class="nav" aria-label="Primary">
@@ -434,10 +508,20 @@
     </div>
   </footer>
 
-    <aside id="buddy-float" aria-label="Buddy companion" aria-hidden="true" title="Double-click to hide">
-    <div class="buddy-meta" id="buddyMeta"></div>
-    <div class="buddy-ascii" id="buddyAscii"></div>
-  </aside>
+    <aside id="buddy-float" aria-label="Buddy companion" aria-hidden="true" title="Buddy — double-click to hide">
+      <div class="buddy-stage">
+        <div class="buddy-orbit" aria-hidden="true"></div>
+        <div class="buddy-orb" id="buddyOrb" title="Buddy">
+          <div class="buddy-face">
+            <span class="buddy-eye"></span>
+            <span class="buddy-eye"></span>
+            <span class="buddy-mouth"></span>
+          </div>
+        </div>
+      </div>
+      <div class="buddy-meta" id="buddyMeta">Buddy</div>
+      <div class="buddy-ascii" id="buddyAscii" hidden></div>
+    </aside>
 
   <script>
     const thread = document.getElementById("thread");
