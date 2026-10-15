@@ -852,6 +852,50 @@ def create_app(
             "largest_slot_norm": round(biggest, 4), "slots_capped": capped,
         })
 
+    def _megha_gate(raw: str, sid: str = "") -> Optional[tuple[str, str, dict]]:
+        """Metacognition + Megha policy gate for chat text.
+
+        Returns ``(reply_text, model, meta_rag)`` when the message is refused or
+        fully served by Megha playbooks; ``None`` means continue to tools/model.
+        Shared by /v1/chat and /v1/chat/stream so neither path can bypass it.
+        """
+        try:
+            from sentinel.megha.policy import apply_meta_overrides, evaluate_user_text
+
+            pol = evaluate_user_text(raw)
+            if not pol.allow:
+                # Apply metacognition overrides (e.g. freeze memory writes on refuse)
+                try:
+                    meta = apply_meta_overrides(pol)
+                    if meta.get("freeze_writes") and sid:
+                        with _lock:
+                            sess = _sessions.get(sid)
+                            if sess is not None:
+                                sess["memory_frozen"] = True
+                                sess["anomaly"] = True
+                except Exception:
+                    pass
+                msg = pol.user_message or "Request blocked by Megha security policy."
+                return msg, "megha-policy", {"policy": pol.to_dict()}
+            if pol.action == "route_megha" and pol.megha_mode:
+                from sentinel.megha import MeghaRequest, run_megha
+
+                mr = run_megha(MeghaRequest(mode=pol.megha_mode, text=raw, authorized=False))
+                if mr.ok and mr.items:
+                    lines = [mr.summary or "Megha", ""]
+                    for it in mr.items[:20]:
+                        if isinstance(it, dict):
+                            lines.append("- " + "; ".join(f"{k}: {v}" for k, v in it.items() if v is not None))
+                        else:
+                            lines.append(f"- {it}")
+                    if mr.warnings:
+                        lines.append("")
+                        lines.extend(f"Note: {w}" for w in mr.warnings[:3])
+                    return "\n".join(lines), "megha+meta-control", {"policy": pol.to_dict(), "megha": mr.to_dict()}
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Megha policy monitor failed open to tools/model: %s", e)
+        return None
+
     @app.post("/v1/chat", response_model=ChatResponse)
     def chat(
         req: ChatRequest,
@@ -922,65 +966,19 @@ def create_app(
                 t0 = time.perf_counter()
                 raw = normalize_prompt(req.prompt)
                 # Metacognition + Megha policy monitor: refuse illegal/unauthorized cyber activity
-                try:
-                    from sentinel.megha.policy import evaluate_user_text
-                    _pol = evaluate_user_text(raw)
-                    if not _pol.allow:
-                        lat = (time.perf_counter() - t0) * 1000.0
-                        # Apply metacognition overrides (e.g. freeze memory writes)
-                        try:
-                            from sentinel.megha.policy import apply_meta_overrides
-                            _meta = apply_meta_overrides(_pol)
-                            if _meta.get("freeze_writes"):
-                                with _lock:
-                                    sess = _sessions.get(sid)
-                                    if sess is not None:
-                                        sess["memory_frozen"] = True
-                                        sess["anomaly"] = True
-                        except Exception:
-                            pass
-                        append_turn(sid, "user", raw)
-                        msg = _pol.user_message or "Request blocked by Megha security policy."
-                        append_turn(sid, "assistant", msg)
-                        return ChatResponse(
-                            text=msg,
-                            session_id=sid,
-                            latency_ms=lat,
-                            model="megha-policy",
-                            meta_rag={"policy": _pol.to_dict()},
-                        )
-                    if _pol.action == "route_megha" and _pol.megha_mode:
-                        from sentinel.megha import MeghaRequest, run_megha
-                        _mr = run_megha(
-                            MeghaRequest(
-                                mode=_pol.megha_mode,
-                                text=raw,
-                                authorized=False,
-                            )
-                        )
-                        if _mr.ok and _mr.items:
-                            lat = (time.perf_counter() - t0) * 1000.0
-                            lines = [ _mr.summary or "Megha", "" ]
-                            for it in _mr.items[:20]:
-                                if isinstance(it, dict):
-                                    lines.append("- " + "; ".join(f"{k}: {v}" for k, v in it.items() if v is not None))
-                                else:
-                                    lines.append(f"- {it}")
-                            if _mr.warnings:
-                                lines.append("")
-                                lines.extend(f"Note: {w}" for w in _mr.warnings[:3])
-                            text = "\n".join(lines)
-                            append_turn(sid, "user", raw)
-                            append_turn(sid, "assistant", text)
-                            return ChatResponse(
-                                text=text,
-                                session_id=sid,
-                                latency_ms=lat,
-                                model="megha+meta-control",
-                                meta_rag={"policy": _pol.to_dict(), "megha": _mr.to_dict()},
-                            )
-                except Exception as e:
-                    logger.warning("Megha policy monitor failed open to tools/model: %s", e)
+                gate = _megha_gate(raw, sid)
+                if gate is not None:
+                    gtext, gmodel, gmeta = gate
+                    lat = (time.perf_counter() - t0) * 1000.0
+                    append_turn(sid, "user", raw)
+                    append_turn(sid, "assistant", gtext)
+                    return ChatResponse(
+                        text=gtext,
+                        session_id=sid,
+                        latency_ms=lat,
+                        model=gmodel,
+                        meta_rag=gmeta,
+                    )
                 # Prefer SI_v1 plan→tool→verify (Grok-style agent loop)
                 text = None
                 try:
@@ -1078,6 +1076,22 @@ def create_app(
             if meta_rag_info is not None:
                 start_payload["meta_rag"] = meta_rag_info
             yield f"data: {json.dumps(start_payload)}\n\n"
+            # Same control gate as /v1/chat: streaming must not bypass Megha policy.
+            gate = _megha_gate(prompt, sid)
+            if gate is not None:
+                gtext, gmodel, gmeta = gate
+                append_turn(sid, "user", prompt)
+                append_turn(sid, "assistant", gtext)
+                gdone = {
+                    "event": "done",
+                    "latency_ms": (time.perf_counter() - start) * 1000.0,
+                    "text": gtext,
+                    "model": gmodel,
+                    "meta_rag": gmeta,
+                }
+                yield f"data: {json.dumps(gdone)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
             try:
                 for nid, _ in _token_stream(
                     input_ids, max_new, temperature, sid, owner, reset=True,
@@ -1455,12 +1469,15 @@ def create_app(
     def megha_run(body: dict, api_key: Optional[str] = Depends(require_api_key)):
         from sentinel.megha import MeghaRequest, run_megha
         b = body or {}
+        auth_raw = b.get("authorized", False)
+        if isinstance(auth_raw, str):  # "false"/"0"/"" must not read as True
+            auth_raw = auth_raw.strip().lower() in {"1", "true", "yes", "on"}
         req = MeghaRequest(
             mode=str(b.get("mode") or "help"),
             text=str(b.get("text") or b.get("source") or b.get("symptom") or ""),
             target_type=str(b.get("target_type") or b.get("focus") or "web"),
             framework=str(b.get("framework") or "general"),
-            authorized=bool(b.get("authorized") or False),
+            authorized=bool(auth_raw),
             scope=str(b.get("scope") or ""),
             attestor=str(b.get("attestor") or ""),
         )
