@@ -575,8 +575,9 @@
 
     function setBusy(v) {
       busy = v;
-      sendBtn.disabled = v;
-      promptEl.disabled = v;
+      // Input stays ENABLED while a reply generates — so /buddy on|off (and typing)
+      // always work. Real sends while busy get a hint in send() instead.
+      sendBtn.style.opacity = v ? "0.55" : "";
     }
 
     function autoGrow() {
@@ -608,12 +609,14 @@
     checkHealth();
     setInterval(checkHealth, 30000);
 
+    const PROMPT_PLACEHOLDER = promptEl.placeholder;
+
     async function send(text) {
       
       const q = (text != null ? text : promptEl.value).trim();
-      if (!q || busy) return;
-      // Local buddy on/off — no model wait
-      var bm = q.match(/^\/\s*buddy\s*(on|off)?\s*$/i);  /* on|off only */
+      if (!q) return;
+      // Local buddy on/off — no model wait; runs even while a reply is generating
+      var bm = q.match(/^(?:\/|--)\s*buddy\s*(on|off)?\s*$/i);  /* /buddy or --buddy, on|off */
       if (bm) {
         promptEl.value = "";
         autoGrow();
@@ -627,6 +630,11 @@
           if (typeof addMessage === "function") addMessage("assistant", "Buddy on.");
           else if (typeof addBubble === "function") addBubble("bot", "Buddy on.");
         }
+        return;
+      }
+      if (busy) {
+        promptEl.placeholder = "⌛ waiting for reply…";
+        setTimeout(function () { promptEl.placeholder = PROMPT_PLACEHOLDER; }, 1600);
         return;
       }
 
