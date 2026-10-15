@@ -20,3 +20,11 @@ Decorative only. Does **not** write or debug code.
 - Shiny 1% independent of rarity
 - 6 eye styles, 8 hats (rarer hats gated)
 - Name + personality from user hash (no external LLM required)
+
+## Web UI (floating)
+
+- Navbar me **Buddy** toggle (◉).
+- On hone par buddy **navbar ke thoda neeche, right side floating** dikhta hai — chat/thread/chart ke **andar nahi**.
+- Soft **bob animation** + idle blink; **Pet** se short pet animation.
+- Preference `localStorage.sentinel_buddy_on` me save.
+
