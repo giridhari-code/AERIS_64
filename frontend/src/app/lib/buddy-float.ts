@@ -222,7 +222,7 @@ export function initBuddy(): void {
     }
     const p = eggProgressNow();
     const r = data.required || 1;
-    if (buddyFloat) buddyFloat.classList.add("egg-mode");
+    
     if (buddyMeta) buddyMeta.textContent = p >= r ? "Egg · ready!" : eggMetaText();
     updateProgressBar(p, r);
     eggIdleSpeed = eggSpeedFor(p, r);
@@ -240,7 +240,7 @@ export function initBuddy(): void {
     let i = 0;
     const finish = () => {
       egg = null;
-      if (buddyFloat) buddyFloat.classList.remove("egg-mode");
+      
       const wrap = document.getElementById("buddyProgress");
       if (wrap) wrap.hidden = true;
       if (freshBuddy) {
