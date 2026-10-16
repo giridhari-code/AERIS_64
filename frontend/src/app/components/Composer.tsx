@@ -14,6 +14,8 @@ interface ComposerProps {
   temp: string;
   autoLen: boolean;
   latencyText: string;
+  modeLabel?: string;
+  onMode?: () => void;
   onSettings: (patch: SettingsPatch) => void;
   onInput: () => void;
   onSubmit: () => void;
@@ -71,7 +73,14 @@ export function Composer(p: ComposerProps) {
           )}
         </form>
         <div className="composer-meta">
-          {p.latencyText ? <span className="lat">{p.latencyText}</span> : <span />}
+          <div className="composer-meta-left">
+            {p.onMode && (
+              <button type="button" className="mode-pill footer-mode" onClick={p.onMode} title="Model & effort">
+                {p.modeLabel || "Fable"}
+              </button>
+            )}
+            {p.latencyText ? <span className="lat">{p.latencyText}</span> : null}
+          </div>
           <button type="button" className="link quiet" onClick={p.onClear}>
             Clear
           </button>

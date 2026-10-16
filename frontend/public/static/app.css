@@ -854,3 +854,16 @@
   font-size: 0.7rem;
   padding: 4px 8px;
 }
+
+.composer-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mode-pill.footer-mode {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  padding: 5px 10px;
+}
+.topbar .mode-pill { display: none; }

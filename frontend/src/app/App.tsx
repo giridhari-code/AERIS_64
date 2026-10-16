@@ -711,12 +711,10 @@ export function App() {
           health={health}
           menuOpen={sidebarOpen}
           user={accountUser}
-          modeLabel={`${modelById(settings.model).name} · ${settings.effort}`}
           onMenu={() => setSidebarOpen((v) => !v)}
           onNew={newChat}
           onLogout={handleLogout}
           onLogin={requestLogin}
-          onMode={() => setModeOpen(true)}
         />
         <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
           <div className="thread" id="thread">
@@ -744,6 +742,8 @@ export function App() {
           temp={settings.temp}
           autoLen={settings.autoLen}
           latencyText={latencyText}
+          modeLabel={`${modelById(settings.model).name} · ${settings.effort}`}
+          onMode={() => setModeOpen(true)}
           onSettings={updateSettings}
           onInput={autoGrow}
           onSubmit={() => send()}
