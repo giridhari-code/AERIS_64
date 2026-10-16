@@ -97,9 +97,10 @@ Clear fast-memory session state.
 Decorative ASCII companion + egg state for that identity.
 
 ### POST /v1/buddy
-`{"command":"/buddy|/buddy egg|/buddy pet","user_id":"…"}` →
-`{"text":…,"buddy":{…},"egg":{…}}`. While the egg is unhatched, `/buddy`
-answers with incubation status instead of the reveal.
+`{"command":"/buddy|/buddy egg|/buddy pet|/buddy mimic hi|/buddy mood|…","user_id":"…"}`
+→ `{"text":…,"buddy":{…},"egg":{…}}` (plus `"anim"` for animation commands,
+e.g. `/buddy dance`). While the egg is unhatched, `/buddy` answers with a short
+"see the float" note — hatch art never enters the chat.
 
 ### POST /v1/buddy/step
 `{"user_id":"…","n":1}` → one incubation step (the chat UI calls this after
@@ -117,6 +118,14 @@ and carries the revealed `buddy`. Egg env:
 | --- | --- |
 | `NEUROFIELD_BUDDY_DB` | egg store JSON (default `data/buddy/eggs.json`) |
 | `NEUROFIELD_BUDDY_EGG_PERIOD` | passive seconds per step (default 300 = 5 min) |
+
+### POST /v1/buddy/adopt
+`{"user_id":"u-…","from":"web-…"}` — first login: carry the guest (device)
+egg/buddy into the account and pin the companion key (same buddy on every
+device). No-op when the account already has a *started* egg (`messages > 0`)
+or the device has none. Response:
+`{"ok":true,"adopted":true,"buddy_key":"web-…","egg":{…}}` (plus `buddy` once
+hatched).
 
 ## Start server
 

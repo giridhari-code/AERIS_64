@@ -84,11 +84,18 @@ token gaps are not reset mid-stream.
   `Egg · 3/8 steps · next ~4m` and the wobble speeds up near hatching.
 - The float auto-opens once on the first visit (the egg is the discovery
   moment); an explicit `/buddy off` is respected. On hatching it plays the
-  crack sequence and reveals the buddy — deterministic per identity and
-  unchanged, so existing devices keep theirs. `/buddy egg` shows incubation
-  status in the transcript; plain `/buddy` stays the on/off toggle.
+  crack sequence, reveals the buddy and fires a one-time branded celebration
+  overlay **outside the chat** (click/Enter/Esc dismiss; seen-flag kept in
+  `sentinel_buddy_hatch_seen:<id>`). Chat never shows hatch art — `/buddy`
+  replies point at the float.
 - Identity follows the account: signed-in users incubate `u-<account id>`
-  (same egg on any device), guests keep the per-browser device id.
+  (same egg on any device), guests keep the per-browser device id. First
+  login adopts the guest egg into the account (`POST /v1/buddy/adopt`,
+  pinned companion key) so the same buddy carries over.
+- New chat commands surface through `meta_rag`: `mimic`/`joker` (echo
+  spoof), `mood` (emotion sensing), `stats`, `who`, `about`,
+  `dance|wave|happy|sleep|excited`. The app routes `meta_rag.buddy_anim` to
+  `window.sentinelBuddyAnim`; hooks `sentinelBuddyAnim/Refresh/Adopt`.
 - Server side: `packages/sentinel/buddy/eggs.py` (stdlib JSON store
   `NEUROFIELD_BUDDY_DB`, default `data/buddy/eggs.json`; passive period
   `NEUROFIELD_BUDDY_EGG_PERIOD`, default 300 s).

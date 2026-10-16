@@ -180,7 +180,8 @@ class EggStore:
         rec = self._record(data, uid, now)
         messages = int(rec.get("messages") or 0)
         created = float(rec.get("created_at") or now)
-        required = required_steps(uid)
+        # Adopted guest eggs keep their original goal (buddy key pinned).
+        required = required_steps(str(rec.get("buddy_key") or uid))
         period = egg_period_s()
         elapsed = max(0.0, now - created)
         time_steps = int(elapsed // period) if period > 0 else 0
@@ -221,3 +222,44 @@ class EggStore:
             rec["messages"] = int(rec.get("messages") or 0) + step
             self._save(data)
             return _public(self._snapshot(data, uid, ts))
+
+    def buddy_key(self, user_id: str) -> str | None:
+        """Pinned companion identity for this user (guest egg adopted by an account)."""
+        uid = self._uid(user_id)
+        with self._lock:
+            rec = self._load()["users"].get(uid)
+        if isinstance(rec, dict) and rec.get("buddy_key"):
+            return str(rec["buddy_key"])
+        return None
+
+    def adopt(self, src_user_id: str, dst_user_id: str, now: float | None = None) -> dict[str, Any]:
+        """Move a guest/device egg into an account on first login.
+
+        A *started* account egg (``messages > 0``) is never overwritten — the
+        account keeps its own companion. An untouched account egg (created by
+        merely opening the float) is replaced, so the login flow's race
+        (float loads first, adopt lands right after) still carries the guest
+        egg over. The moved record keeps ``buddy_key = src`` so the companion
+        name/species stays exactly the same before and after login.
+        """
+        src, dst = self._uid(src_user_id), self._uid(dst_user_id)
+        if src == dst:
+            return {"adopted": False, "reason": "same identity"}
+        ts = time.time() if now is None else float(now)
+        with self._lock:
+            data = self._load()
+            dst_rec = data["users"].get(dst)
+            if isinstance(dst_rec, dict) and int(dst_rec.get("messages") or 0) > 0:
+                return {"adopted": False, "reason": "account already has a started egg"}
+            rec = data["users"].get(src)
+            if not isinstance(rec, dict):
+                return {"adopted": False, "reason": "no guest egg to adopt"}
+            data["users"].pop(src, None)
+            rec["buddy_key"] = str(rec.get("buddy_key") or src)
+            data["users"][dst] = rec
+            self._save(data)
+            return {
+                "adopted": True,
+                "buddy_key": rec["buddy_key"],
+                "egg": _public(self._snapshot(data, dst, ts)),
+            }

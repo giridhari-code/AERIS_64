@@ -298,6 +298,15 @@
       font-weight: 500;
       max-width: 140px;
     }
+    #buddy-float .buddy-brand {
+      font-size: 8.5px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-secondary, #a89a86);
+      opacity: 0.85;
+      margin-bottom: 2px;
+    }
+    #buddy-float:hover { filter: brightness(1.06); }
     #buddy-float .buddy-progress {
       width: 72px;
       height: 4px;
@@ -312,9 +321,6 @@
       background: linear-gradient(90deg, #e8a838, #4ecbff);
       border-radius: 99px;
       transition: width 0.4s ease;
-    }
-    
-      to { transform: rotate(360deg); }
     }
     @keyframes buddy-bob {
       0%, 100% { transform: translateY(0); }
@@ -358,6 +364,59 @@
       0%, 100% { transform: rotate(0deg); }
       25% { transform: rotate(-6deg); }
       75% { transform: rotate(6deg); }
+    }
+
+    /* One-time hatch celebration — outside the chat; click / key to dismiss */
+    #buddy-hatch-overlay {
+      position: fixed; inset: 0; z-index: 140;
+      display: grid; place-items: center;
+      background: rgba(4, 10, 18, 0.72);
+      -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+      animation: buddy-fade-in 0.28s ease;
+      overflow: hidden;
+    }
+    #buddy-hatch-overlay .hatch-card {
+      position: relative; text-align: center;
+      padding: 24px 30px 20px; border-radius: 18px;
+      border: 1px solid rgba(232, 168, 56, 0.45);
+      background: linear-gradient(180deg, rgba(21, 27, 39, 0.98), rgba(12, 16, 26, 0.98));
+      box-shadow: 0 26px 64px rgba(0, 0, 0, 0.55);
+      max-width: min(88vw, 380px);
+      animation: buddy-hatch-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    }
+    #buddy-hatch-overlay .hatch-brand {
+      font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-secondary, #a89a86); margin-bottom: 10px;
+    }
+    #buddy-hatch-overlay .hatch-ascii {
+      white-space: pre; font-size: 15px; line-height: 1.2;
+      color: var(--text, #e2e8f0); margin: 0 0 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    #buddy-hatch-overlay .hatch-name {
+      font-size: 15px; font-weight: 600; color: var(--accent, #e8a838);
+    }
+    #buddy-hatch-overlay .hatch-sub {
+      font-size: 11px; color: var(--text-secondary, #a89a86);
+      margin-top: 6px; line-height: 1.5;
+    }
+    #buddy-hatch-overlay .hatch-confetti {
+      position: absolute; top: -14px; font-size: 20px;
+      animation: buddy-confetti-fall 2.6s linear infinite;
+    }
+    @keyframes buddy-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes buddy-hatch-pop {
+      from { opacity: 0; transform: scale(0.86); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes buddy-confetti-fall {
+      0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
+      12% { opacity: 1; }
+      100% { transform: translateY(102vh) rotate(540deg); opacity: 0.9; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #buddy-float, #buddy-hatch-overlay, #buddy-hatch-overlay .hatch-card,
+      #buddy-hatch-overlay .hatch-confetti { animation: none !important; }
     }
 
 

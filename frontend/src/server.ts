@@ -217,6 +217,13 @@ app.post("/v1/buddy/step", async (c) => {
   return c.json(r.body, r.status as 200);
 });
 
+// First login: carry the guest (device) egg/buddy into the account
+app.post("/v1/buddy/adopt", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/buddy/adopt", body);
+  return c.json(r.body, r.status as 200);
+});
+
 // ---- React app bundle (built in memory; rebuilt when src/app changes) ------
 
 let APP_JS = "";

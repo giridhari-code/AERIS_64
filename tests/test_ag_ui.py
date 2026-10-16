@@ -87,7 +87,7 @@ def test_ag_ui_buddy_command_short_circuits_model(client):
     assert r.status_code == 200
     events = sse_events(r.text)
     text = "".join(e.get("delta", "") for e in events if e["type"] == "TEXT_MESSAGE_CONTENT")
-    assert "Buddy on." in text
+    assert "Buddy on" in text
     end = next(e for e in events if e["type"] == "TEXT_MESSAGE_END")
     assert (end.get("metadata") or {}).get("sentinel", {}).get("model") == "buddy"
 

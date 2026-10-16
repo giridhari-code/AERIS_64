@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased — buddy v2: account link, hatch celebration, new commands
+
+- **Buddies ride the user account.** First login adopts the guest (device)
+  egg into the account (`POST /v1/buddy/adopt`,
+  `{"user_id":"u-…","from":"web-…"}`) and pins the companion key, so the same
+  egg/buddy follows the login on every device. A *started* account egg
+  (`messages > 0`) is never overwritten; an untouched one (created by the
+  float loading before the adopt lands) is replaced — later logins no-op
+  safely. Store rules covered in `tests/test_buddy_commands.py`.
+- **Hatching lives outside the chat.** Chat/AG-UI `/buddy` replies point at
+  the float ("Egg incubating — see Buddy float …"), the float owns the egg
+  art + progress bar, and the first hatch fires a one-time full-screen
+  celebration overlay (crack → confetti → reveal; click/Enter/Esc to
+  dismiss; remembered per user as `sentinel_buddy_hatch_seen:<id>`).
+- **New commands** (also `--buddy …` and bare `buddy …` spellings):
+  `/buddy mimic [text]` (joker nakal of the last message or given text),
+  `/buddy joker [text]`, `/buddy mood` (emotion sensing on your last
+  message — happy/sad/angry/tired/loving/curious/excited + float animation),
+  `/buddy stats` (curiosity/calm/loyalty bars), `/buddy who` (user + AERIS-64
+  link), `/buddy about` (AERIS-64 × buddy),
+  `/buddy dance|wave|happy|sleep|excited`. Command meta now carries
+  `buddy_anim` so the float mirrors it; frontend hooks
+  `sentinelBuddyAnim/Refresh/Adopt` added.
+- **Mood lexicon** extended (`packages/sentinel/buddy/mood.py`): Hinglish +
+  English emotion words (`khush/udaas/gussa/thak/tension/pyaar/…`),
+  `sense_mood()` powers `mimic`, `mood` and the float's reaction to chat.
+- Float polish: AERIS-64 brand header, progress bar, hover lift, branded
+  hatch overlay, reduced-motion support. The Bun edge proxies
+  `/v1/buddy/adopt`.
+
 ## Unreleased — buddy: Pokémon-style egg hatching
 
 - **Egg incubation (backend).** `packages/sentinel/buddy/eggs.py`: small

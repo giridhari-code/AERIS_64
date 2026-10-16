@@ -4,10 +4,19 @@ Decorative only. Does **not** write or debug code.
 
 ## Commands (chat)
 
-- `/buddy` — hatch/show your buddy (deterministic from user id)
-- `/buddy on` — show the floating companion
-- `/buddy off` — hide it
+Sab commands `/buddy …`, `--buddy …` aur bare `buddy …` — teeno spellings chalte hain.
+
+- `/buddy` / `/buddy status` — short status (incubation **float pe**, chat me nahi)
+- `/buddy on` / `/buddy off` — float show/hide
+- `/buddy egg` — float ka egg refresh
 - `/buddy pet` — pet animation with hearts
+- `/buddy mimic [text]` — joker nakal: last message (ya diya gaya text) ki funny copy
+- `/buddy joker [text]` — full joker-mode mimicry
+- `/buddy mood` — aapki last message ki emotion padho (happy/sad/angry/tired/…)
+- `/buddy stats` — curiosity / calm / loyalty bars + personality
+- `/buddy who` (alias `link`) — user + AERIS-64 link info
+- `/buddy about` — AERIS-64 companion info
+- `/buddy dance|party|wave|happy|sleep|excited` — float animation
 - `/buddy help` — short help
 
 ## API
@@ -29,6 +38,20 @@ Decorative only. Does **not** write or debug code.
 - On hone par buddy **navbar ke thoda neeche, top-right floating** dikhta hai — content ke **upar overlay** (display push nahi hota), thread ke **andar nahi**.
 - Soft **bob animation** + idle blink; **Pet** se short pet animation.
 - Preference `localStorage.sentinel_buddy_on` me save.
+- **Hatching sirf float pe** hoti hai: chat kabhi egg art nahi dikhata — `/buddy` "see Buddy float" bolta hai. Progress bar + `Egg · 3/8 steps · next ~4m` meta float pe.
+- Hatch hote hi **one-time celebration overlay** (poori screen, chat ke bahar): crack → confetti → reveal; click / Enter / Esc se dismiss. Per user sirf ek baar (`sentinel_buddy_hatch_seen:<id>`).
+- Float header: **AERIS-64 · Buddy** — buddy account + AERIS-64 dono se linked (`/buddy who`, `/buddy about`).
+
+## Account link (one user, one hatch)
+
+- Pehli baar login karne par aapka **guest (device) egg + buddy account me adopt**
+  ho jata hai (`POST /v1/buddy/adopt`) — companion key pin hoti hai, isliye
+  **same buddy har device pe** milta hai.
+- Account ka *started* egg (jisme messages ho chuke) kabhi overwrite nahi hota;
+  sirf untouched (khaali) egg adopt hone deta hai — dobara login par adopt
+  safely no-op hota hai.
+- **One user, one time**: hatch hone ke baad progress unlock ho jata hai,
+  dobara hatch nahi hota; steps buddy ko wipe nahi karte.
 
 ## Animation types
 

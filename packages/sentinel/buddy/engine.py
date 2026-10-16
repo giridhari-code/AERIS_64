@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, asdict, field
-from typing import Any, Optional
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
-from sentinel.buddy.species import SPECIES, idle_frames
-from sentinel.buddy.animations import build_animations, animations_as_text
+from sentinel.buddy.animations import animations_as_text, build_animations
 from sentinel.buddy.cosmetics import EYES, HATS, rarity_rank
+from sentinel.buddy.mood import MOOD_META, sense_mood
+from sentinel.buddy.species import SPECIES, idle_frames
 
 # cumulative weights: common 60, uncommon 25, rare 10, epic 4, legendary 1
 _RARITY_BANDS = [
@@ -41,7 +42,7 @@ _PERSONALITY = [
 
 
 def _digest(user_id: str) -> bytes:
-    return hashlib.sha256(f"sentinel-buddy-v1:{user_id}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(f"sentinel-buddy-v1:{user_id}".encode()).hexdigest()
 
 
 def _u8(hexdig: str, start: int) -> int:
@@ -177,41 +178,110 @@ def pet_buddy(user_id: str) -> str:
     return b.render(frame=1, hearts=True)
 
 
+def _bar(value: Any, width: int = 10) -> str:
+    """ASCII progress bar for /buddy stats."""
+    try:
+        v = max(0, min(int(value), width))
+    except (TypeError, ValueError):
+        v = 0
+    return "█" * v + "░" * (width - v)
+
+
+def _joker_echo(text: str) -> str:
+    """Alternating-case echo — deterministic joker mimicry (no RNG)."""
+    t = (text or "").strip()
+    if len(t) > 140:
+        t = t[:137].rstrip() + "..."
+    return "".join(ch.upper() if i % 2 else ch.lower() for i, ch in enumerate(t))
+
+
+_ANIM_LINES = {
+    "wave": "Buddy waves! 👋",
+    "happy": "Buddy khush ho gaya! 😊",
+    "excited": "Buddy excited — full jump mode! 🤩",
+    "sleep": "Buddy ko neend aa rahi hai… 😴",
+    "think": "Buddy soch me hai… 🤔",
+    "pet": "Buddy ko pyaar mila! 💛",
+    "talk": "Buddy baat kar raha hai.",
+}
+_ANIM_ALIASES = {"dance": "excited", "party": "excited"}
+
+
+def _anim_token(name: str, line: str | None = None) -> str:
+    """Control token: the float plays ``name``, chat shows ``line``."""
+    return f"BUDDY_ANIM:{name}\n{line or _ANIM_LINES.get(name, 'Buddy!')}"
+
+
+def resolve_buddy_reply(reply: str) -> tuple[str, dict]:
+    """Map control tokens/prefixes to (chat message, UI meta)."""
+    t = (reply or "").strip()
+    if t == "BUDDY_ON":
+        return "Buddy on — float only; linked to you + AERIS-64.", {"buddy": True, "buddy_ui": "on"}
+    if t == "BUDDY_OFF":
+        return "Buddy hidden.", {"buddy": True, "buddy_ui": "off"}
+    if t == "BUDDY_EGG_UI":
+        return (
+            "Egg incubating — see Buddy float (hatch is not shown in chat).",
+            {"buddy": True, "buddy_egg": True},
+        )
+    m = re.match(r"^BUDDY_ANIM:([a-z]+)\n?(.*)$", t, flags=re.DOTALL)
+    if m:
+        name = m.group(1).lower()
+        rest = (m.group(2) or "").strip()
+        return (rest or _ANIM_LINES.get(name, "Buddy!")), {"buddy": True, "buddy_anim": name}
+    return t, {"buddy": True}
+
+
 def _norm_buddy_text(text: str) -> str:
-    """Accept both `/buddy ...` and `--buddy ...` spellings."""
+    """Accept `/buddy ...`, `--buddy ...` and bare `buddy ...` spellings."""
     t = (text or "").strip()
     if t.lower().startswith("--buddy"):
         t = "/" + t[2:]
+    if re.match(r"^buddy\s+", t, flags=re.IGNORECASE) and not t.lower().startswith("/buddy"):
+        t = "/" + t
     return t
 
 
+_SUBS = (
+    "on|off|enable|disable|hide|show|hatch|status|egg|pet|help|who|me|link|linked|"
+    "mimic|joker|mirror|mood|stats|about|aeris|aeris64|dance|party|wave|happy|"
+    "sleep|excited|think"
+)
+
+
 def is_buddy_command(text: str) -> bool:
+    raw = (text or "").strip().lower()
     t = _norm_buddy_text(text).lower()
     if t in {"/buddy", "/buddy on", "/buddy off", "/buddyon", "/buddyoff"}:
         return True
-    if t.startswith("/buddy "):
-        return True
-    # plain "buddy on/off" handled on client; still accept server-side
-    if re.match(r"^buddy\s+(on|off|pet|help|who|mimic|joker|mood|egg|status)\b", t):
-        return True
-    return False
+    if raw.startswith(("/buddy", "--buddy")):
+        return t.startswith("/buddy ")
+    # bare-word form: only known subcommands ("buddy mood", "buddy on", …)
+    return bool(re.match(rf"^/buddy\s+({_SUBS})\b", t))
 
 
-def handle_buddy_command(text: str, user_id: str, egg: Optional[dict] = None) -> Optional[str]:
-    """Return reply text if this is a buddy command, else None.
+def handle_buddy_command(
+    text: str,
+    user_id: str,
+    egg: dict | None = None,
+    last_text: str | None = None,
+    hatch_id: str | None = None,
+) -> str | None:
+    """Return reply text (or a UI control token) if this is a buddy command, else None.
 
-    Egg incubation UI lives on the **Buddy float only** — chat never gets
-    hatch ASCII art. ``BUDDY_EGG_UI`` tells the client to refresh the float.
+    Egg incubation UI lives on the **Buddy float only** — chat never gets hatch
+    ASCII art (``BUDDY_EGG_UI`` tells the client to refresh the float).
+    ``last_text`` powers `/buddy mimic` and `/buddy mood` (previous message);
+    ``hatch_id`` pins the companion identity after a guest→account adopt.
     """
     t = _norm_buddy_text(text)
-    # normalize "buddy X" → "/buddy X"
-    if re.match(r"^buddy\s+", t, flags=re.I) and not t.lower().startswith("/buddy"):
-        t = "/" + t
     if not is_buddy_command(t):
         return None
     parts = t.split()
     uid = (user_id or "anonymous").strip() or "anonymous"
+    key = (hatch_id or uid).strip() or "anonymous"
     sub = parts[1].lower() if len(parts) >= 2 else "show"
+    arg = " ".join(parts[2:]).strip()
 
     if sub in {"on", "enable"}:
         return "BUDDY_ON"
@@ -221,33 +291,56 @@ def handle_buddy_command(text: str, user_id: str, egg: Optional[dict] = None) ->
         # Never dump egg art into the chat box — float owns hatching UI.
         if egg is not None and not egg.get("hatched"):
             return "BUDDY_EGG_UI"
-        b = hatch_buddy(uid)
+        b = hatch_buddy(key)
+        shiny = ", shiny" if b.shiny else ""
         return (
-            f"{b.name} · {b.species_name} ({b.rarity}"
-            + (", shiny" if b.shiny else "")
-            + f")\nLinked to you + AERIS-64 · {b.personality}"
+            f"{b.name} · {b.species_name} ({b.rarity}{shiny})\n"
+            f"Linked to you + AERIS-64 · {b.personality}"
         )
     if sub == "pet":
-        return pet_buddy(uid)
-    if sub in {"who", "me", "link", "linked"}:
-        b = hatch_buddy(uid)
-        return (
-            f"Buddy linked to user `{uid}` and product **AERIS-64**.\n"
-            f"{b.name} the {b.species_name} ({b.rarity}"
-            + (", shiny" if b.shiny else "")
-            + f")\nStats: {b.stats}"
-        )
+        return pet_buddy(key)
     if sub in {"mimic", "joker", "mirror"}:
-        return (
-            "BUDDY_MIMIC_ON"
-            if sub != "joker"
-            else "BUDDY_JOKER_ON"
-        )
+        src = arg or (last_text or "").strip()
+        if not arg and src.lower().startswith(("/buddy", "--buddy")):
+            src = ""  # don't mimic other buddy commands
+        echo = _joker_echo(src)
+        if not echo:
+            return _anim_token("happy", "Hehe… pehle kuch bolo, phir main nakal karunga! 😜")
+        tail = "Joker mode: nakal complete! 😜" if sub == "joker" else "Hehe — bilkul wahi bola! 😜"
+        return _anim_token("excited", f"😜 Buddy nakal:\n> {echo}\n{tail}")
     if sub == "mood":
+        if not (last_text or "").strip():
+            return _anim_token("blink", "Mood: **neutral** 🙂 — pehle kuch bolo, main emotion padhta hoon.")
+        label = sense_mood(last_text or "")
+        emoji, line, anim = MOOD_META.get(label, MOOD_META["neutral"])
+        return _anim_token(anim, f"Mood: **{label}** {emoji} — {line}\n(float pe `{anim}` animation)")
+    if sub in {"stats", "stat"}:
+        b = hatch_buddy(key)
         return (
-            "Buddy reads your chat emotion (happy / think / wave / sleep / excited) "
-            "and mirrors it on the float — joker mode amplifies mimicry."
+            f"**{b.name}** stats (1–10):\n"
+            f"  curiosity  `{_bar(b.stats.get('curiosity', 5))}`\n"
+            f"  calm       `{_bar(b.stats.get('calm', 5))}`\n"
+            f"  loyalty    `{_bar(b.stats.get('loyalty', 5))}`\n"
+            f"Personality: {b.personality}"
         )
+    if sub in {"who", "me", "link", "linked"}:
+        b = hatch_buddy(key)
+        pinned = f" (buddy key `{key}`)" if key != uid else ""
+        return (
+            f"Buddy linked to user `{uid}`{pinned} + product **AERIS-64**.\n"
+            f"{b.name} the {b.species_name} ({b.rarity}{', shiny' if b.shiny else ''})\n"
+            f"Same login → same egg + buddy on every device."
+        )
+    if sub in {"about", "aeris", "aeris64"}:
+        return (
+            "**AERIS-64** ka companion — decorative buddy, AERIS-64 ke saath linked.\n"
+            "· account se linked: same login = same egg/buddy har device pe\n"
+            "· hatching sirf Buddy float pe — chat box clean rehta hai\n"
+            "· chat, streaming, tools, memory, accounts — sab AERIS-64 ke andar\n"
+            "· `/buddy help` — saare commands"
+        )
+    if sub in {"dance", "party", "wave", "happy", "sleep", "excited", "think"}:
+        return _anim_token(_ANIM_ALIASES.get(sub, sub))
     if sub in {"help", "?"}:
         return (
             "Buddy commands (float UI — hatch is NOT in the chat box):\n"
@@ -256,10 +349,13 @@ def handle_buddy_command(text: str, user_id: str, egg: Optional[dict] = None) ->
             "  /buddy                    — short status (egg progress on float)\n"
             "  /buddy egg                — refresh egg on float\n"
             "  /buddy pet                — pet animation\n"
-            "  /buddy who                — link: your id + AERIS-64\n"
-            "  /buddy mimic | joker      — emotional mimicry mode\n"
-            "  /buddy mood               — how emotion mapping works\n"
-            "  /buddy help\n"
+            "  /buddy mimic [text]       — joker nakal (last message / given text)\n"
+            "  /buddy joker [text]       — full joker-mode mimicry\n"
+            "  /buddy mood               — aapki emotion padho (last message)\n"
+            "  /buddy stats              — curiosity / calm / loyalty\n"
+            "  /buddy who | link         — user + AERIS-64 link\n"
+            "  /buddy about              — AERIS-64 × buddy\n"
+            "  /buddy dance | wave | happy | sleep | excited\n"
             "Same user_id → same buddy forever. Chat messages incubate the egg."
         )
     return "Unknown. Try `/buddy help` or `--buddy on`."
