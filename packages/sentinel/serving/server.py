@@ -146,9 +146,65 @@ class _QuietAccessPaths(logging.Filter):
 # --------------------------------------------------------------------------
 # Plain Lock (not RLock): a streaming generator may resume on a different
 # worker thread, and only a plain Lock can be released from another thread.
+# Scale (single process): fair queue in front of the lock — metrics + max depth.
+# Multi-process scale: one model-loaded worker per GPU/port + load balancer
+# (torch weights are not shared across uvicorn workers safely).
 _lock = threading.Lock()  # serialises model use + session table mutation
 _stats_lock = threading.Lock()
-_stats = {"requests": 0, "errors": 0, "latency_ms": 0.0}
+_stats = {
+    "requests": 0,
+    "errors": 0,
+    "latency_ms": 0.0,
+    "queue_wait_ms": 0.0,
+    "queue_acquires": 0,
+    "queue_rejected": 0,
+}
+_queue_waiting = 0  # threads blocked on _lock.acquire (approx)
+_model_busy = 0     # 1 while generation holds the lock
+
+
+def _max_queue() -> int:
+    try:
+        return max(1, int(_env("MAX_QUEUE", "32") or 32))
+    except Exception:
+        return 32
+
+
+@contextlib.contextmanager
+def _model_gate(*, reject_if_full: bool = True):
+    """Acquire the model lock with queue depth / wait-time metrics.
+
+    Callers that must not fail (shutdown, load) pass reject_if_full=False.
+    """
+    global _queue_waiting, _model_busy
+    with _stats_lock:
+        depth = _queue_waiting + _model_busy
+        if reject_if_full and depth >= _max_queue():
+            _stats["queue_rejected"] += 1
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "server_busy",
+                    "message": "Model queue full — retry shortly or scale workers.",
+                    "queue_depth": depth,
+                    "max_queue": _max_queue(),
+                },
+            )
+        _queue_waiting += 1
+    t0 = time.perf_counter()
+    _lock.acquire()
+    waited = (time.perf_counter() - t0) * 1000.0
+    with _stats_lock:
+        _queue_waiting = max(0, _queue_waiting - 1)
+        _model_busy += 1
+        _stats["queue_wait_ms"] += waited
+        _stats["queue_acquires"] += 1
+    try:
+        yield waited
+    finally:
+        with _stats_lock:
+            _model_busy = max(0, _model_busy - 1)
+        _lock.release()
 
 _model: Optional[SENTINEL] = None
 _cfg: Optional[SENTINELConfig] = None
@@ -430,7 +486,7 @@ def _token_stream(
     if _model is None:
         raise HTTPException(status_code=503, detail="model not loaded")
     input_ids = input_ids[-_max_context:]
-    with _lock:
+    with _model_gate(reject_if_full=True):
         sess = _claim_session_locked(sid, owner)
         if reset:
             sess["state"] = None
@@ -920,6 +976,12 @@ def create_app(
     async def metrics():
         with _stats_lock:
             req, err, lat = _stats["requests"], _stats["errors"], _stats["latency_ms"]
+            qwait, qacq, qrej = (
+                _stats.get("queue_wait_ms", 0.0),
+                _stats.get("queue_acquires", 0),
+                _stats.get("queue_rejected", 0),
+            )
+            waiting, busy = _queue_waiting, _model_busy
         body = (
             "# HELP sentinel_requests_total Total requests\n"
             "# TYPE sentinel_requests_total counter\n"
@@ -933,6 +995,24 @@ def create_app(
             "# HELP sentinel_sessions Active sessions\n"
             "# TYPE sentinel_sessions gauge\n"
             f"sentinel_sessions {len(_sessions)}\n"
+            "# HELP sentinel_model_queue_waiting Threads waiting for model lock\n"
+            "# TYPE sentinel_model_queue_waiting gauge\n"
+            f"sentinel_model_queue_waiting {int(waiting)}\n"
+            "# HELP sentinel_model_busy 1 if model lock held\n"
+            "# TYPE sentinel_model_busy gauge\n"
+            f"sentinel_model_busy {int(busy)}\n"
+            "# HELP sentinel_model_queue_wait_ms_total Cumulative queue wait\n"
+            "# TYPE sentinel_model_queue_wait_ms_total counter\n"
+            f"sentinel_model_queue_wait_ms_total {qwait:.2f}\n"
+            "# HELP sentinel_model_queue_acquires_total Model lock acquires\n"
+            "# TYPE sentinel_model_queue_acquires_total counter\n"
+            f"sentinel_model_queue_acquires_total {int(qacq)}\n"
+            "# HELP sentinel_model_queue_rejected_total Rejected when queue full\n"
+            "# TYPE sentinel_model_queue_rejected_total counter\n"
+            f"sentinel_model_queue_rejected_total {int(qrej)}\n"
+            "# HELP sentinel_model_max_queue Configured max queue depth\n"
+            "# TYPE sentinel_model_max_queue gauge\n"
+            f"sentinel_model_max_queue {_max_queue()}\n"
         )
         return PlainTextResponse(body)
 
