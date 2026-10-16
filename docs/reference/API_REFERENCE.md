@@ -12,6 +12,23 @@ X-API-Key: key1
 
 If unset, API is open (development mode).
 
+### Accounts (web client login/signup)
+
+Optional. Accounts are stored server-side (SQLite, default
+`data/auth/accounts.db`); passwords are scrypt-hashed, sessions are opaque
+bearer tokens (only SHA-256 stored, 30-day TTL).
+
+```
+Authorization: Bearer <token>
+```
+
+| Env | Effect |
+| --- | --- |
+| `NEUROFIELD_AUTH=0` | disable accounts entirely |
+| `NEUROFIELD_AUTH_DB` | sqlite path (default `data/auth/accounts.db`) |
+| `NEUROFIELD_AUTH_TTL_DAYS` | session lifetime (default 30) |
+| `NEUROFIELD_AUTH_REQUIRED=1` | chat endpoints require an account token or X-API-Key |
+
 ## Rate limit
 
 Default 120 requests / 60s per API key or IP.  
@@ -30,6 +47,25 @@ Prometheus text metrics.
 
 ### GET /v1/models
 List model ids.
+
+### GET /v1/auth/status
+Public capability probe (no secrets):
+`{"accounts":true,"guest_ok":true,"required":false,"users":3}`.
+
+### POST /v1/auth/signup
+`{"name":"Asha","email":"asha@example.com","password":"…"}` → 201
+`{"token":"…","user":{id,name,email}}`. 409 when the email exists, 422 on
+weak input.
+
+### POST /v1/auth/login
+`{"email":"…","password":"…"}` → `{"token":"…","user":{…}}`; 401 on bad
+credentials.
+
+### GET /v1/auth/me
+`Authorization: Bearer` → `{"user":{…}}`; 401 when expired/revoked.
+
+### POST /v1/auth/logout
+`Authorization: Bearer` → `{"status":"bye"}` (revokes that one session).
 
 ### POST /v1/chat
 ```json

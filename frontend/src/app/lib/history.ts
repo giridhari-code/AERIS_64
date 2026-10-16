@@ -12,6 +12,8 @@ export interface StoredChat {
   updatedAt: number;
   sessionId: string | null;
   messages: ChatMessage[];
+  /** Who owns this chat: "guest" or an account id (`session.user.id`). */
+  owner: string;
 }
 
 export interface ChatStore {
@@ -29,7 +31,7 @@ export function newChatId(): string {
   return "chat-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 }
 
-export function freshChat(now = Date.now()): StoredChat {
+export function freshChat(owner = "guest", now = Date.now()): StoredChat {
   return {
     id: newChatId(),
     title: DEFAULT_TITLE,
@@ -37,7 +39,20 @@ export function freshChat(now = Date.now()): StoredChat {
     updatedAt: now,
     sessionId: null,
     messages: [],
+    owner,
   };
+}
+
+/** Make sure `owner` has a visible current chat (login/logout switches). */
+export function ensureOwnerChat(s: ChatStore, owner: string): ChatStore {
+  const mine = s.chats.filter((c) => c.owner === owner);
+  if (mine.some((c) => c.id === s.currentId)) return s;
+  if (mine.length) {
+    const next = [...mine].sort((a, b) => b.updatedAt - a.updatedAt)[0]!;
+    return { ...s, currentId: next.id };
+  }
+  const c = freshChat(owner);
+  return { ...s, currentId: c.id, chats: [c, ...s.chats].slice(0, MAX_CHATS) };
 }
 
 export function titleFrom(text: string): string {
@@ -88,6 +103,7 @@ function sanitizeChat(c: unknown): StoredChat | null {
     updatedAt: typeof o.updatedAt === "number" ? o.updatedAt : now,
     sessionId: typeof o.sessionId === "string" ? o.sessionId : null,
     messages,
+    owner: typeof o.owner === "string" && o.owner ? o.owner : "guest",
   };
 }
 

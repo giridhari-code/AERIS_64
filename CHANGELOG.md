@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased — accounts: login / signup for the web client
+
+- **Backend accounts.** `packages/sentinel/serving/accounts.py`: stdlib-only
+  user store (SQLite, `NEUROFIELD_AUTH_DB`, default `data/auth/accounts.db` —
+  gitignored). Passwords are scrypt-hashed with per-user salts; sessions are
+  opaque bearer tokens stored only as SHA-256 hashes
+  (`NEUROFIELD_AUTH_TTL_DAYS`, default 30). New routes: `GET /v1/auth/status`,
+  `POST /v1/auth/signup|login|logout`, `GET /v1/auth/me`.
+  `NEUROFIELD_AUTH=0` disables accounts (old behavior). With
+  `NEUROFIELD_AUTH_REQUIRED=1` the chat endpoints (`/v1/chat`,
+  `/v1/chat/stream`, `/ag-ui`, `/v1/ag-ui`) additionally demand an account
+  bearer token (X-API-Key still works for machines). Tests:
+  `tests/test_accounts.py` (9).
+- **Frontend login/signup gate.** `src/app/components/AuthGate.tsx`:
+  full-screen sign up / log in card with a one-click "Continue as guest"
+  (hidden when the server sets `required: true`). The app probes
+  `/v1/auth/status` on load; if the auth API is missing (older server,
+  offline dev, stubbed tests) it falls back to guest mode so chat is never
+  blocked. Sessions live in localStorage `sentinel_auth_v1`; stored tokens
+  are re-validated via `/v1/auth/me` and dropped on 401.
+- **Per-user chats + account chip.** Chats in `sentinel_chats_v1` carry an
+  `owner` (`"guest"` or account id) and the sidebar only shows the current
+  identity's chats. Topbar account chip (`#btnUser`) opens a menu with
+  log in / log out. `Authorization: Bearer` rides every model call and the
+  Bun edge forwards it (`bearerOf` in `src/server.ts`).
+
 ## Unreleased — web client: streaming, AG-UI, history, regenerate/edit
 
 - **AG-UI protocol endpoint.** `packages/sentinel/serving/server.py`: `/ag-ui`

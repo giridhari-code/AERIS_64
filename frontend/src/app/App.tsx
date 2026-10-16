@@ -5,11 +5,22 @@ import { Message, TypingIndicator, type ChatMessage } from "./components/Message
 import { Composer } from "./components/Composer";
 import { BuddyFloat } from "./components/BuddyFloat";
 import { Sidebar } from "./components/Sidebar";
+import { AuthGate } from "./components/AuthGate";
 import { initBuddy } from "./lib/buddy-float";
 import { matchBuddyOnOff } from "../buddy";
 import { ChatError, chatWithStreaming, type ChatRequest } from "./lib/stream";
 import {
+  authStatus as fetchAuthStatus,
+  loadSession,
+  logout,
+  saveSession,
+  validateSession,
+  type AuthStatus,
+  type Session,
+} from "./lib/auth";
+import {
   DEFAULT_TITLE,
+  ensureOwnerChat,
   freshChat,
   loadStore,
   MAX_CHATS,
@@ -75,10 +86,20 @@ export function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(isDesktop);
+  const [session, setSession] = useState<Session | null>(() => loadSession());
+  /** "checking" while probing; null = auth unavailable (auto-guest fallback). */
+  const [authStatus, setAuthStatus] = useState<AuthStatus | "checking" | null>("checking");
 
-  const active = useMemo(
-    () => store.chats.find((c) => c.id === store.currentId) || store.chats[0]!,
-    [store],
+  /** Account identity for chat ownership ("guest" = this device only). */
+  const owner = session?.kind === "user" ? session.user.id : "guest";
+
+  const active = useMemo(() => {
+    const mine = store.chats.filter((c) => c.owner === owner);
+    return mine.find((c) => c.id === store.currentId) || mine[0] || store.chats[0]!;
+  }, [store, owner]);
+  const visibleChats = useMemo(
+    () => store.chats.filter((c) => c.owner === owner),
+    [store, owner],
   );
   const messages = active.messages;
 
@@ -206,10 +227,77 @@ export function App() {
     setTyping(false);
   }, []);
 
-  /* Buddy float (imperative controller — same DOM ids/behavior as the legacy UI) */
-  useEffect(() => {
-    initBuddy();
+  /* ---- accounts (login / signup / guest) -------------------------------- */
+
+  const probeAuth = useCallback(async () => {
+    setAuthStatus("checking");
+    const st = await fetchAuthStatus();
+    setAuthStatus(st);
+    // Auth unavailable (older server / offline): fall back to a transient
+    // guest session so chat keeps working. Not persisted — a later reload
+    // against a real auth backend shows the gate again.
+    if (!st || !st.accounts) setSession({ kind: "guest" });
   }, []);
+
+  useEffect(() => {
+    const s = loadSession();
+    if (!s) {
+      void probeAuth();
+      return;
+    }
+    setSession(s);
+    setAuthStatus(null);
+    if (s.kind === "user") {
+      void validateSession(s).then((v) => {
+        if (v === "invalid") {
+          // Expired/revoked token — clear it and fall back to the gate.
+          saveSession(null);
+          setSession(null);
+          void probeAuth();
+        }
+      });
+    }
+  }, [probeAuth]);
+
+  /* Belt & braces: whenever the owner changes, keep a visible chat selected. */
+  useEffect(() => {
+    setStore((prev) => ensureOwnerChat(prev, owner));
+  }, [owner]);
+
+  const enterSession = useCallback(
+    (s: Session) => {
+      saveSession(s);
+      cancelInFlight();
+      setStore((prev) => ensureOwnerChat(prev, s.kind === "user" ? s.user.id : "guest"));
+      setSession(s);
+      setAuthStatus(null);
+    },
+    [cancelInFlight],
+  );
+
+  const handleLogout = useCallback(() => {
+    const s = loadSession();
+    if (s && s.kind === "user") void logout(s);
+    cancelInFlight();
+    saveSession(null);
+    setStore((prev) => ensureOwnerChat(prev, "guest"));
+    setSession(null);
+    void probeAuth();
+  }, [cancelInFlight, probeAuth]);
+
+  const requestLogin = useCallback(() => {
+    cancelInFlight();
+    saveSession(null);
+    setSession(null);
+    void probeAuth();
+  }, [cancelInFlight, probeAuth]);
+
+  /* Buddy float (imperative controller — same DOM ids/behavior as the legacy UI).
+     Init once a chat session exists: during the boot splash / auth gate the
+     float is not mounted yet and the controller binds its DOM exactly once. */
+  useEffect(() => {
+    if (session) initBuddy();
+  }, [session]);
 
   /* Backend health poll */
   useEffect(() => {
@@ -265,12 +353,12 @@ export function App() {
     setLatencyText("");
     setEditingId(null);
     setStore((s) => {
-      const c = freshChat();
+      const c = freshChat(owner);
       const keep = s.chats.filter((x) => x.id !== s.currentId || x.messages.length > 0);
       return { version: 1, currentId: c.id, chats: [c, ...keep].slice(0, MAX_CHATS) };
     });
     if (!isDesktop()) setSidebarOpen(false);
-  }, [cancelInFlight, forgetSession]);
+  }, [cancelInFlight, forgetSession, owner]);
 
   const clearChat = useCallback(() => {
     forgetSession();
@@ -309,17 +397,16 @@ export function App() {
       setStore((s) => {
         const chats = s.chats.filter((c) => c.id !== id);
         if (!chats.length) {
-          const c = freshChat();
+          const c = freshChat(owner);
           return { version: 1, currentId: c.id, chats: [c] };
         }
-        return {
-          version: 1,
-          currentId: s.currentId === id ? chats[0]!.id : s.currentId,
-          chats,
-        };
+        return ensureOwnerChat(
+          { version: 1, currentId: s.currentId === id ? "" : s.currentId, chats },
+          owner,
+        );
       });
     },
-    [cancelInFlight],
+    [cancelInFlight, owner],
   );
 
   /* ---- generate / stop / edit / regenerate ------------------------------ */
@@ -531,10 +618,26 @@ export function App() {
     return -1;
   }, [messages]);
 
+  /* ---- account gate: no session yet ------------------------------------- */
+
+  if (!session) {
+    if (authStatus !== "checking" && authStatus && authStatus.accounts) {
+      return <AuthGate status={authStatus} onAuthed={enterSession} />;
+    }
+    return (
+      <div className="boot" id="boot">
+        <img src="/logo.svg" alt="" width={44} height={44} />
+        <p>Starting SENTINEL…</p>
+      </div>
+    );
+  }
+
+  const accountUser = session.kind === "user" ? session.user : null;
+
   return (
     <div className="shell">
       <Sidebar
-        chats={store.chats}
+        chats={visibleChats}
         currentId={store.currentId}
         open={sidebarOpen}
         onSelect={selectChat}
@@ -546,8 +649,11 @@ export function App() {
         <Topbar
           health={health}
           menuOpen={sidebarOpen}
+          user={accountUser}
           onMenu={() => setSidebarOpen((v) => !v)}
           onNew={newChat}
+          onLogout={handleLogout}
+          onLogin={requestLogin}
         />
         <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
           <div className="thread" id="thread">

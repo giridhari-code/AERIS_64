@@ -9,6 +9,7 @@
  */
 
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
@@ -24,8 +25,15 @@ app.use(
   cors({
     origin: "*",
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Request-ID"],
   }),
 );
+
+/** Forward the browser's Authorization header (accounts bearer token). */
+function bearerOf(c: Context): Record<string, string> {
+  const h = c.req.header("authorization");
+  return h ? { Authorization: h } : {};
+}
 
 
 // ---- Edge rate limit (per IP, in-memory) ----------------------------------
@@ -80,35 +88,64 @@ app.get("/readyz", async (c) => {
 
 app.post("/v1/chat", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const result = await proxyChat(body);
+  const result = await proxyChat(body, bearerOf(c));
   return c.json(result.body, result.status as 200);
 });
 
 // SSE pass-through (no buffering): token deltas reach the browser live.
 app.post("/v1/chat/stream", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  return proxyStream("POST", "/v1/chat/stream", body);
+  return proxyStream("POST", "/v1/chat/stream", body, bearerOf(c));
 });
 
 // AG-UI protocol (spec 1.0) — agent-UI event stream, proxied unbuffered.
 app.post("/ag-ui", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  return proxyStream("POST", "/ag-ui", body);
+  return proxyStream("POST", "/ag-ui", body, bearerOf(c));
 });
 
 app.post("/v1/ag-ui", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  return proxyStream("POST", "/v1/ag-ui", body);
+  return proxyStream("POST", "/v1/ag-ui", body, bearerOf(c));
 });
 
 app.post("/v1/reset", async (c) => {
   const url = new URL(c.req.url);
-  const r = await proxyJson("POST", `/v1/reset${url.search}`);
+  const r = await proxyJson("POST", `/v1/reset${url.search}`, undefined, bearerOf(c));
   return c.json(r.body, r.status as 200);
 });
 
 app.get("/v1/models", async (c) => {
   const r = await proxyJson("GET", "/v1/models");
+  return c.json(r.body, r.status as 200);
+});
+
+// ---- Accounts: signup / login / me / logout (proxied to the Python store) --
+
+app.get("/v1/auth/status", async (c) => {
+  const r = await proxyJson("GET", "/v1/auth/status");
+  return c.json(r.body, r.status as 200);
+});
+
+app.post("/v1/auth/signup", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/auth/signup", body);
+  return c.json(r.body, r.status as 200);
+});
+
+app.post("/v1/auth/login", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/auth/login", body);
+  return c.json(r.body, r.status as 200);
+});
+
+app.get("/v1/auth/me", async (c) => {
+  const r = await proxyJson("GET", "/v1/auth/me", undefined, bearerOf(c));
+  return c.json(r.body, r.status as 200);
+});
+
+app.post("/v1/auth/logout", async (c) => {
+  const r = await proxyJson("POST", "/v1/auth/logout", undefined, bearerOf(c));
   return c.json(r.body, r.status as 200);
 });
 

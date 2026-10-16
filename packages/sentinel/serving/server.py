@@ -59,6 +59,7 @@ from sentinel.config import SENTINELConfig
 from sentinel.model import SENTINEL
 from sentinel.safety import SafetyMonitor
 from sentinel.serving.adaptive_length import adaptive_sampling, should_stop_generation
+from sentinel.serving.accounts import AccountError, AccountStore
 from sentinel.serving.auth import (
     client_ip,
     get_api_keys,
@@ -103,6 +104,19 @@ _stop_token_ids: set[int] = set()  # <|end|>, <|user|> from tokenizer when prese
 
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     return os.environ.get(f"NEUROFIELD_{name}") or os.environ.get(name) or default
+
+
+def _auth_required() -> bool:
+    """``NEUROFIELD_AUTH_REQUIRED=1`` → chat endpoints demand a login (or X-API-Key)."""
+    return (_env("AUTH_REQUIRED", "0") or "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _bearer_token(request: Request) -> Optional[str]:
+    """Extract an ``Authorization: Bearer <token>`` value (accounts sessions)."""
+    auth = request.headers.get("authorization", "")
+    if auth[:7].lower() == "bearer ":
+        return auth[7:].strip() or None
+    return None
 
 
 class _QuietAccessPaths(logging.Filter):
@@ -227,6 +241,19 @@ class ChatResponse(BaseModel):
         None,
         description="Adaptive RAG decision (should_retrieve, confidence, top_k, reason, hits).",
     )
+
+
+# Same module-level rule as ShellRequest above: FastAPI resolves parameter
+# annotations against module globals, so account bodies must live here too.
+class AuthSignupRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=40)
+    email: str = Field(..., max_length=200)
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class AuthLoginRequest(BaseModel):
+    email: str = Field(..., max_length=200)
+    password: str = Field(..., min_length=1, max_length=200)
 
 
 # --------------------------------------------------------------------------
@@ -694,6 +721,48 @@ def create_app(
     def _limit(request: Request, api_key: Optional[str]) -> None:
         _limiter.check(api_key or client_ip(request))
 
+    # ---- local accounts (signup/login for the web client) ------------------
+    # The model API keeps using NEUROFIELD_API_KEYS; with
+    # NEUROFIELD_AUTH_REQUIRED=1 the chat endpoints also accept/require an
+    # account bearer token. NEUROFIELD_AUTH=0 disables accounts entirely.
+
+    _accounts_cache: dict[str, Any] = {"store": None, "tried": False}
+
+    def _account_store() -> Optional[AccountStore]:
+        if (_env("AUTH", "1") or "1").strip().lower() in {"0", "false", "no", "off"}:
+            return None
+        if not _accounts_cache["tried"]:
+            _accounts_cache["tried"] = True
+            try:
+                _accounts_cache["store"] = AccountStore(_env("AUTH_DB", "data/auth/accounts.db"))
+                logger.info("Accounts enabled | db=%s", _accounts_cache["store"].path)
+            except Exception as e:  # noqa: BLE001 - auth stays optional, chat must keep working
+                logger.warning("accounts store unavailable (auth disabled for this run): %s", e)
+        return _accounts_cache["store"]
+
+    def _need_accounts() -> AccountStore:
+        store = _account_store()
+        if store is None:
+            raise HTTPException(
+                status_code=404,
+                detail="accounts are disabled (NEUROFIELD_AUTH=0 or store unavailable)",
+            )
+        return store
+
+    async def require_chat_access(
+        request: Request,
+        x_api_key: Optional[str] = Depends(require_api_key),
+    ) -> Optional[str]:
+        """Pass-through by default; with NEUROFIELD_AUTH_REQUIRED=1 the chat
+        endpoints need a valid account bearer token or an X-API-Key."""
+        if not _auth_required() or x_api_key:
+            return x_api_key
+        store = _account_store()
+        user = store.verify(_bearer_token(request)) if store is not None else None
+        if user is None:
+            raise HTTPException(status_code=401, detail="login required (or provide X-API-Key)")
+        return str(user["id"])
+
     @app.middleware("http")
     async def security_headers_middleware(request: Request, call_next):
         response = await call_next(request)
@@ -999,6 +1068,7 @@ def create_app(
         req: ChatRequest,
         request: Request,
         api_key: Optional[str] = Depends(require_api_key),
+        _access: Optional[str] = Depends(require_chat_access),
     ):
         _limit(request, api_key)
         _bump("requests")
@@ -1157,6 +1227,7 @@ def create_app(
         req: ChatRequest,
         request: Request,
         api_key: Optional[str] = Depends(require_api_key),
+        _access: Optional[str] = Depends(require_chat_access),
     ):
         _limit(request, api_key)
         _need_model()
@@ -1256,6 +1327,7 @@ def create_app(
     async def ag_ui(
         request: Request,
         api_key: str | None = Depends(require_api_key),
+        _access: Optional[str] = Depends(require_chat_access),
     ):
         """AG-UI compatible agent endpoint: ``RunAgentInput`` in, event stream out."""
         try:
@@ -1535,6 +1607,60 @@ def create_app(
                 )
 
         return StreamingResponse(event_gen(), media_type=encoder.get_content_type())
+
+    # ------------------------------------------------------------------
+    # Local accounts — web client signup/login routes. Store + dependency
+    # live near the top of the factory (see require_chat_access).
+    # ------------------------------------------------------------------
+
+    @app.get("/v1/auth/status")
+    def auth_status():
+        """Public capability probe for the web client (no secrets in it)."""
+        store = _account_store()
+        required = _auth_required()
+        return {
+            "accounts": store is not None,
+            "guest_ok": not required,
+            "required": required,
+            "users": store.user_count() if store is not None else 0,
+        }
+
+    @app.post("/v1/auth/signup", status_code=201)
+    def auth_signup(body: AuthSignupRequest, request: Request):
+        _limit(request, None)
+        store = _need_accounts()
+        try:
+            user, token = store.signup(body.name, body.email, body.password)
+        except AccountError as e:
+            raise HTTPException(status_code=e.status, detail=e.detail) from None
+        _bump("requests")
+        logger.info("signup: %s (%s)", user["email"], user["id"])
+        return {"token": token, "user": user}
+
+    @app.post("/v1/auth/login")
+    def auth_login(body: AuthLoginRequest, request: Request):
+        _limit(request, None)
+        store = _need_accounts()
+        try:
+            user, token = store.login(body.email, body.password)
+        except AccountError as e:
+            raise HTTPException(status_code=e.status, detail=e.detail) from None
+        _bump("requests")
+        return {"token": token, "user": user}
+
+    @app.get("/v1/auth/me")
+    def auth_me(request: Request):
+        store = _need_accounts()
+        user = store.verify(_bearer_token(request))
+        if user is None:
+            raise HTTPException(status_code=401, detail="invalid or expired session")
+        return {"user": user}
+
+    @app.post("/v1/auth/logout")
+    def auth_logout(request: Request):
+        store = _need_accounts()
+        store.logout(_bearer_token(request))
+        return {"status": "bye"}
 
     # ------------------------------------------------------------------
     # Per-user persistent memory (opt-in: NEUROFIELD_MEMORY_DIR). Always needs an API key.
