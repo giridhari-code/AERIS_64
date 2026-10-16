@@ -11,15 +11,13 @@ interface TopbarProps {
   menuOpen: boolean;
   /** Signed-in account, or null for guests / undecided. */
   user: AuthUser | null;
-  modeLabel?: string;
   onMenu: () => void;
   onNew: () => void;
   onLogout: () => void;
   onLogin: () => void;
-  onMode?: () => void;
 }
 
-export function Topbar({ health, menuOpen, user, modeLabel, onMenu, onNew, onLogout, onLogin, onMode }: TopbarProps) {
+export function Topbar({ health, menuOpen, user, onMenu, onNew, onLogout, onLogin }: TopbarProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
@@ -61,7 +59,7 @@ export function Topbar({ health, menuOpen, user, modeLabel, onMenu, onNew, onLog
         <img src="/logo.svg" alt="" width={28} height={28} />
         <div className="brand-text">
           <strong>SENTINEL</strong>
-          <span>Direct · Honest</span>
+          <span>Think Smarter. Do More</span>
         </div>
       </div>
       <nav className="nav" aria-label="Primary">
@@ -73,11 +71,6 @@ export function Topbar({ health, menuOpen, user, modeLabel, onMenu, onNew, onLog
           <span className="dot" aria-hidden="true"></span>
           <span id="statusText">{health.label}</span>
         </div>
-        {onMode && (
-          <button type="button" className="mode-pill" onClick={onMode} title="Chat mode">
-            {modeLabel || "AERIS-64"}
-          </button>
-        )}
         <button
           type="button"
           className="icon-btn"
