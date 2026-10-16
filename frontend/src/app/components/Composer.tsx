@@ -62,29 +62,45 @@ export function Composer(p: ComposerProps) {
               }
             }}
           />
-          {p.busy ? (
-            <button type="button" className="stop" title="Stop" aria-label="Stop" onClick={p.onStop}>
-              ■
+          <div className="composer-bar">
+            <button
+              type="button"
+              className="composer-icon"
+              title="New chat / clear"
+              aria-label="Clear chat"
+              onClick={p.onClear}
+            >
+              +
             </button>
-          ) : (
-            <button type="submit" className="send" title="Send" aria-label="Send">
-              ↑
-            </button>
-          )}
-        </form>
-        <div className="composer-meta">
-          <div className="composer-meta-left">
             {p.onMode && (
-              <button type="button" className="mode-pill footer-mode" onClick={p.onMode} title="Model & effort">
-                {p.modeLabel || "Fable"}
+              <button
+                type="button"
+                className="mode-chip"
+                onClick={p.onMode}
+                title="Model & effort"
+              >
+                {p.modeLabel || "Fable · recommend"}
               </button>
             )}
-            {p.latencyText ? <span className="lat">{p.latencyText}</span> : null}
+            <span className="composer-bar-spacer" />
+            {p.latencyText ? <span className="lat-inline">{p.latencyText}</span> : null}
+            {p.busy ? (
+              <button
+                type="button"
+                className="composer-icon stop-icon"
+                title="Stop"
+                aria-label="Stop"
+                onClick={p.onStop}
+              >
+                ■
+              </button>
+            ) : (
+              <button type="submit" className="composer-icon send-icon" title="Send" aria-label="Send">
+                ↑
+              </button>
+            )}
           </div>
-          <button type="button" className="link quiet" onClick={p.onClear}>
-            Clear
-          </button>
-        </div>
+        </form>
       </div>
     </footer>
   );
