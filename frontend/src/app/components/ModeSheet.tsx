@@ -1,5 +1,5 @@
 /**
- * Product mode sheet — model lineup (Haiku / Fable / Sonnet / Opus) + effort.
+ * Product mode sheet — model lineup (Blink / Fable / Mythos / Oracle) + effort.
  */
 import {
   EFFORTS,
@@ -72,7 +72,7 @@ export function ModeSheet(p: ModeSheetProps) {
           ))}
         </div>
         <p className="mode-foot">
-          Higher effort = more tokens / slower on CPU. Fable + Recommend is the product default.
+          Higher effort = more tokens / slower on CPU. Fable + Recommend = product default.
         </p>
       </div>
     </div>
