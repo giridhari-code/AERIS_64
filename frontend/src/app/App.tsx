@@ -1,11 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Topbar, type Health } from "./components/Topbar";
 import { Welcome } from "./components/Welcome";
 import { Message, TypingIndicator, type ChatMessage } from "./components/Message";
 import { Composer } from "./components/Composer";
 import { BuddyFloat } from "./components/BuddyFloat";
+import { Sidebar } from "./components/Sidebar";
 import { initBuddy } from "./lib/buddy-float";
 import { matchBuddyOnOff } from "../buddy";
+import { ChatError, chatWithStreaming, type ChatRequest } from "./lib/stream";
+import {
+  DEFAULT_TITLE,
+  freshChat,
+  loadStore,
+  MAX_CHATS,
+  persistStore,
+  titleFrom,
+  type ChatStore,
+} from "./lib/history";
 
 const PROMPT_PLACEHOLDER = "Message SENTINEL…";
 
@@ -34,35 +45,165 @@ function fmtMs(ms: number | null | undefined): string {
   return (ms / 1000).toFixed(1) + " s";
 }
 
+function isAbort(e: unknown): boolean {
+  return !!e && typeof e === "object" && (e as { name?: string }).name === "AbortError";
+}
+
+function isDesktop(): boolean {
+  try {
+    return window.matchMedia("(min-width: 901px)").matches;
+  } catch (_) {
+    return true;
+  }
+}
+
 export function App() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  /* Monotonic message id across the whole session — seeded once from the store
+     so ids stay unique even if messages arrive before effects flush. */
+  const idRef = useRef(0);
+  const [store, setStore] = useState<ChatStore>(() => {
+    const s = loadStore();
+    let max = 0;
+    for (const c of s.chats) for (const m of c.messages) if (m.id > max) max = m.id;
+    idRef.current = max;
+    return s;
+  });
   const [typing, setTyping] = useState(false);
   const [busy, setBusy] = useState(false);
   const [latencyText, setLatencyText] = useState("");
   const [health, setHealth] = useState<Health>({ state: "unknown", label: "…" });
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(isDesktop);
+
+  const active = useMemo(
+    () => store.chats.find((c) => c.id === store.currentId) || store.chats[0]!,
+    [store],
+  );
+  const messages = active.messages;
 
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   const chatRef = useRef<HTMLElement | null>(null);
-  const idRef = useRef(0);
   const busyRef = useRef(false);
-  const sessionRef = useRef<string | null>(localStorage.getItem("sentinel_session") || null);
   const epochRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  const sessionIdRef = useRef<string | null>(active.sessionId);
+  sessionIdRef.current = active.sessionId;
+
+  /* Persist the chat store (debounced) */
+  useEffect(() => {
+    const t = window.setTimeout(() => persistStore(store), 250);
+    return () => window.clearTimeout(t);
+  }, [store]);
+
+  useEffect(() => {
+    const save = () => persistStore(storeRef.current);
+    window.addEventListener("beforeunload", save);
+    window.addEventListener("pagehide", save);
+    return () => {
+      window.removeEventListener("beforeunload", save);
+      window.removeEventListener("pagehide", save);
+    };
+  }, []);
+
+  /* Legacy key stays in sync with the active chat's server session */
+  useEffect(() => {
+    try {
+      if (active.sessionId) localStorage.setItem("sentinel_session", active.sessionId);
+      else localStorage.removeItem("sentinel_session");
+    } catch (_) {}
+  }, [active.sessionId]);
 
   const setBusyBoth = useCallback((v: boolean) => {
     busyRef.current = v;
     setBusy(v);
   }, []);
 
-  const appendMessage = useCallback((role: ChatMessage["role"], text: string, meta?: string) => {
-    setMessages((prev) => [...prev, { id: ++idRef.current, role, text, meta }]);
+  const updateActive = useCallback((fn: (c: ChatStore["chats"][number]) => ChatStore["chats"][number]) => {
+    setStore((s) => ({
+      ...s,
+      chats: s.chats.map((c) => (c.id === s.currentId ? fn(c) : c)),
+    }));
   }, []);
+
+  const appendMessage = useCallback(
+    (role: ChatMessage["role"], text: string, meta?: string) => {
+      const id = ++idRef.current; // outside the updater — updaters must stay pure
+      updateActive((c) => {
+        const msg: ChatMessage = { id, role, text, meta };
+        const title =
+          c.title === DEFAULT_TITLE && role === "user" && !c.messages.length
+            ? titleFrom(text)
+            : c.title;
+        return { ...c, title, updatedAt: Date.now(), messages: [...c.messages, msg] };
+      });
+    },
+    [updateActive],
+  );
+
+  /** Streaming: extend the live assistant bubble, or start a new one. */
+  const appendDelta = useCallback(
+    (delta: string) => {
+      const newId = ++idRef.current; // outside the updater — updaters must stay pure
+      updateActive((c) => {
+        const last = c.messages[c.messages.length - 1];
+        if (last && last.role === "assistant" && last.streaming) {
+          const next: ChatMessage = { ...last, text: last.text + delta };
+          return { ...c, messages: [...c.messages.slice(0, -1), next], updatedAt: Date.now() };
+        }
+        const msg: ChatMessage = { id: newId, role: "assistant", text: delta, streaming: true };
+        return { ...c, messages: [...c.messages, msg], updatedAt: Date.now() };
+      });
+    },
+    [updateActive],
+  );
+
+  /** Finish the live assistant bubble (text null = keep whatever streamed). */
+  const finalizeAssistant = useCallback(
+    (text: string | null, meta?: string) => {
+      updateActive((c) => {
+        const last = c.messages[c.messages.length - 1];
+        if (!last || last.role !== "assistant" || !last.streaming) return c;
+        const next: ChatMessage = {
+          ...last,
+          text: text != null ? text : last.text,
+          streaming: false,
+          meta: meta ?? last.meta,
+        };
+        return { ...c, messages: [...c.messages.slice(0, -1), next], updatedAt: Date.now() };
+      });
+    },
+    [updateActive],
+  );
 
   const autoGrow = useCallback(() => {
     const el = promptRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }, []);
+
+  const resetServerSession = useCallback((sid: string | null) => {
+    if (!sid) return;
+    fetch("/v1/reset?session_id=" + encodeURIComponent(sid), { method: "POST" }).catch(() => {});
+  }, []);
+
+  /** Drop the active chat's server session (client + server). */
+  const forgetSession = useCallback(() => {
+    resetServerSession(sessionIdRef.current);
+    sessionIdRef.current = null;
+  }, [resetServerSession]);
+
+  /** Cancel any in-flight generation; further async updates are epoch-dropped. */
+  const cancelInFlight = useCallback(() => {
+    epochRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    busyRef.current = false;
+    setBusy(false);
+    setTyping(false);
   }, []);
 
   /* Buddy float (imperative controller — same DOM ids/behavior as the legacy UI) */
@@ -116,26 +257,168 @@ export function App() {
     });
   }, []);
 
-  const resetSession = useCallback(async () => {
-    epochRef.current += 1; // invalidate any in-flight reply
-    try {
-      if (sessionRef.current) {
-        await fetch("/v1/reset?session_id=" + encodeURIComponent(sessionRef.current), { method: "POST" });
-      }
-    } catch (_) {}
-    sessionRef.current = null;
-    localStorage.removeItem("sentinel_session");
-    setMessages([]);
-    setBusyBoth(false);
-    setTyping(false);
+  /* ---- chat history (sidebar) ------------------------------------------- */
+
+  const newChat = useCallback(() => {
+    forgetSession();
+    cancelInFlight();
     setLatencyText("");
-  }, [setBusyBoth]);
+    setEditingId(null);
+    setStore((s) => {
+      const c = freshChat();
+      const keep = s.chats.filter((x) => x.id !== s.currentId || x.messages.length > 0);
+      return { version: 1, currentId: c.id, chats: [c, ...keep].slice(0, MAX_CHATS) };
+    });
+    if (!isDesktop()) setSidebarOpen(false);
+  }, [cancelInFlight, forgetSession]);
+
+  const clearChat = useCallback(() => {
+    forgetSession();
+    cancelInFlight();
+    setLatencyText("");
+    setEditingId(null);
+    updateActive((c) => ({
+      ...c,
+      messages: [],
+      sessionId: null,
+      title: DEFAULT_TITLE,
+      updatedAt: Date.now(),
+    }));
+  }, [cancelInFlight, forgetSession, updateActive]);
+
+  const selectChat = useCallback(
+    (id: string) => {
+      if (id !== storeRef.current.currentId) {
+        cancelInFlight();
+        setEditingId(null);
+        setLatencyText("");
+        setStore((s) => ({ ...s, currentId: id }));
+      }
+      if (!isDesktop()) setSidebarOpen(false);
+    },
+    [cancelInFlight],
+  );
+
+  const deleteChat = useCallback(
+    (id: string) => {
+      if (id === storeRef.current.currentId) {
+        cancelInFlight();
+        setEditingId(null);
+        setLatencyText("");
+      }
+      setStore((s) => {
+        const chats = s.chats.filter((c) => c.id !== id);
+        if (!chats.length) {
+          const c = freshChat();
+          return { version: 1, currentId: c.id, chats: [c] };
+        }
+        return {
+          version: 1,
+          currentId: s.currentId === id ? chats[0]!.id : s.currentId,
+          chats,
+        };
+      });
+    },
+    [cancelInFlight],
+  );
+
+  /* ---- generate / stop / edit / regenerate ------------------------------ */
+
+  const runPrompt = useCallback(
+    async (
+      text: string,
+      opts: { appendUser: boolean; sessionId: string | null; threadId: string },
+    ) => {
+      const epoch = epochRef.current;
+      if (opts.appendUser) appendMessage("user", text);
+      setBusyBoth(true);
+      setTyping(true);
+      try {
+        window.sentinelBuddyReact?.(text, "user");
+      } catch (_) {}
+
+      const ac = new AbortController();
+      abortRef.current = ac;
+      let streamed = false;
+
+      const onDelta = (delta: string) => {
+        if (epoch !== epochRef.current || !delta) return;
+        if (!streamed) {
+          streamed = true;
+          setTyping(false);
+        }
+        appendDelta(delta);
+      };
+
+      const maxTok = parseInt(settings.maxTok, 10) || 64;
+      const temp = parseFloat(settings.temp);
+      const req: ChatRequest = {
+        prompt: text,
+        maxNewTokens: maxTok,
+        temperature: Number.isFinite(temp) ? temp : 0.4,
+        autoLength: settings.autoLen,
+        sessionId: opts.sessionId,
+        threadId: opts.threadId,
+      };
+
+      try {
+        const outcome = await chatWithStreaming(req, { onDelta }, ac.signal);
+        if (epoch !== epochRef.current) return; // chat switched / reset while waiting — drop
+        setTyping(false);
+        const reply = (outcome.text || "").trim() || "(empty reply — train with more SFT data)";
+        const lat = outcome.meta.latencyMs != null ? fmtMs(outcome.meta.latencyMs) : "";
+        const meta = lat ? "latency " + lat : undefined;
+        if (streamed) finalizeAssistant(reply, meta);
+        else appendMessage("assistant", reply, meta);
+
+        if (outcome.meta.sessionId) {
+          const sid = outcome.meta.sessionId;
+          sessionIdRef.current = sid;
+          updateActive((c) => ({ ...c, sessionId: sid }));
+        }
+        try {
+          window.sentinelBuddyReact?.(reply, "assistant");
+        } catch (_) {}
+        const bmeta = outcome.meta.metaRag || {};
+        if (bmeta.buddy_ui === "on" || bmeta.buddy_ui === "off") {
+          try {
+            window.sentinelBuddySetVisible?.(bmeta.buddy_ui === "on");
+          } catch (_) {}
+        } else if (bmeta.buddy && /♥/.test(reply)) {
+          try {
+            window.sentinelBuddyPet?.();
+          } catch (_) {}
+        }
+        setLatencyText(lat ? "last " + lat : "");
+      } catch (e) {
+        if (epoch !== epochRef.current) return;
+        setTyping(false);
+        if (isAbort(e)) {
+          // Stopped by the user — keep whatever text streamed so far.
+          finalizeAssistant(null, "stopped");
+        } else if (e instanceof ChatError) {
+          appendMessage("assistant", "Error: " + e.message);
+        } else {
+          appendMessage("assistant", "Network error: " + (e as Error).message);
+        }
+      } finally {
+        if (epoch === epochRef.current) setBusyBoth(false);
+        if (abortRef.current === ac) abortRef.current = null;
+        promptRef.current?.focus();
+      }
+    },
+    [settings, appendMessage, appendDelta, finalizeAssistant, updateActive, setBusyBoth],
+  );
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const send = useCallback(
-    async (text?: string) => {
+    async (textArg?: string) => {
       const promptEl = promptRef.current;
       if (!promptEl) return;
-      const q = (text != null ? text : promptEl.value).trim();
+      const q = (textArg != null ? textArg : promptEl.value).trim();
       if (!q) return;
 
       // Local buddy on/off — no model wait; runs even while a reply is generating.
@@ -158,101 +441,147 @@ export function App() {
 
       promptEl.value = "";
       autoGrow();
-      appendMessage("user", q);
-      setBusyBoth(true);
-      setTyping(true);
-      try {
-        window.sentinelBuddyReact?.(q, "user");
-      } catch (_) {}
 
-      const maxTok = parseInt(settings.maxTok, 10) || 64;
-      const temp = parseFloat(settings.temp);
-      const auto = settings.autoLen;
+      const activeChat = storeRef.current.chats.find((c) => c.id === storeRef.current.currentId);
 
-      const epoch = epochRef.current;
-      try {
-        const r = await fetch("/v1/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: q,
-            max_new_tokens: maxTok,
-            temperature: Number.isFinite(temp) ? temp : 0.4,
-            auto_length: auto,
-            session_id: sessionRef.current || null,
-          }),
+      if (editingId != null) {
+        // Edited message: drop it + everything after, reset the server session,
+        // then resend the new text as a fresh user turn.
+        const targetId = editingId;
+        setEditingId(null);
+        forgetSession();
+        updateActive((c) => {
+          const kept = c.messages.filter((m) => m.id < targetId);
+          return {
+            ...c,
+            sessionId: null,
+            updatedAt: Date.now(),
+            title: kept.length === 0 ? titleFrom(q) : c.title,
+            messages: kept,
+          };
         });
-        if (epoch !== epochRef.current) return; // session reset while waiting — drop reply
-        setTyping(false);
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({}) as Record<string, unknown>);
-          if (epoch !== epochRef.current) return;
-          let detail = err.detail as unknown;
-          if (Array.isArray(detail)) {
-            detail = detail.map((d) => (d as { msg?: string }).msg || JSON.stringify(d)).join("; ");
-          } else if (detail && typeof detail === "object") {
-            detail = JSON.stringify(detail);
-          }
-          appendMessage("assistant", "Error: " + (detail || r.statusText || r.status));
-        } else {
-          const j = await r.json();
-          if (epoch !== epochRef.current) return;
-          sessionRef.current = j.session_id || sessionRef.current;
-          if (sessionRef.current) localStorage.setItem("sentinel_session", sessionRef.current);
-          const lat = j.latency_ms != null ? fmtMs(j.latency_ms) : "";
-          const reply = (j.text || "").trim() || "(empty reply — train with more SFT data)";
-          appendMessage("assistant", reply, lat ? "latency " + lat : "");
-          try {
-            window.sentinelBuddyReact?.(reply, "assistant");
-          } catch (_) {}
-          const bmeta = j.meta_rag || {};
-          if (bmeta.buddy_ui === "on" || bmeta.buddy_ui === "off") {
-            try {
-              window.sentinelBuddySetVisible?.(bmeta.buddy_ui === "on");
-            } catch (_) {}
-          } else if (bmeta.buddy && /♥/.test(reply)) {
-            try {
-              window.sentinelBuddyPet?.();
-            } catch (_) {}
-          }
-          setLatencyText(lat ? "last " + lat : "");
-        }
-      } catch (e) {
-        if (epoch !== epochRef.current) return;
-        setTyping(false);
-        appendMessage("assistant", "Network error: " + (e as Error).message);
+        await runPrompt(q, {
+          appendUser: true,
+          sessionId: null,
+          threadId: activeChat?.id || "web-session",
+        });
+        return;
       }
-      setBusyBoth(false);
-      promptRef.current?.focus();
+
+      const sessionId = activeChat?.sessionId ?? null;
+      const threadId = sessionId || activeChat?.id || "web-session";
+      await runPrompt(q, { appendUser: true, sessionId, threadId });
     },
-    [settings, appendMessage, autoGrow, setBusyBoth],
+    [editingId, appendMessage, autoGrow, forgetSession, runPrompt, updateActive],
   );
 
+  const regenerate = useCallback(async () => {
+    if (busyRef.current) return;
+    const msgs = active.messages;
+    let targetIdx = -1;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i]!.role === "assistant") {
+        targetIdx = i;
+        break;
+      }
+    }
+    if (targetIdx < 0) return;
+    const target = msgs[targetIdx]!;
+    let userText: string | null = null;
+    for (let i = targetIdx - 1; i >= 0; i--) {
+      if (msgs[i]!.role === "user") {
+        userText = msgs[i]!.text;
+        break;
+      }
+    }
+    if (userText == null) return;
+
+    forgetSession();
+    updateActive((c) => ({
+      ...c,
+      sessionId: null,
+      updatedAt: Date.now(),
+      messages: c.messages.filter((m) => m.id < target.id),
+    }));
+    await runPrompt(userText, {
+      appendUser: false,
+      sessionId: null,
+      threadId: active.id,
+    });
+  }, [active, forgetSession, runPrompt, updateActive]);
+
+  const startEdit = useCallback(
+    (msg: ChatMessage) => {
+      const el = promptRef.current;
+      if (!el) return;
+      el.value = msg.text;
+      autoGrow();
+      setEditingId(msg.id);
+      el.focus();
+    },
+    [autoGrow],
+  );
+
+  const cancelEdit = useCallback(() => setEditingId(null), []);
+
+  const lastAssistantIdx = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]!.role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
+
   return (
-    <>
-      <Topbar health={health} onNew={resetSession} />
-      <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
-        <div className="thread" id="thread">
-          {messages.length === 0 && !typing && <Welcome onChip={(q) => send(q)} />}
-          {messages.map((m) => (
-            <Message key={m.id} msg={m} />
-          ))}
-          {typing && <TypingIndicator />}
-        </div>
-      </main>
-      <Composer
-        promptRef={promptRef}
-        busy={busy}
-        maxTok={settings.maxTok}
-        temp={settings.temp}
-        autoLen={settings.autoLen}
-        latencyText={latencyText}
-        onSettings={updateSettings}
-        onInput={autoGrow}
-        onSubmit={() => send()}
-        onClear={resetSession}
+    <div className="shell">
+      <Sidebar
+        chats={store.chats}
+        currentId={store.currentId}
+        open={sidebarOpen}
+        onSelect={selectChat}
+        onDelete={deleteChat}
+        onNew={newChat}
+        onClose={() => setSidebarOpen(false)}
       />
+      <div className="main-col">
+        <Topbar
+          health={health}
+          menuOpen={sidebarOpen}
+          onMenu={() => setSidebarOpen((v) => !v)}
+          onNew={newChat}
+        />
+        <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
+          <div className="thread" id="thread">
+            {messages.length === 0 && !typing && <Welcome onChip={(q) => send(q)} />}
+            {messages.map((m, i) => (
+              <Message
+                key={m.id}
+                msg={m}
+                canEdit={!busy && m.role === "user"}
+                canRegenerate={!busy && i === lastAssistantIdx}
+                onEdit={startEdit}
+                onRegenerate={regenerate}
+              />
+            ))}
+            {typing && <TypingIndicator />}
+          </div>
+        </main>
+        <Composer
+          promptRef={promptRef}
+          busy={busy}
+          editing={editingId != null}
+          maxTok={settings.maxTok}
+          temp={settings.temp}
+          autoLen={settings.autoLen}
+          latencyText={latencyText}
+          onSettings={updateSettings}
+          onInput={autoGrow}
+          onSubmit={() => send()}
+          onStop={stop}
+          onClear={clearChat}
+          onCancelEdit={cancelEdit}
+        />
+      </div>
       <BuddyFloat />
-    </>
+    </div>
   );
 }

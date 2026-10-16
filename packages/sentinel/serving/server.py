@@ -7,6 +7,7 @@ or highly concurrent workloads.
 
 Features
   - Chat + raw-token completions, SSE streaming
+  - AG-UI protocol endpoint (Agent-User Interaction, spec 1.0 event stream)
   - Optional API-key auth (NEUROFIELD_API_KEYS, header only)
   - Rate limiting, Prometheus metrics, health/readiness
   - Safe, thread-safe session handling (TTL, max sessions, owner binding)
@@ -31,6 +32,7 @@ Environment (NEUROFIELD_* wins; the short names are kept for compatibility)
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import json
@@ -42,13 +44,14 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, AsyncIterator, Iterator, Optional
 
 import torch
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from sentinel import __version__
 from sentinel.checkpoint.resolve import load_model_from_checkpoint
@@ -484,6 +487,68 @@ def _generate(
     lat = (time.perf_counter() - start) * 1000
     _bump("latency_ms", lat)
     return new_ids, lat, audit
+
+
+class _TokenPump:
+    """Bridge a synchronous token generator onto the asyncio event loop.
+
+    ``_token_stream`` holds ``_lock`` for the length of a generation and only
+    makes progress while *something* iterates it. When a streaming client
+    disconnects, Starlette can abandon a suspended generator without ever
+    closing it — that used to strand ``_lock`` forever (every later request
+    blocked at zero CPU until a server restart; stop/disconnect in the UI
+    reproduced it). The pump makes that impossible: the generator is driven by
+    a plain worker-thread loop that always reaches the end of its
+    ``with _lock`` block (or closes the generator explicitly), while events
+    cross to the loop over an ``asyncio.Queue``. ``signal_cancel`` stops the
+    worker at the next token boundary.
+    """
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, factory) -> None:
+        self._loop = loop
+        self._factory = factory
+        self._q: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+        self._cancel = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="aeris-token-pump", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def signal_cancel(self) -> None:
+        self._cancel.set()
+
+    async def next_event(self) -> tuple[str, Any]:
+        """Await the next ``("token" | "done" | "error", payload)`` item.
+
+        Suspension happens *inside* the consumer coroutine, so a client
+        disconnect cancels here (not at an untracked generator yield).
+        """
+        return await self._q.get()
+
+    def _emit(self, kind: str, payload: Any = None) -> None:
+        try:
+            self._loop.call_soon_threadsafe(self._q.put_nowait, (kind, payload))
+        except RuntimeError:  # event loop already closed (server shutting down)
+            pass
+
+    def _run(self) -> None:
+        stream = None
+        aborted = False
+        try:
+            stream = self._factory()
+            for nid, _audit in stream:
+                if self._cancel.is_set():
+                    aborted = True
+                    break
+                self._emit("token", nid)
+        except Exception as e:  # noqa: BLE001 - surfaced to the SSE consumer
+            self._emit("error", e)
+        finally:
+            if stream is not None:
+                # GeneratorExit at the yield unwinds `with _lock`.
+                with contextlib.suppress(Exception):
+                    stream.close()
+            self._emit("done", aborted)
 
 
 def _postprocess(prompt: str, raw: str, enabled: bool) -> str:
@@ -1088,7 +1153,7 @@ def create_app(
             raise HTTPException(status_code=500, detail="internal error") from e
 
     @app.post("/v1/chat/stream")
-    def chat_stream(
+    async def chat_stream(
         req: ChatRequest,
         request: Request,
         api_key: Optional[str] = Depends(require_api_key),
@@ -1098,11 +1163,11 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         owner = _owner(api_key)
-        prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = _prepare_chat(
-            req, sid, owner
+        prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = (
+            await run_in_threadpool(_prepare_chat, req, sid, owner)
         )
 
-        def event_gen() -> Iterator[str]:
+        async def event_gen() -> AsyncIterator[str]:
             start = time.perf_counter()
             new_ids: list[int] = []
             start_payload = {"session_id": sid, "event": "start"}
@@ -1125,13 +1190,32 @@ def create_app(
                 yield f"data: {json.dumps(gdone)}\n\n"
                 yield "data: [DONE]\n\n"
                 return
-            try:
-                for nid, _ in _token_stream(
+            # Generation runs on a pump thread: a client disconnect can cancel
+            # this generator at any await, but the model lock is always
+            # released by the pump (see _TokenPump).
+            pump = _TokenPump(
+                asyncio.get_running_loop(),
+                lambda: _token_stream(
                     input_ids, max_new, temperature, sid, owner, reset=True,
                     slow_seed=slow_seed, replay_len=replay_len,
-                ):
-                    new_ids.append(nid)
-                    yield f"data: {json.dumps({'token': _decode([nid]), 'id': nid})}\n\n"
+                ),
+            )
+            pump.start()
+            aborted = False
+            try:
+                while True:
+                    kind, payload = await pump.next_event()
+                    if kind == "token":
+                        new_ids.append(payload)
+                        yield f"data: {json.dumps({'token': _decode([payload]), 'id': payload})}\n\n"
+                    elif kind == "done":
+                        aborted = bool(payload)
+                        break
+                    else:
+                        raise payload
+            except (asyncio.CancelledError, GeneratorExit):
+                pump.signal_cancel()
+                raise
             except HTTPException as e:
                 yield f"data: {json.dumps({'event': 'error', 'detail': e.detail})}\n\n"
                 yield "data: [DONE]\n\n"
@@ -1142,12 +1226,16 @@ def create_app(
                 yield f"data: {json.dumps({'event': 'error', 'detail': 'internal error'})}\n\n"
                 yield "data: [DONE]\n\n"
                 return
+            finally:
+                pump.signal_cancel()
+            if aborted:  # client is gone; do not commit a partial turn
+                return
             lat = (time.perf_counter() - start) * 1000
             _bump("latency_ms", lat)
             text = _postprocess(prompt, _decode(new_ids), req.postprocess)
             append_turn(sid, "user", prompt)
             append_turn(sid, "assistant", text)
-            _persist(sid, owner, req, prompt, text)
+            await run_in_threadpool(_persist, sid, owner, req, prompt, text)
             done_payload = {"event": "done", "latency_ms": lat, "text": text}
             if meta_rag_info is not None:
                 done_payload["meta_rag"] = meta_rag_info
@@ -1155,6 +1243,298 @@ def create_app(
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+    # ------------------------------------------------------------------
+    # AG-UI protocol endpoint (Agent-User Interaction, spec 1.0).
+    # https://docs.ag-ui.com — accepts RunAgentInput, streams AG-UI events (SSE).
+    # Feature parity with /v1/chat: buddy -> bhutu -> tool-first -> Megha gate
+    # -> model token stream as TEXT_MESSAGE_CONTENT deltas -> RUN_FINISHED.
+    # ------------------------------------------------------------------
+
+    @app.post("/ag-ui")
+    @app.post("/v1/ag-ui")
+    async def ag_ui(
+        request: Request,
+        api_key: str | None = Depends(require_api_key),
+    ):
+        """AG-UI compatible agent endpoint: ``RunAgentInput`` in, event stream out."""
+        try:
+            from ag_ui.core import (
+                EventType,
+                RunAgentInput,
+                RunErrorEvent,
+                RunFinishedEvent,
+                RunStartedEvent,
+                TextMessageContentEvent,
+                TextMessageEndEvent,
+                TextMessageStartEvent,
+            )
+            from ag_ui.encoder import EventEncoder
+        except Exception as e:  # pragma: no cover - optional dependency
+            raise HTTPException(status_code=501, detail="ag-ui-protocol not installed") from e
+
+        _limit(request, api_key)
+        _bump("requests")
+
+        try:
+            payload = await request.json()
+        except Exception:  # noqa: BLE001 - any parse failure means an invalid body
+            raise HTTPException(status_code=400, detail="invalid JSON body") from None
+        try:
+            agent_input = RunAgentInput.model_validate(payload)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"invalid RunAgentInput: {e}") from e
+
+        thread_id = agent_input.thread_id
+        run_id = agent_input.run_id
+        try:
+            sid = _valid_session_id(thread_id)
+        except HTTPException:
+            sid = uuid.uuid4().hex  # tolerate arbitrary client thread ids
+        owner = _owner(api_key)
+
+        raw = ""
+        for msg in reversed(agent_input.messages or []):
+            if getattr(msg, "role", None) != "user":
+                continue
+            content = getattr(msg, "content", "")
+            if isinstance(content, str):
+                raw = content
+            else:
+                parts: list[str] = []
+                for part in content or []:
+                    txt = part.get("text") if isinstance(part, dict) else getattr(part, "text", None)
+                    if txt:
+                        parts.append(str(txt))
+                raw = "\n".join(parts)
+            break
+        raw = normalize_prompt(raw)
+        if not raw:
+            raise HTTPException(status_code=422, detail="RunAgentInput needs a non-empty user message")
+
+        # Optional generation knobs via forwardedProps (everything optional)
+        fp = agent_input.forwarded_props if isinstance(agent_input.forwarded_props, dict) else {}
+        try:
+            req_max_new = max(1, min(8192, int(fp.get("max_new_tokens", 48))))
+        except Exception:  # noqa: BLE001 - malformed knobs fall back to defaults
+            req_max_new = 48
+        try:
+            req_temp = max(0.0, min(2.0, float(fp.get("temperature", 0.2))))
+        except Exception:  # noqa: BLE001 - malformed knobs fall back to defaults
+            req_temp = 0.2
+        req = ChatRequest(
+            prompt=raw,
+            max_new_tokens=req_max_new,
+            temperature=req_temp,
+            auto_length=bool(fp.get("auto_length", True)),
+            postprocess=bool(fp.get("postprocess", True)),
+            session_id=sid,
+        )
+
+        encoder = EventEncoder()
+        message_id = "msg_" + uuid.uuid4().hex[:16]
+        started = time.perf_counter()
+
+        def _sentinel_meta(model_name: str, meta_rag: dict | None, lat: float) -> dict:
+            return {
+                "sentinel": {
+                    "session_id": sid,
+                    "model": model_name,
+                    "latency_ms": round(lat, 3),
+                    "meta_rag": meta_rag,
+                }
+            }
+
+        def _message_events(text: str, model_name: str, meta_rag: dict | None) -> Iterator[str]:
+            """One complete assistant message as the AG-UI start/content/end triad."""
+            yield encoder.encode(
+                TextMessageStartEvent(
+                    type=EventType.TEXT_MESSAGE_START, message_id=message_id, role="assistant"
+                )
+            )
+            yield encoder.encode(
+                TextMessageContentEvent(
+                    type=EventType.TEXT_MESSAGE_CONTENT, message_id=message_id, delta=text
+                )
+            )
+            yield encoder.encode(
+                TextMessageEndEvent(
+                    type=EventType.TEXT_MESSAGE_END,
+                    message_id=message_id,
+                    metadata=_sentinel_meta(model_name, meta_rag, (time.perf_counter() - started) * 1000.0),
+                )
+            )
+
+        def _finish() -> str:
+            return encoder.encode(
+                RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id=thread_id, run_id=run_id)
+            )
+
+        async def event_gen() -> AsyncIterator[str]:
+            yield encoder.encode(
+                RunStartedEvent(type=EventType.RUN_STARTED, thread_id=thread_id, run_id=run_id)
+            )
+            try:
+                # 1) Buddy companion commands (decorative only — no model)
+                try:
+                    from sentinel.buddy import handle_buddy_command, is_buddy_command
+
+                    if is_buddy_command(raw):
+                        text = handle_buddy_command(raw, str(owner or api_key or sid))
+                        if text:
+                            if text == "BUDDY_ON":
+                                msg, bmeta = "Buddy on.", {"buddy": True, "buddy_ui": "on"}
+                            elif text == "BUDDY_OFF":
+                                msg, bmeta = "Buddy off.", {"buddy": True, "buddy_ui": "off"}
+                            else:
+                                msg, bmeta = text, {"buddy": True}
+                            append_turn(sid, "user", raw)
+                            append_turn(sid, "assistant", msg)
+                            for chunk in _message_events(msg, "buddy", bmeta):
+                                yield chunk
+                            yield _finish()
+                            return
+                except Exception as e:  # noqa: BLE001 - optional subsystem must never break the stream
+                    logger.warning("ag-ui buddy command: %s", e)
+
+                # 2) Bhutu (metacognition manager) precheck — same gate as /v1/chat
+                try:
+                    from sentinel.modules.bhutu import bhutu_decide
+
+                    b0 = bhutu_decide(raw)
+                    if not b0.allow:
+                        msg = b0.user_message or "Request blocked by Bhutu."
+                        append_turn(sid, "user", raw)
+                        append_turn(sid, "assistant", msg)
+                        for chunk in _message_events(msg, "bhutu-policy", {"bhutu": b0.to_dict()}):
+                            yield chunk
+                        yield _finish()
+                        return
+                except Exception as e:  # noqa: BLE001 - optional subsystem must never break the stream
+                    logger.warning("ag-ui bhutu precheck: %s", e)
+
+                # 3) Tool-first path (Grok-style live facts) + Megha policy gate
+                direct = (_env("CHAT_TOOLS_DIRECT", "1") or "1").strip().lower() not in {
+                    "0", "false", "no", "off",
+                }
+                gate = _megha_gate(raw, sid)  # streaming must not bypass Megha policy
+                if gate is not None:
+                    gtext, gmodel, gmeta = gate
+                    append_turn(sid, "user", raw)
+                    append_turn(sid, "assistant", gtext)
+                    for chunk in _message_events(gtext, gmodel, gmeta):
+                        yield chunk
+                    yield _finish()
+                    return
+                if direct:
+                    def _tool_first_text() -> str | None:
+                        text = None
+                        try:
+                            from sentinel.agent.si_v1 import SI_v1Config, build_plan, run_si_v1
+
+                            plan = build_plan(raw)
+                            uses_tool = any(
+                                s.get("action") not in ("compose_answer", "verify_nonempty", "")
+                                for s in plan
+                            )
+                            if uses_tool:
+                                result = run_si_v1(raw, config=SI_v1Config(max_steps=6))
+                                if result.answer and result.stopped_reason not in ("empty_input", "no_tools"):
+                                    text = result.answer.strip()
+                        except Exception as e:  # noqa: BLE001 - optional subsystem must never break the stream
+                            logger.warning("ag-ui SI_v1 path failed, falling back to enrich: %s", e)
+                        if not text:
+                            _enriched, tool_note = enrich_prompt_with_tools(raw)
+                            if tool_note and str(tool_note).strip():
+                                text = str(tool_note).strip()
+                        return text
+
+                    text = await run_in_threadpool(_tool_first_text)
+                    if text:
+                        append_turn(sid, "user", raw)
+                        append_turn(sid, "assistant", text)
+                        await run_in_threadpool(_persist, sid, owner, req, raw, text)
+                        for chunk in _message_events(text, "tools+si_v1", None):
+                            yield chunk
+                        yield _finish()
+                        return
+
+                # 4) Model token stream -> TEXT_MESSAGE_CONTENT deltas
+                _need_model()
+                prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = (
+                    await run_in_threadpool(_prepare_chat, req, sid, owner)
+                )
+                yield encoder.encode(
+                    TextMessageStartEvent(
+                        type=EventType.TEXT_MESSAGE_START, message_id=message_id, role="assistant"
+                    )
+                )
+                # Generation runs on a pump thread: a client disconnect can
+                # cancel this generator at any await, but the model lock is
+                # always released by the pump (see _TokenPump).
+                pump = _TokenPump(
+                    asyncio.get_running_loop(),
+                    lambda: _token_stream(
+                        input_ids, max_new, temperature, sid, owner, reset=True,
+                        slow_seed=slow_seed, replay_len=replay_len,
+                    ),
+                )
+                pump.start()
+                new_ids: list[int] = []
+                aborted = False
+                try:
+                    while True:
+                        kind, payload = await pump.next_event()
+                        if kind == "token":
+                            new_ids.append(payload)
+                            delta = _decode([payload])
+                            if delta:
+                                yield encoder.encode(
+                                    TextMessageContentEvent(
+                                        type=EventType.TEXT_MESSAGE_CONTENT,
+                                        message_id=message_id,
+                                        delta=delta,
+                                    )
+                                )
+                        elif kind == "done":
+                            aborted = bool(payload)
+                            break
+                        else:
+                            raise payload
+                except (asyncio.CancelledError, GeneratorExit):
+                    pump.signal_cancel()
+                    raise
+                finally:
+                    pump.signal_cancel()
+                if aborted:  # client is gone; do not commit a partial turn
+                    return
+                lat = (time.perf_counter() - started) * 1000.0
+                _bump("latency_ms", lat)
+                text = _postprocess(prompt, _decode(new_ids), req.postprocess)
+                append_turn(sid, "user", prompt)
+                append_turn(sid, "assistant", text)
+                await run_in_threadpool(_persist, sid, owner, req, prompt, text)
+                yield encoder.encode(
+                    TextMessageEndEvent(
+                        type=EventType.TEXT_MESSAGE_END,
+                        message_id=message_id,
+                        metadata=_sentinel_meta(_model_id, meta_rag_info, lat),
+                    )
+                )
+                yield _finish()
+            except HTTPException as e:
+                detail = e.detail if isinstance(e.detail, str) else json.dumps(e.detail)
+                yield encoder.encode(
+                    RunErrorEvent(type=EventType.RUN_ERROR, message=detail, code="http_error")
+                )
+            except Exception:
+                _bump("errors")
+                logger.exception("ag-ui run failed")
+                yield encoder.encode(
+                    RunErrorEvent(type=EventType.RUN_ERROR, message="internal error", code="internal_error")
+                )
+
+        return StreamingResponse(event_gen(), media_type=encoder.get_content_type())
 
     # ------------------------------------------------------------------
     # Per-user persistent memory (opt-in: NEUROFIELD_MEMORY_DIR). Always needs an API key.

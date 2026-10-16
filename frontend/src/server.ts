@@ -12,7 +12,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
-import { proxyChat, proxyHealth, proxyJson, pythonBase } from "./proxy";
+import { proxyChat, proxyHealth, proxyJson, proxyStream, pythonBase } from "./proxy";
 import { gitStatus, gitLog, gitDiff } from "./git";
 import { buildAppBundle, latestAppMtime } from "./app-build";
 
@@ -54,12 +54,12 @@ function rateLimit(ip: string): boolean {
 
 app.use("*", async (c, next) => {
   const path = c.req.path || "";
-  if (path.startsWith("/v1/") || path === "/healthz" || path === "/readyz") {
+  if (path.startsWith("/v1/") || path === "/ag-ui" || path === "/healthz" || path === "/readyz") {
     const ip =
       c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
       c.req.header("x-real-ip") ||
       "anon";
-    if (path.startsWith("/v1/") && !rateLimit(ip)) {
+    if ((path.startsWith("/v1/") || path === "/ag-ui") && !rateLimit(ip)) {
       return c.json({ detail: "Rate limit exceeded" }, 429);
     }
   }
@@ -84,10 +84,21 @@ app.post("/v1/chat", async (c) => {
   return c.json(result.body, result.status as 200);
 });
 
+// SSE pass-through (no buffering): token deltas reach the browser live.
 app.post("/v1/chat/stream", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const r = await proxyJson("POST", "/v1/chat/stream", body);
-  return c.json(r.body, r.status as 200);
+  return proxyStream("POST", "/v1/chat/stream", body);
+});
+
+// AG-UI protocol (spec 1.0) — agent-UI event stream, proxied unbuffered.
+app.post("/ag-ui", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return proxyStream("POST", "/ag-ui", body);
+});
+
+app.post("/v1/ag-ui", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return proxyStream("POST", "/v1/ag-ui", body);
 });
 
 app.post("/v1/reset", async (c) => {
@@ -214,4 +225,8 @@ console.log(`Python model backend     → ${pythonBase()}`);
 export default {
   port,
   fetch: app.fetch,
+  // Max idle window for sockets/streams. Needed for SSE: the demo model can
+  // take many seconds between tokens, and Bun's default (10s) would ECONNRESET
+  // slow streams mid-generation.
+  idleTimeout: 255,
 };

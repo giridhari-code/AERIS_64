@@ -3,11 +3,29 @@ export interface Health {
   label: string;
 }
 
-export function Topbar({ health, onNew }: { health: Health; onNew: () => void }) {
+interface TopbarProps {
+  health: Health;
+  menuOpen: boolean;
+  onMenu: () => void;
+  onNew: () => void;
+}
+
+export function Topbar({ health, menuOpen, onMenu, onNew }: TopbarProps) {
   const cls =
     "status" + (health.state === "ok" ? " ok" : health.state === "err" ? " err" : "");
   return (
     <header className="topbar" role="banner">
+      <button
+        type="button"
+        className="icon-btn"
+        id="btnMenu"
+        title="Chats"
+        aria-label="Chats"
+        aria-pressed={menuOpen}
+        onClick={onMenu}
+      >
+        ☰
+      </button>
       <div className="brand">
         <img src="/logo.svg" alt="" width={28} height={28} />
         <div className="brand-text">

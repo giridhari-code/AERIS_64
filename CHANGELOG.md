@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased — web client: streaming, AG-UI, history, regenerate/edit
+
+- **AG-UI protocol endpoint.** `packages/sentinel/serving/server.py`: `/ag-ui`
+  (alias `/v1/ag-ui`) accepts an AG-UI `RunAgentInput` and streams spec-1.0
+  events (`RUN_STARTED` → `TEXT_MESSAGE_START/CONTENT/END` → `RUN_FINISHED`,
+  `RUN_ERROR` on failure) with the same control gates as `/v1/chat` (buddy →
+  Bhutu → tool-first/SI_v1 → Megha gate → model). `TEXT_MESSAGE_END.metadata`
+  carries the `sentinel` block (session_id · model · latency_ms · meta_rag).
+  Depends on `ag-ui-protocol` (added to the `serve` extra); the endpoint
+  returns 501 when the package is absent. Tests: `tests/test_ag_ui.py`.
+- **Streaming SSE hardening (`_TokenPump`).** A client disconnect used to
+  strand the global model `_lock`: the abandoned response generator stayed
+  suspended inside `_token_stream`'s `with _lock`, and every later request
+  blocked forever at zero CPU until a restart (the new UI Stop button made
+  this easy to hit). The token generator is now driven by a worker thread
+  that always finishes or closes it — cancellation releases the lock at the
+  next token, and even a fully abandoned stream drains without wedging the
+  server. `_prepare_chat` / `_persist` moved to the threadpool in the two
+  streaming endpoints. Tests: `tests/test_stream_pump.py`.
+- **Frontend chat client** (`frontend/`):
+  - token-by-token streaming with transport fallback
+    `/v1/ag-ui` → `/v1/chat/stream` → `/v1/chat` (`src/app/lib/stream.ts`);
+  - **Stop** button (aborts stream, keeps partial reply + `stopped` marker);
+  - **Regenerate / Edit message** actions (reset server session, replay turn);
+  - **History sidebar** (`sentinel_chats_v1` in localStorage; switch, delete,
+    clear; mobile overlay via `#btnMenu`);
+  - edge: unbuffered SSE pass-through (`proxyStream` in `src/proxy.ts`),
+    `/ag-ui` + `/v1/ag-ui` routes, `idleTimeout: 255` on Bun.serve so slow
+    token gaps are not reset (default 10s did reset them).
+  - Legacy DOM ids/classes are unchanged; the jsdom e2e suite (34 checks)
+    still passes.
+
+
 ## Unreleased — Auto RAG (metacognition-controlled)
 
 - **Auto RAG** is the default retrieval path. `src/neurofield/rag/meta_rag.py`:
