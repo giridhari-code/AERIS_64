@@ -68,7 +68,7 @@ export function Message({ msg, canEdit, canRegenerate, onEdit, onRegenerate }: M
               title="Edit and resend this message"
               onClick={() => onEdit(msg)}
             >
-              ✎ Edit
+              Edit
             </button>
           )}
           {!isUser && canRegenerate && onRegenerate && (
@@ -78,7 +78,7 @@ export function Message({ msg, canEdit, canRegenerate, onEdit, onRegenerate }: M
               title="Generate a new reply"
               onClick={onRegenerate}
             >
-              ↻ Regenerate
+              Retry
             </button>
           )}
         </div>

@@ -720,7 +720,9 @@ export function App() {
         />
         <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
           <div className="thread" id="thread">
-            {messages.length === 0 && !typing && <Welcome onChip={(q) => send(q)} />}
+            {messages.length === 0 && !typing && (
+              <Welcome onChip={(q) => send(q)} userName={accountUser?.name || null} />
+            )}
             {messages.map((m, i) => (
               <Message
                 key={m.id}
