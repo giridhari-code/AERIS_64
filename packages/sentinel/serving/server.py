@@ -73,6 +73,7 @@ from sentinel.serving.chat_history import (
     build_prompt,
     build_user_part,
     history_len,
+    last_user_message,
     reset_history,
     restore_turns,
     set_system_prompt,
@@ -778,6 +779,23 @@ def create_app(
             logger.warning("buddy egg snapshot failed: %s", e)
             return None
 
+    def _buddy_key(uid: str) -> Optional[str]:
+        """Pinned companion identity (set when a guest egg was adopted)."""
+        store = _egg_store()
+        if store is None:
+            return None
+        try:
+            return store.buddy_key(uid)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("buddy key lookup failed: %s", e)
+            return None
+
+    def _buddy_for(uid: str):
+        """Hatch the companion for this identity (pinned key wins)."""
+        from sentinel.buddy import hatch_buddy
+
+        return hatch_buddy(_buddy_key(uid) or uid)
+
     async def require_chat_access(
         request: Request,
         x_api_key: Optional[str] = Depends(require_api_key),
@@ -1106,29 +1124,21 @@ def create_app(
             # Buddy companion commands (decorative only — no tools/model)
             _raw0 = normalize_prompt(req.prompt)
             try:
-                from sentinel.buddy import is_buddy_command, handle_buddy_command
+                from sentinel.buddy import is_buddy_command, handle_buddy_command, resolve_buddy_reply
                 if is_buddy_command(_raw0):
                     uid_hint = str(getattr(req, "user_id", "") or "").strip()
-                    owner = _owner(api_key) or uid_hint or (api_key or sid)
-                    egg = _egg_snapshot(str(owner))
-                    text = handle_buddy_command(_raw0, str(owner), egg=egg)
+                    owner = str(_owner(api_key) or uid_hint or (api_key or sid))
+                    egg = _egg_snapshot(owner)
+                    text = handle_buddy_command(
+                        _raw0,
+                        owner,
+                        egg=egg,
+                        last_text=last_user_message(sid),
+                        hatch_id=_buddy_key(owner),
+                    )
                     if text:
-                        # Control tokens for UI; short human message for transcript
-                        if text == "BUDDY_ON":
-                            msg = "Buddy on — float only; linked to you + AERIS-64."
-                            meta = {"buddy": True, "buddy_ui": "on"}
-                        elif text == "BUDDY_OFF":
-                            msg = "Buddy hidden."
-                            meta = {"buddy": True, "buddy_ui": "off"}
-                        elif text == "BUDDY_EGG_UI":
-                            msg = "Egg incubating — see Buddy float (hatch is not shown in chat)."
-                            meta = {"buddy": True, "buddy_egg": True}
-                        elif text in ("BUDDY_MIMIC_ON", "BUDDY_JOKER_ON"):
-                            msg = "Buddy mimic/joker mode: mirrors your chat emotion on the float."
-                            meta = {"buddy": True, "buddy_mimic": True}
-                        else:
-                            msg = text
-                            meta = {"buddy": True}
+                        # Control tokens for UI; short human message for the transcript
+                        msg, meta = resolve_buddy_reply(text)
                         append_turn(sid, "user", _raw0)
                         append_turn(sid, "assistant", msg)
                         return ChatResponse(
@@ -1486,19 +1496,24 @@ def create_app(
             try:
                 # 1) Buddy companion commands (decorative only — no model)
                 try:
-                    from sentinel.buddy import handle_buddy_command, is_buddy_command
+                    from sentinel.buddy import (
+                        handle_buddy_command,
+                        is_buddy_command,
+                        resolve_buddy_reply,
+                    )
 
                     if is_buddy_command(raw):
                         uid_hint = str(fp.get("user_id") or "").strip()
                         bkey = str(owner or uid_hint or api_key or sid)
-                        text = handle_buddy_command(raw, bkey, egg=_egg_snapshot(bkey))
+                        text = handle_buddy_command(
+                            raw,
+                            bkey,
+                            egg=_egg_snapshot(bkey),
+                            last_text=last_user_message(sid),
+                            hatch_id=_buddy_key(bkey),
+                        )
                         if text:
-                            if text == "BUDDY_ON":
-                                msg, bmeta = "Buddy on.", {"buddy": True, "buddy_ui": "on"}
-                            elif text == "BUDDY_OFF":
-                                msg, bmeta = "Buddy off.", {"buddy": True, "buddy_ui": "off"}
-                            else:
-                                msg, bmeta = text, {"buddy": True}
+                            msg, bmeta = resolve_buddy_reply(text)
                             append_turn(sid, "user", raw)
                             append_turn(sid, "assistant", msg)
                             for chunk in _message_events(msg, "buddy", bmeta):
@@ -2003,9 +2018,8 @@ def create_app(
         api_key: Optional[str] = Depends(require_api_key),
         user_id: Optional[str] = None,
     ):
-        from sentinel.buddy import hatch_buddy
         owner = str((user_id or "").strip() or (_owner(api_key) if api_key else "anonymous") or "anonymous")
-        b = hatch_buddy(owner)
+        b = _buddy_for(owner)
         out: dict = {
             "product": "Buddy",
             "buddy": b.to_public_dict(),
@@ -2019,7 +2033,12 @@ def create_app(
 
     @app.post("/v1/buddy")
     def buddy_post(body: dict, api_key: Optional[str] = Depends(require_api_key)):
-        from sentinel.buddy import hatch_buddy, pet_buddy, handle_buddy_command, is_buddy_command
+        from sentinel.buddy import (
+            pet_buddy,
+            handle_buddy_command,
+            is_buddy_command,
+            resolve_buddy_reply,
+        )
         body = body or {}
         # Prefer explicit user_id from UI so hatch stays stable per browser
         owner = str(body.get("user_id") or "").strip() or (
@@ -2027,7 +2046,7 @@ def create_app(
         )
         owner = str(owner or "anonymous")
         cmd = str(body.get("command") or "/buddy").strip()
-        b = hatch_buddy(owner)
+        b = _buddy_for(owner)
         egg = _egg_snapshot(owner)
         out: dict = {
             "product": "Buddy",
@@ -2037,11 +2056,18 @@ def create_app(
         if egg is not None:
             out["egg"] = egg
         if "pet" in cmd.lower():
-            out["text"] = pet_buddy(owner)
+            out["text"] = pet_buddy(_buddy_key(owner) or owner)
             return out
-        out["text"] = handle_buddy_command(
-            cmd if is_buddy_command(cmd) else "/buddy", owner, egg=egg
+        reply = handle_buddy_command(
+            cmd if is_buddy_command(cmd) else "/buddy",
+            owner,
+            egg=egg,
+            hatch_id=_buddy_key(owner),
         )
+        msg, bmeta = resolve_buddy_reply(reply or "")
+        out["text"] = msg
+        if bmeta.get("buddy_anim"):
+            out["anim"] = bmeta["buddy_anim"]
         return out
 
     @app.post("/v1/buddy/step")
@@ -2056,8 +2082,6 @@ def create_app(
         the (deterministic) requirement the response flips to ``hatched`` and
         carries the revealed companion.
         """
-        from sentinel.buddy import hatch_buddy
-
         _limit(request, api_key)
         body = body or {}
         owner = str(body.get("user_id") or "").strip() or (
@@ -2081,7 +2105,41 @@ def create_app(
             "hatched": bool(egg and egg.get("hatched")),
         }
         if out["hatched"]:
-            out["buddy"] = hatch_buddy(owner).to_public_dict()
+            out["buddy"] = _buddy_for(owner).to_public_dict()
+        return out
+
+    @app.post("/v1/buddy/adopt")
+    def buddy_adopt(
+        body: dict,
+        request: Request,
+        api_key: Optional[str] = Depends(require_api_key),
+    ):
+        """First login: carry the guest (device) egg/buddy into the account.
+
+        No-op when the account already has a *started* egg or the device has
+        none. The companion is pinned to the adopted egg so the exact same
+        buddy shows on every device after login (one user → one hatch).
+        """
+        _limit(request, api_key)
+        body = body or {}
+        account = str(body.get("user_id") or "").strip()
+        device = str(body.get("from") or "").strip()
+        if not account or not device or account == device:
+            raise HTTPException(status_code=400, detail="user_id and from are required")
+        store = _egg_store()
+        if store is None:
+            return {"ok": False, "adopted": False, "reason": "eggs disabled"}
+        try:
+            res = store.adopt(device, account)
+        except Exception as e:  # noqa: BLE001 - adopt is best-effort
+            logger.warning("buddy adopt failed: %s", e)
+            return {"ok": False, "adopted": False, "reason": "adopt failed"}
+        out: dict = {"ok": True, "adopted": bool(res.get("adopted")), "reason": res.get("reason")}
+        egg = _egg_snapshot(account)
+        if egg is not None:
+            out["egg"] = egg
+        if egg and egg.get("hatched"):
+            out["buddy"] = _buddy_for(account).to_public_dict()
         return out
 
     @app.get("/v1/megha/capabilities")

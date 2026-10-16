@@ -23,11 +23,13 @@ from sentinel.buddy.engine import (
     hatch_buddy,
     is_buddy_command,
     pet_buddy,
+    resolve_buddy_reply,
 )
-from sentinel.buddy.mood import mood_from_text
+from sentinel.buddy.mood import MOOD_META, mood_from_text, sense_mood
 
 __all__ = [
     "ANIMATION_TYPES",
+    "MOOD_META",
     "Buddy",
     "EggStore",
     "crack_frames",
@@ -40,4 +42,6 @@ __all__ = [
     "mood_from_text",
     "pet_buddy",
     "required_steps",
+    "resolve_buddy_reply",
+    "sense_mood",
 ]

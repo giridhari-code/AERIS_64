@@ -37,16 +37,8 @@ export function buddyOnChosen(): boolean {
   }
 }
 
-export function buddyUserId(): string {
-  // Signed-in accounts carry their companion (egg + buddy + steps) with them:
-  // the same login hatches the same egg on any device. Guests keep the
-  // per-browser device id (unchanged legacy behavior).
-  try {
-    const s = loadSession();
-    if (s && s.kind === "user" && s.user && s.user.id) return "u-" + s.user.id;
-  } catch {
-    /* fall through to the device id */
-  }
+/** Per-browser device id (guest companion before login / adopt source). */
+export function buddyDeviceId(): string {
   try {
     let id = localStorage.getItem(STORAGE_UID);
     if (!id) {
@@ -57,6 +49,19 @@ export function buddyUserId(): string {
   } catch {
     return "anonymous";
   }
+}
+
+export function buddyUserId(): string {
+  // Signed-in accounts carry their companion (egg + buddy + steps) with them:
+  // the same login hatches the same egg on any device. Guests keep the
+  // per-browser device id (unchanged legacy behavior).
+  try {
+    const s = loadSession();
+    if (s && s.kind === "user" && s.user && s.user.id) return "u-" + s.user.id;
+  } catch {
+    /* fall through to the device id */
+  }
+  return buddyDeviceId();
 }
 
 /** Parse chat line → on | off | null */

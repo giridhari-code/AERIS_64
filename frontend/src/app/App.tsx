@@ -296,7 +296,13 @@ export function App() {
      Init once a chat session exists: during the boot splash / auth gate the
      float is not mounted yet and the controller binds its DOM exactly once. */
   useEffect(() => {
-    if (session) initBuddy();
+    if (!session) return;
+    initBuddy();
+    if (session.kind === "user" && session.user.id) {
+      // First login: carry this device's guest egg/buddy into the account,
+      // so the same companion stays with the user on every device (one hatch).
+      window.sentinelBuddyAdopt?.(session.user.id);
+    }
   }, [session]);
 
   /* Backend health poll */
@@ -468,16 +474,17 @@ export function App() {
           window.sentinelBuddyReact?.(reply, "assistant");
         } catch (_) {}
         const bmeta = outcome.meta.metaRag || {};
-        if (bmeta.buddy_egg || reply === "BUDDY_EGG_UI") {
+        if (bmeta.buddy_egg) {
+          // Hatching lives on the float — the chat only gets a short note.
           try {
             window.sentinelBuddySetVisible?.(true);
             window.sentinelBuddyStep?.();
           } catch (_) {}
-          if (reply === "BUDDY_EGG_UI") {
-            appendMessage("assistant", "Egg incubating — progress is on the Buddy float (not in this chat).");
-            setBusy(false);
-            return;
-          }
+        }
+        if (bmeta.buddy_anim) {
+          try {
+            window.sentinelBuddyAnim?.(String(bmeta.buddy_anim));
+          } catch (_) {}
         }
         if (bmeta.buddy_ui === "on" || bmeta.buddy_ui === "off") {
           try {

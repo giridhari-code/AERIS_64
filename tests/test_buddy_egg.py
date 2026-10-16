@@ -106,14 +106,19 @@ def test_period_env_and_default(monkeypatch):
 
 
 def test_egg_status_text_and_buddy_command(store):
-    from sentinel.buddy import handle_buddy_command
+    from sentinel.buddy import handle_buddy_command, resolve_buddy_reply
 
     snap = store.snapshot("frank")
     txt = egg_status_text(snap)
     assert "Buddy egg" in txt and f"/{snap['required']}" in txt and "```" in txt
 
+    # chat never gets hatch ASCII art — the float owns the incubation UI
     out = handle_buddy_command("/buddy", "frank", egg=snap)
-    assert out and "Buddy egg" in out
+    assert out == "BUDDY_EGG_UI"
+    msg, meta = resolve_buddy_reply(out)
+    assert "float" in msg.lower() and meta.get("buddy_egg") is True
+    assert "Buddy egg" not in msg
+
     assert handle_buddy_command("/buddy on", "frank", egg=snap) == "BUDDY_ON"
     assert handle_buddy_command("/buddy off", "frank", egg=snap) == "BUDDY_OFF"
 
@@ -121,7 +126,7 @@ def test_egg_status_text_and_buddy_command(store):
     for _ in range(snap["required"]):
         done = store.add_message_steps("frank")
     out2 = handle_buddy_command("/buddy", "frank", egg=done)
-    assert out2 and "Buddy egg" not in out2  # revealed after hatching
+    assert out2 and "Buddy egg" not in out2 and "AERIS-64" in out2
 
     # no egg context (older callers) → legacy instant reveal
     legacy = handle_buddy_command("/buddy", "frank")
@@ -168,7 +173,8 @@ def test_buddy_api_reports_egg(client):
 
     post = client.post("/v1/buddy", json={"command": "/buddy", "user_id": "api-egg-1"}).json()
     assert post["egg"]["hatched"] is False
-    assert "Buddy egg" in post["text"]  # /buddy shows incubation, not the reveal
+    assert "Buddy egg" not in post["text"]  # /buddy points at the float, no art
+    assert "float" in post["text"].lower()
 
 
 def test_buddy_step_api_hatches(client):
@@ -208,12 +214,18 @@ def test_chat_buddy_command_uses_user_id_and_egg(client):
 
     r = client.post("/v1/chat", json={"prompt": "/buddy", "user_id": uid})
     assert r.status_code == 200
-    assert "Buddy egg" in r.json()["text"]
+    body = r.json()
+    assert "Buddy egg" not in body["text"]  # hatch ASCII never enters the chat
+    assert body["meta_rag"].get("buddy_egg") is True  # float refresh signal
+    assert "float" in body["text"].lower()
 
     client.post("/v1/buddy/step", json={"user_id": uid, "n": req})
 
     r2 = client.post("/v1/chat", json={"prompt": "/buddy", "user_id": uid})
-    assert "Buddy egg" not in r2.json()["text"]
+    body2 = r2.json()
+    assert "Buddy egg" not in body2["text"]
+    assert body2["meta_rag"].get("buddy_egg") is None
+    assert "AERIS-64" in body2["text"]
 
 
 def test_ag_ui_buddy_command_egg_aware(client):
@@ -229,4 +241,31 @@ def test_ag_ui_buddy_command_egg_aware(client):
     }
     r = client.post("/ag-ui", json=payload)
     assert r.status_code == 200
-    assert "Buddy egg" in r.text
+    assert "Buddy egg" not in r.text  # no art over AG-UI either
+    assert "float" in r.text.lower()
+
+
+def test_buddy_adopt_carries_guest_egg_and_pins_buddy(client):
+    from sentinel.buddy import hatch_buddy
+
+    device, account = "web-test-9", "u-test-9"
+    req = client.get("/v1/buddy", params={"user_id": device}).json()["egg"]["required"]
+    client.post("/v1/buddy/step", json={"user_id": device, "n": 3})
+
+    r = client.post("/v1/buddy/adopt", json={"user_id": account, "from": device})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["ok"] is True and j["adopted"] is True
+    assert j["egg"]["messages"] == 3 and j["egg"]["required"] == req  # goal preserved
+
+    # second adopt is a no-op — the account already owns an egg
+    again = client.post("/v1/buddy/adopt", json={"user_id": account, "from": device}).json()
+    assert again["adopted"] is False
+
+    # the revealed buddy is pinned to the adopted (guest) identity — one user, one buddy
+    done = client.post("/v1/buddy/step", json={"user_id": account, "n": req}).json()
+    assert done["hatched"] is True
+    assert done["buddy"]["name"] == hatch_buddy(device).name
+
+    # bad input → 400
+    assert client.post("/v1/buddy/adopt", json={"user_id": "", "from": device}).status_code == 400

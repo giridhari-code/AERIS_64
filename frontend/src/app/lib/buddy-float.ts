@@ -8,7 +8,13 @@
  * chat message is one step (App calls window.sentinelBuddyStep()), passive time
  * also counts; on hatch the float plays the crack sequence and reveals the buddy.
  */
-import { buddyUserId as storedBuddyUserId, buddyOnChosen, readBuddyOn, writeBuddyOn } from "../../buddy";
+import {
+  buddyUserId as storedBuddyUserId,
+  buddyDeviceId as storedBuddyDeviceId,
+  buddyOnChosen,
+  readBuddyOn,
+  writeBuddyOn,
+} from "../../buddy";
 
 const CSS_ANIMS = ["float", "talk", "think", "happy", "sleep", "excited", "wave", "pet"];
 
@@ -61,20 +67,29 @@ export function initBuddy(): void {
     return storedBuddyUserId();
   }
 
+  /** Guest (device) identity — the source of a first-login adopt. */
+  function deviceId(): string {
+    return storedBuddyDeviceId();
+  }
+
   function moodFromChat(text?: string, role?: string): string {
     const t = (text || "").toLowerCase();
     if (!t) return "idle";
     if (role === "assistant") {
-      if (/sorry|error|cannot|can't|unable/.test(t)) return "think";
-      if (/!|great|done|success/.test(t)) return "happy";
+      if (/sorry|error|cannot|can't|unable|blocked/.test(t)) return "think";
+      if (/!|great|done|success|haan|theek/.test(t)) return "happy";
       return "talk";
     }
-    if (/haha|lol|lmao|😂|hehe/.test(t) || (t.match(/!/g) || []).length > 1) return "happy";
-    if (/\b(why|how|what|explain|kyun|kaise|think)\b/.test(t) || t.indexOf("?") >= 0) return "think";
-    if (/\b(bye|good night|sleep|so ja)\b/.test(t)) return "sleep";
-    if (/\b(hi|hello|hey|namaste|hola)\b/.test(t)) return "wave";
-    if (/\b(wow|amazing|yay)\b/.test(t)) return "excited";
-    if (/\b(pet|love|cute)\b/.test(t)) return "pet";
+    if (/\b(gussa|angry|mad|hate|krodh)\b/.test(t) || (t.match(/!/g) || []).length > 1) return "excited";
+    if (/haha|lol|lmao|😂|🤣|hehe|mazak|joke|joker/.test(t)) return "happy";
+    if (/\b(khush|maza|badhiya|zabardast|shukriya|dhanyavad|thanks)\b/.test(t)) return "happy";
+    if (/\b(tension|pareshan|stress|chinta|worried)\b/.test(t)) return "think";
+    if (/\b(udaas|sad|cry|rona|miss|lonely|tired|thak|neend)\b/.test(t)) return "sleep";
+    if (/\b(why|how|what|explain|kyun|kaise|think|samajh)\b/.test(t) || t.indexOf("?") >= 0) return "think";
+    if (/\b(bye|good night|sleep|so ja|raat)\b/.test(t)) return "sleep";
+    if (/\b(hi|hello|hey|namaste|hola|salaam)\b/.test(t)) return "wave";
+    if (/\b(wow|amazing|yay|zindabad|op)\b/.test(t)) return "excited";
+    if (/\b(pet|love|cute|pyaar)\b/.test(t)) return "pet";
     if (t.length > 120) return "think";
     return "blink";
   }
@@ -268,6 +283,77 @@ export function initBuddy(): void {
     step();
   }
 
+  /**
+   * One-time hatch celebration — a full-screen card outside the chat list.
+   * Fires once per user (localStorage flag) when the egg flips to hatched.
+   */
+  function celebrateHatch(b: BuddyData | null | undefined): void {
+    const fresh = b || buddyCache;
+    let uid = "anon";
+    try {
+      uid = buddyId();
+    } catch (_) {
+      /* ignore */
+    }
+    const seenKey = "sentinel_buddy_hatch_seen:" + uid;
+    try {
+      if (localStorage.getItem(seenKey)) return;
+      localStorage.setItem(seenKey, "1");
+    } catch (_) {
+      /* storage blocked → still celebrate this once */
+    }
+
+    const card = document.createElement("div");
+    card.className = "hatch-card";
+    const brand = document.createElement("div");
+    brand.className = "hatch-brand";
+    brand.textContent = "AERIS-64 · Buddy hatched";
+    const art = document.createElement("pre");
+    art.className = "hatch-ascii";
+    const idle = (fresh && fresh.animations && fresh.animations.idle) || [];
+    art.textContent =
+      (idle.length && idle[0]) ||
+      (fresh && fresh.sprite_lines ? fresh.sprite_lines.join("\n") : "(o o)");
+    const name = document.createElement("div");
+    name.className = "hatch-name";
+    name.textContent =
+      fresh && fresh.name ? fresh.name + " the " + (fresh.species_name || "Buddy") : "Your Buddy";
+    const sub = document.createElement("div");
+    sub.className = "hatch-sub";
+    sub.textContent = "Linked to you + AERIS-64 · click anywhere to continue";
+    card.appendChild(brand);
+    card.appendChild(art);
+    card.appendChild(name);
+    card.appendChild(sub);
+
+    const ov = document.createElement("div");
+    ov.id = "buddy-hatch-overlay";
+    ov.setAttribute("role", "dialog");
+    ov.setAttribute("aria-label", "Buddy hatched");
+    ov.appendChild(card);
+    const emojis = ["✨", "🎉", "🥚", "💫", "🎊"];
+    for (let i = 0; i < 12; i++) {
+      const c = document.createElement("span");
+      c.className = "hatch-confetti";
+      c.textContent = emojis[i % emojis.length] || "✨";
+      c.style.left = 4 + (92 * ((i * 37) % 100)) / 100 + "%";
+      c.style.animationDelay = ((i % 6) * 0.35).toFixed(2) + "s";
+      ov.appendChild(c);
+    }
+    const close = () => {
+      window.removeEventListener("keydown", onKey);
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      if (buddyOn) setBuddyAnim("wave");
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Enter" || e.key === " ") close();
+    };
+    ov.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    document.body.appendChild(ov);
+    window.setTimeout(close, 9000);
+  }
+
   function setBuddyVisible(on: boolean): void {
     buddyOn = !!on;
     writeBuddyOn(buddyOn);
@@ -351,9 +437,12 @@ export function initBuddy(): void {
       }
       egg = null;
       stopEggTicker();
+      const wrap = document.getElementById("buddyProgress");
+      if (wrap) wrap.hidden = true;
       const b = data.buddy || {};
       buddyCache = b;
       applyBuddyData(b);
+      if (eggData && eggData.hatched) celebrateHatch(b); // once per user
       return;
     } catch (_) {
       localBuddyFallback();
@@ -412,15 +501,52 @@ export function initBuddy(): void {
           }
           if (egg && !hatching) {
             hatchEgg(b);
+            celebrateHatch(b);
           } else if (b) {
             buddyCache = b;
             applyBuddyData(b);
             setBuddyAnim("wave");
+            celebrateHatch(b);
           }
         })
         .catch(() => {});
     } catch (_) {
       /* never block chat on the pet */
+    }
+  };
+
+  /** Command meta (buddy_anim) → float animation, e.g. /buddy dance. */
+  window.sentinelBuddyAnim = function (name) {
+    if (!buddyOn) return;
+    setBuddyAnim(name || "idle");
+  };
+
+  /** Re-fetch egg/buddy state (after login/adopt or /buddy egg). */
+  window.sentinelBuddyRefresh = function () {
+    buddyCache = null;
+    void loadBuddy();
+  };
+
+  /** First login: carry this device's guest egg/buddy into the account. */
+  window.sentinelBuddyAdopt = function (accountId) {
+    try {
+      void fetch("/v1/buddy/adopt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}),
+        },
+        body: JSON.stringify({ user_id: "u-" + accountId, from: deviceId() }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { adopted?: boolean } | null) => {
+          if (!data || !data.adopted) return;
+          buddyCache = null;
+          if (buddyOn) void loadBuddy();
+        })
+        .catch(() => {});
+    } catch (_) {
+      /* never block login on the pet */
     }
   };
 

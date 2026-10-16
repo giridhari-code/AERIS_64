@@ -12,7 +12,6 @@ ids to NEUROFIELD_MAX_CONTEXT / model.max_seq_len.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 from sentinel.tokenizer.specials import ASSISTANT, END, SYSTEM, USER
 
@@ -110,6 +109,14 @@ def history_len(session_id: str) -> int:
     return len(_HISTORY.get(session_id, []))
 
 
+def last_user_message(session_id: str) -> str:
+    """Most recent user turn (for ``/buddy mimic`` / ``/buddy mood``); '' if none."""
+    for role, text in reversed(_HISTORY.get(session_id, [])):
+        if role == "user":
+            return text
+    return ""
+
+
 def append_turn(session_id: str, role: str, text: str) -> None:
     t = (text or "").strip()
     if not t:
@@ -124,7 +131,7 @@ def append_turn(session_id: str, role: str, text: str) -> None:
 def build_prompt(
     session_id: str,
     user_prompt: str,
-    system: Optional[str] = None,
+    system: str | None = None,
 ) -> str:
     """Full chat context: [system] + history + user + assistant prefix."""
     sys_text = (system if system is not None else _SYSTEM_TEXT) or ""
