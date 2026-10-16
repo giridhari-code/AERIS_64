@@ -9,6 +9,7 @@ export interface SettingsPatch {
 interface ComposerProps {
   promptRef: RefObject<HTMLTextAreaElement | null>;
   busy: boolean;
+  editing: boolean;
   maxTok: string;
   temp: string;
   autoLen: boolean;
@@ -16,13 +17,23 @@ interface ComposerProps {
   onSettings: (patch: SettingsPatch) => void;
   onInput: () => void;
   onSubmit: () => void;
+  onStop: () => void;
   onClear: () => void;
+  onCancelEdit: () => void;
 }
 
 export function Composer(p: ComposerProps) {
   return (
     <footer className="composer-wrap">
       <div className="composer-inner">
+        {p.editing && (
+          <div className="editing-banner" id="editingBanner">
+            <span>✎ Editing message — send to resend, everything after it is replaced.</span>
+            <button type="button" className="link" id="btnCancelEdit" onClick={p.onCancelEdit}>
+              Cancel
+            </button>
+          </div>
+        )}
         <form
           id="form"
           className="composer"
@@ -43,9 +54,24 @@ export function Composer(p: ComposerProps) {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 p.onSubmit();
+              } else if (e.key === "Escape" && p.editing) {
+                e.preventDefault();
+                p.onCancelEdit();
               }
             }}
           ></textarea>
+          {p.busy && (
+            <button
+              type="button"
+              className="stop"
+              id="stop"
+              title="Stop generating"
+              aria-label="Stop generating"
+              onClick={p.onStop}
+            >
+              ■
+            </button>
+          )}
           <button
             type="submit"
             className="send"

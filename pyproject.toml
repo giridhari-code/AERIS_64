@@ -37,6 +37,7 @@ serve = [
     "uvicorn[standard]>=0.27",
     "pydantic>=2.5",
     "httpx>=0.26",
+    "ag-ui-protocol>=1.0",
 ]
 sdk = [
     "httpx>=0.26",
