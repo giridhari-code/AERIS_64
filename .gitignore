@@ -10,6 +10,9 @@ venv/
 dist/
 build/
 
+# Tests stay local — never uploaded to git
+/tests/
+
 # Env / secrets
 .env
 *.pem
