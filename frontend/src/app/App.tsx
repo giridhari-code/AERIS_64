@@ -4,6 +4,7 @@ import { Welcome } from "./components/Welcome";
 import { Message, TypingIndicator, type ChatMessage } from "./components/Message";
 import { Composer } from "./components/Composer";
 import { BuddyFloat } from "./components/BuddyFloat";
+import { ModeSheet, type Effort, type ContextMode } from "./components/ModeSheet";
 import { Sidebar } from "./components/Sidebar";
 import { AuthGate } from "./components/AuthGate";
 import { initBuddy } from "./lib/buddy-float";
@@ -35,6 +36,8 @@ interface Settings {
   maxTok: string;
   temp: string;
   autoLen: boolean;
+  effort: Effort;
+  context: ContextMode;
 }
 
 function loadSettings(): Settings {
@@ -44,9 +47,11 @@ function loadSettings(): Settings {
       maxTok: s.maxTok != null ? String(s.maxTok) : "64",
       temp: s.temp != null ? String(s.temp) : "0.4",
       autoLen: s.autoLen != null ? !!s.autoLen : true,
+      effort: (s.effort as Effort) || "standard",
+      context: (s.context as ContextMode) || "standard",
     };
   } catch (_) {
-    return { maxTok: "64", temp: "0.4", autoLen: true };
+    return { maxTok: "64", temp: "0.4", autoLen: true, effort: "standard", context: "standard" };
   }
 }
 
@@ -84,6 +89,7 @@ export function App() {
   const [latencyText, setLatencyText] = useState("");
   const [health, setHealth] = useState<Health>({ state: "unknown", label: "…" });
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [modeOpen, setModeOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(isDesktop);
   const [session, setSession] = useState<Session | null>(() => loadSession());
@@ -338,7 +344,7 @@ export function App() {
       try {
         localStorage.setItem(
           "sentinel_ui",
-          JSON.stringify({ maxTok: next.maxTok, temp: next.temp, autoLen: next.autoLen }),
+          JSON.stringify({ maxTok: next.maxTok, temp: next.temp, autoLen: next.autoLen, effort: next.effort, context: next.context }),
         );
       } catch (_) {}
       return next;
@@ -673,14 +679,18 @@ export function App() {
           health={health}
           menuOpen={sidebarOpen}
           user={accountUser}
+          modeLabel={settings.effort === "fast" ? "Fast" : settings.effort === "think" ? "Think" : "AERIS-64"}
           onMenu={() => setSidebarOpen((v) => !v)}
           onNew={newChat}
           onLogout={handleLogout}
           onLogin={requestLogin}
+          onMode={() => setModeOpen(true)}
         />
         <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
           <div className="thread" id="thread">
-            {messages.length === 0 && !typing && <Welcome onChip={(q) => send(q)} />}
+            {messages.length === 0 && !typing && (
+              <Welcome onChip={(q) => send(q)} userName={accountUser?.name || accountUser?.email || null} />
+            )}
             {messages.map((m, i) => (
               <Message
                 key={m.id}
@@ -710,6 +720,17 @@ export function App() {
           onCancelEdit={cancelEdit}
         />
       </div>
+      <ModeSheet
+        open={modeOpen}
+        effort={settings.effort}
+        context={settings.context}
+        onClose={() => setModeOpen(false)}
+        onEffort={(effort) => {
+          const maxTok = effort === "fast" ? "48" : effort === "think" ? "256" : "96";
+          updateSettings({ effort, maxTok });
+        }}
+        onContext={(context) => updateSettings({ context })}
+      />
       <BuddyFloat />
     </div>
   );
