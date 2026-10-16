@@ -9,18 +9,17 @@ export PYTHONPATH="${ROOT}/packages${PYTHONPATH:+:$PYTHONPATH}"
 DEVICE="${NEUROFIELD_DEVICE:-auto}"
 OUT="${OUT:-checkpoints/AERIS_decent}"
 STEPS="${STEPS:-20000}"
-DATA=( data/decent )
 
-if [[ ! -d data/decent ]] || [[ -z "$(find data/decent -name '*.txt' 2>/dev/null | head -1)" ]]; then
+mkdir -p data/decent
+if [[ -z "$(find data/decent -name '*.txt' -type f 2>/dev/null | head -1)" ]]; then
   echo "[decent] no data/decent/*.txt — generating seed (not enough for 1M tokens)"
-  mkdir -p data/decent
   python scripts/data/make_synthetic_100k.py \
     --out data/decent/synthetic_seed.txt --target-chars 200000
 fi
 
-# rough char count
-CHARS=$(cat data/decent/*.txt 2>/dev/null | wc -c | tr -d ' ')
-echo "[decent] ~${CHARS} characters in data/decent (aim for several million chars ≈ 1M+ tokens)"
+mapfile -t DATA < <(find data/decent -name '*.txt' -type f | sort)
+CHARS=$(cat "${DATA[@]}" 2>/dev/null | wc -c | tr -d ' ')
+echo "[decent] ${#DATA[@]} files, ~${CHARS} characters (aim for several million chars ≈ 1M+ tokens)"
 
 EXTRA=()
 if [[ "${DEVICE}" == "cuda" ]] || [[ "${DEVICE}" == "auto" ]]; then
