@@ -1,5 +1,7 @@
 # Long context + memory (SENTINEL)
 
+Code: `packages/sentinel/serving/chat_history.py`, `packages/sentinel/modules/memory.py`
+
 ## Two systems
 
 | Layer | What | Bound |
@@ -27,3 +29,9 @@ export NEUROFIELD_MAX_CONTEXT=2048      # max tokens into model
 ## Honest limit
 
 Neural slow ring quality still depends on **training**. Longer chat window only helps **text** continuity; weak checkpoints still produce weak text.
+
+
+## Commit trail
+
+- `82eec15` — 6→24 turns, env limits
+- follow-up — public `get_max_turns()`, packages/ path

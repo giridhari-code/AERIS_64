@@ -282,11 +282,11 @@ def load_model(checkpoint: str, config_path: Optional[str], device: str) -> None
         _model_id = str(meta.get("model_id") or meta.get("name") or Path(checkpoint).stem or "model")
         _max_context = int(_env("MAX_CONTEXT", str(full_cfg.model.max_seq_len)) or full_cfg.model.max_seq_len)
         try:
-            from sentinel.serving.chat_history import _max_turns
+            from sentinel.serving.chat_history import get_max_turns
             logger.info(
                 "Long-context limits | max_context_tokens=%s max_chat_turns=%s slow_slots=%s truncate_win=%s",
                 _max_context,
-                _max_turns(),
+                get_max_turns(),
                 getattr(full_cfg.model, "context_slots", 0) or "auto",
                 getattr(full_cfg.model, "truncate_write_window", 32),
             )

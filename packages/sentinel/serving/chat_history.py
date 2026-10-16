@@ -21,6 +21,16 @@ _USE_SPECIALS = True
 _SYSTEM_TEXT: str = ""
 
 
+def get_max_turns() -> int:
+    """Public: max user/assistant pairs kept in the prompt window."""
+    return _max_turns()
+
+
+def get_turn_chars() -> int:
+    """Public: max chars stored per turn."""
+    return _turn_chars()
+
+
 def _max_turns() -> int:
     try:
         return max(2, min(128, int(os.environ.get("NEUROFIELD_MAX_TURNS") or os.environ.get("MAX_TURNS") or "24")))
