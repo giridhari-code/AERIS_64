@@ -80,6 +80,12 @@ export function matchBuddyOnOff(text: string): "on" | "off" | null {
   return (m[1] || "on").toLowerCase() === "off" ? "off" : "on";
 }
 
+/** True for any buddy chat command that should skip the LM. */
+export function isLocalBuddyLine(text: string): boolean {
+  const q = (text || "").trim();
+  return /^(?:\/|--)?\s*buddy\b/i.test(q);
+}
+
 export function syncBuddyDom(on: boolean): void {
   const btn = document.getElementById("btnBuddy");
   if (btn) {

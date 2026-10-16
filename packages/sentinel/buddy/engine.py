@@ -107,6 +107,11 @@ class Buddy:
             "shiny": self.shiny,
             "sprite_lines": self.sprite_lines,
             "animations": self.animations,
+            "user_id": self.user_id,
+            "personality": self.personality,
+            "stats": self.stats,
+            "product": "AERIS-64",
+            "linked": True,
         }
 
 
@@ -184,17 +189,24 @@ def is_buddy_command(text: str) -> bool:
     t = _norm_buddy_text(text).lower()
     if t in {"/buddy", "/buddy on", "/buddy off", "/buddyon", "/buddyoff"}:
         return True
-    return t.startswith("/buddy ")
+    if t.startswith("/buddy "):
+        return True
+    # plain "buddy on/off" handled on client; still accept server-side
+    if re.match(r"^buddy\s+(on|off|pet|help|who|mimic|joker|mood|egg|status)\b", t):
+        return True
+    return False
 
 
 def handle_buddy_command(text: str, user_id: str, egg: Optional[dict] = None) -> Optional[str]:
     """Return reply text if this is a buddy command, else None.
 
-    ``egg`` is an optional public egg snapshot (``sentinel.buddy.eggs``).
-    While the egg is unhatched, show/status commands report incubation
-    instead of revealing the companion early.
+    Egg incubation UI lives on the **Buddy float only** — chat never gets
+    hatch ASCII art. ``BUDDY_EGG_UI`` tells the client to refresh the float.
     """
     t = _norm_buddy_text(text)
+    # normalize "buddy X" → "/buddy X"
+    if re.match(r"^buddy\s+", t, flags=re.I) and not t.lower().startswith("/buddy"):
+        t = "/" + t
     if not is_buddy_command(t):
         return None
     parts = t.split()
@@ -206,21 +218,48 @@ def handle_buddy_command(text: str, user_id: str, egg: Optional[dict] = None) ->
     if sub in {"off", "hide", "disable"}:
         return "BUDDY_OFF"
     if len(parts) == 1 or sub in {"show", "hatch", "status", "egg"}:
+        # Never dump egg art into the chat box — float owns hatching UI.
         if egg is not None and not egg.get("hatched"):
-            from sentinel.buddy.eggs import egg_status_text
-
-            return egg_status_text(egg)
-        return hatch_buddy(uid).render(frame=0)
+            return "BUDDY_EGG_UI"
+        b = hatch_buddy(uid)
+        return (
+            f"{b.name} · {b.species_name} ({b.rarity}"
+            + (", shiny" if b.shiny else "")
+            + f")\nLinked to you + AERIS-64 · {b.personality}"
+        )
     if sub == "pet":
         return pet_buddy(uid)
+    if sub in {"who", "me", "link", "linked"}:
+        b = hatch_buddy(uid)
+        return (
+            f"Buddy linked to user `{uid}` and product **AERIS-64**.\n"
+            f"{b.name} the {b.species_name} ({b.rarity}"
+            + (", shiny" if b.shiny else "")
+            + f")\nStats: {b.stats}"
+        )
+    if sub in {"mimic", "joker", "mirror"}:
+        return (
+            "BUDDY_MIMIC_ON"
+            if sub != "joker"
+            else "BUDDY_JOKER_ON"
+        )
+    if sub == "mood":
+        return (
+            "Buddy reads your chat emotion (happy / think / wave / sleep / excited) "
+            "and mirrors it on the float — joker mode amplifies mimicry."
+        )
     if sub in {"help", "?"}:
         return (
-            "Buddy commands:\n"
-            "  /buddy on    — show companion\n"
-            "  /buddy off   — hide companion\n"
-            "  /buddy       — status (egg until hatched)\n"
-            "  /buddy egg   — incubation progress\n"
-            "(--buddy on|off bhi chalta hai)\n"
-            "Auto mood follows chat · every message incubates the egg."
+            "Buddy commands (float UI — hatch is NOT in the chat box):\n"
+            "  /buddy on | --buddy on     — show companion\n"
+            "  /buddy off | --buddy off   — hide\n"
+            "  /buddy                    — short status (egg progress on float)\n"
+            "  /buddy egg                — refresh egg on float\n"
+            "  /buddy pet                — pet animation\n"
+            "  /buddy who                — link: your id + AERIS-64\n"
+            "  /buddy mimic | joker      — emotional mimicry mode\n"
+            "  /buddy mood               — how emotion mapping works\n"
+            "  /buddy help\n"
+            "Same user_id → same buddy forever. Chat messages incubate the egg."
         )
-    return "Unknown. Try `/buddy on` or `/buddy off`."
+    return "Unknown. Try `/buddy help` or `--buddy on`."

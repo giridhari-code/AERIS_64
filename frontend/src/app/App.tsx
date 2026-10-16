@@ -468,6 +468,17 @@ export function App() {
           window.sentinelBuddyReact?.(reply, "assistant");
         } catch (_) {}
         const bmeta = outcome.meta.metaRag || {};
+        if (bmeta.buddy_egg || reply === "BUDDY_EGG_UI") {
+          try {
+            window.sentinelBuddySetVisible?.(true);
+            window.sentinelBuddyStep?.();
+          } catch (_) {}
+          if (reply === "BUDDY_EGG_UI") {
+            appendMessage("assistant", "Egg incubating — progress is on the Buddy float (not in this chat).");
+            setBusy(false);
+            return;
+          }
+        }
         if (bmeta.buddy_ui === "on" || bmeta.buddy_ui === "off") {
           try {
             window.sentinelBuddySetVisible?.(bmeta.buddy_ui === "on");
@@ -516,7 +527,13 @@ export function App() {
         promptEl.value = "";
         autoGrow();
         window.sentinelBuddySetVisible?.(onOff === "on");
-        appendMessage("assistant", onOff === "off" ? "Buddy off." : "Buddy on.");
+        // Status stays on the float — avoid chat clutter
+        appendMessage(
+          "assistant",
+          onOff === "off"
+            ? "Buddy hidden."
+            : "Buddy on — linked to you + AERIS-64. Hatch progress only on the float (not in chat).",
+        );
         return;
       }
       if (busyRef.current) {
