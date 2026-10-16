@@ -14,6 +14,7 @@ import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
 import { proxyChat, proxyHealth, proxyJson, pythonBase } from "./proxy";
 import { gitStatus, gitLog, gitDiff } from "./git";
+import { buildAppBundle, latestAppMtime } from "./app-build";
 
 const app = new Hono();
 
@@ -44,7 +45,8 @@ function rateLimit(ip: string): boolean {
   if (hits.size > 10_000) {
     // crude GC
     for (const [k, v] of hits) {
-      if (!v.length || now - v[v.length - 1] > RATE_WINDOW_MS) hits.delete(k);
+      const last = v.at(-1);
+      if (last === undefined || now - last > RATE_WINDOW_MS) hits.delete(k);
     }
   }
   return true;
@@ -158,6 +160,38 @@ app.post("/v1/buddy", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const r = await proxyJson("POST", "/v1/buddy", body);
   return c.json(r.body, r.status as 200);
+});
+
+// ---- React app bundle (built in memory; rebuilt when src/app changes) ------
+
+let APP_JS = "";
+let APP_OK = false;
+let APP_BUILD_AT = 0;
+
+async function ensureAppBundle(force = false): Promise<void> {
+  if (!force && APP_OK && latestAppMtime() <= APP_BUILD_AT) return;
+  const r = await buildAppBundle();
+  if (r.ok) {
+    APP_JS = r.js;
+    APP_OK = true;
+    APP_BUILD_AT = Date.now();
+  } else if (!APP_JS) {
+    APP_OK = false;
+  }
+}
+await ensureAppBundle(true);
+
+app.get("/static/app.js", async (c) => {
+  await ensureAppBundle();
+  if (!APP_OK) {
+    return c.body("/* app bundle failed to build — check `bun run dev` logs */", 500, {
+      "Content-Type": "text/javascript; charset=utf-8",
+    });
+  }
+  return c.body(APP_JS, 200, {
+    "Content-Type": "text/javascript; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
 });
 
 // ---- Static chat UI (same look as Python frontend) ------------------------

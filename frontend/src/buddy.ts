@@ -48,6 +48,19 @@ export function parseBuddyCommand(text: string): "on" | "off" | null {
   return sub === "off" ? "off" : "on";
 }
 
+/**
+ * Chat-line matcher used by the UI (broader than parseBuddyCommand):
+ * accepts /buddy on|off, --buddy on|off, and plain "buddy on|off" (+ karo/kardo).
+ */
+export function matchBuddyOnOff(text: string): "on" | "off" | null {
+  const q = (text || "").trim();
+  const m =
+    q.match(/^(?:\/|--)\s*buddy\s*(on|off)?\s*$/i) ||
+    q.match(/^buddy\s+(on|off)(?:\s+(?:karo|kardo|kar\s*do))?\s*$/i);
+  if (!m) return null;
+  return (m[1] || "on").toLowerCase() === "off" ? "off" : "on";
+}
+
 export function syncBuddyDom(on: boolean): void {
   const btn = document.getElementById("btnBuddy");
   if (btn) {
