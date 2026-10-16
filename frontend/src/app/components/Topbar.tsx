@@ -72,11 +72,6 @@ export function Topbar({ health, menuOpen, user, modeLabel, onMenu, onNew, onLog
           <span className="dot" aria-hidden="true"></span>
           <span id="statusText">{health.label}</span>
         </div>
-        {onMode && (
-          <button type="button" className="mode-pill" onClick={onMode} title="Model & effort">
-            {modeLabel || "Fable"}
-          </button>
-        )}
         <button
           type="button"
           className="icon-btn"
