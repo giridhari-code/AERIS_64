@@ -26,7 +26,7 @@ export function ModeSheet(p: ModeSheetProps) {
         <div className="mode-sheet-head">
           <div>
             <strong>Model</strong>
-            <p className="mode-sheet-hint">SENTINEL lineup · one checkpoint, tuned decode budget</p>
+            <p className="mode-sheet-hint">Pick a nickname · sets length & style</p>
           </div>
           <button type="button" className="icon-btn" onClick={p.onClose} aria-label="Close">
             ×

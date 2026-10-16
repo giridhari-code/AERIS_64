@@ -61,7 +61,6 @@ export function Topbar({ health, menuOpen, user, modeLabel, onMenu, onNew, onLog
         <img src="/logo.svg" alt="" width={28} height={28} />
         <div className="brand-text">
           <strong>SENTINEL</strong>
-          <span>Direct · Honest</span>
         </div>
       </div>
       <nav className="nav" aria-label="Primary">
