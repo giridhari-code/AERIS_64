@@ -1,55 +1,53 @@
 /**
- * SENTINEL product model lineup + effort (Claude-style clarity, own branding).
- * Client maps these to max_new_tokens / temperature — one backend checkpoint for now.
+ * SENTINEL product model nicknames + effort.
+ * One backend checkpoint for now; UI maps nickname → tokens / temperature.
  */
 
-export type ModelId = "haiku" | "fable" | "sonnet" | "opus";
+export type ModelId = "blink" | "fable" | "mythos" | "oracle";
 export type EffortId = "low" | "medium" | "recommend" | "high" | "extra" | "max";
 
 export interface ModelDef {
   id: ModelId;
   name: string;
   tagline: string;
-  /** Default effort when this model is selected */
   defaultEffort: EffortId;
-  /** Temperature bias */
   temperature: number;
 }
 
 export interface EffortDef {
   id: EffortId;
   label: string;
-  /** Max new tokens sent to the API */
   maxTokens: number;
   blurb: string;
 }
 
+/** Own nicknames — not third-party model brands. */
 export const MODELS: ModelDef[] = [
   {
-    id: "haiku",
-    name: "Haiku",
-    tagline: "Fast replies · everyday chat",
+    id: "blink",
+    name: "Blink",
+    tagline: "Tez jawab · short chat",
     defaultEffort: "low",
     temperature: 0.5,
   },
   {
     id: "fable",
     name: "Fable",
-    tagline: "Balanced · story-clear · product default",
+    tagline: "Balanced · seedha · product default",
     defaultEffort: "recommend",
     temperature: 0.4,
   },
   {
-    id: "sonnet",
-    name: "Sonnet",
-    tagline: "Stronger reasoning · longer answers",
+    id: "mythos",
+    name: "Mythos",
+    tagline: "Zyada soch · lambe jawab",
     defaultEffort: "high",
     temperature: 0.35,
   },
   {
-    id: "opus",
-    name: "Opus",
-    tagline: "Maximum effort · complex tasks",
+    id: "oracle",
+    name: "Oracle",
+    tagline: "Max effort · mushkil kaam",
     defaultEffort: "max",
     temperature: 0.3,
   },
@@ -75,7 +73,6 @@ export function effortById(id: string | undefined | null): EffortDef {
   return EFFORTS.find((e) => e.id === id) || EFFORTS.find((e) => e.id === DEFAULT_EFFORT)!;
 }
 
-/** Resolve API generation params from product UI selection. */
 export function resolveGenParams(modelId: ModelId, effortId: EffortId): {
   maxNewTokens: number;
   temperature: number;

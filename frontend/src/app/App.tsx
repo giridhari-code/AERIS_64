@@ -51,7 +51,11 @@ interface Settings {
 function loadSettings(): Settings {
   try {
     const s = JSON.parse(localStorage.getItem("sentinel_ui") || "{}");
-    const model = (s.model as ModelId) || DEFAULT_MODEL;
+    const _rawModel = String(s.model || "");
+    const _legacy: Record<string, ModelId> = {
+      haiku: "blink", sonnet: "mythos", opus: "oracle",
+    };
+    const model = (_legacy[_rawModel] || (_rawModel as ModelId) || DEFAULT_MODEL) as ModelId;
     const effort = (s.effort as EffortId) || DEFAULT_EFFORT;
     const resolved = resolveGenParams(model, effort);
     return {
