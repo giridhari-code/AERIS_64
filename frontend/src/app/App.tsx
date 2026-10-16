@@ -7,7 +7,7 @@ import { BuddyFloat } from "./components/BuddyFloat";
 import { Sidebar } from "./components/Sidebar";
 import { AuthGate } from "./components/AuthGate";
 import { initBuddy } from "./lib/buddy-float";
-import { matchBuddyOnOff } from "../buddy";
+import { buddyUserId, matchBuddyOnOff } from "../buddy";
 import { ChatError, chatWithStreaming, type ChatRequest } from "./lib/stream";
 import {
   authStatus as fetchAuthStatus,
@@ -446,6 +446,7 @@ export function App() {
         autoLength: settings.autoLen,
         sessionId: opts.sessionId,
         threadId: opts.threadId,
+        userId: buddyUserId(),
       };
 
       try {
@@ -528,6 +529,11 @@ export function App() {
 
       promptEl.value = "";
       autoGrow();
+
+      // Egg incubation: one step per real user message (fire-and-forget)
+      try {
+        window.sentinelBuddyStep?.();
+      } catch (_) {}
 
       const activeChat = storeRef.current.chats.find((c) => c.id === storeRef.current.currentId);
 

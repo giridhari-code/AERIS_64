@@ -9,6 +9,8 @@ declare global {
     sentinelBuddyReact?: (text: string, role?: string) => void;
     sentinelBuddySetVisible?: (on: boolean) => void;
     sentinelBuddyPet?: () => void;
+    /** Egg incubation: one step per real user message (App.send). */
+    sentinelBuddyStep?: () => void;
     /** Optional API key injected by deployments. */
     __API_KEY?: string;
   }

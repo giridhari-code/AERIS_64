@@ -749,6 +749,35 @@ def create_app(
             )
         return store
 
+    # ---- Buddy egg incubation (Pokémon-style reveal gate) ------------------
+    # Every user chat message = 1 step (POST /v1/buddy/step); passive time
+    # adds 1 step per NEUROFIELD_BUDDY_EGG_PERIOD seconds (default 300).
+    _egg_cache: dict[str, Any] = {"store": None, "tried": False}
+
+    def _egg_store():
+        """Lazy per-app egg store; any failure degrades to no-egg mode."""
+        if not _egg_cache["tried"]:
+            _egg_cache["tried"] = True
+            try:
+                from sentinel.buddy.eggs import EggStore
+
+                _egg_cache["store"] = EggStore(_env("BUDDY_DB", "data/buddy/eggs.json"))
+                logger.info("Buddy eggs enabled | db=%s", _egg_cache["store"].path)
+            except Exception as e:  # noqa: BLE001 - egg is decorative, chat must keep working
+                logger.warning("buddy egg store unavailable (eggs disabled for this run): %s", e)
+        return _egg_cache["store"]
+
+    def _egg_snapshot(uid: str) -> Optional[dict]:
+        """Public egg state for this identity, or None when eggs are off."""
+        store = _egg_store()
+        if store is None:
+            return None
+        try:
+            return store.snapshot(uid)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("buddy egg snapshot failed: %s", e)
+            return None
+
     async def require_chat_access(
         request: Request,
         x_api_key: Optional[str] = Depends(require_api_key),
@@ -1079,8 +1108,10 @@ def create_app(
             try:
                 from sentinel.buddy import is_buddy_command, handle_buddy_command
                 if is_buddy_command(_raw0):
-                    owner = _owner(api_key) or (api_key or sid)
-                    text = handle_buddy_command(_raw0, str(owner))
+                    uid_hint = str(getattr(req, "user_id", "") or "").strip()
+                    owner = _owner(api_key) or uid_hint or (api_key or sid)
+                    egg = _egg_snapshot(str(owner))
+                    text = handle_buddy_command(_raw0, str(owner), egg=egg)
                     if text:
                         # Control tokens for UI; short human message for transcript
                         if text == "BUDDY_ON":
@@ -1452,7 +1483,9 @@ def create_app(
                     from sentinel.buddy import handle_buddy_command, is_buddy_command
 
                     if is_buddy_command(raw):
-                        text = handle_buddy_command(raw, str(owner or api_key or sid))
+                        uid_hint = str(fp.get("user_id") or "").strip()
+                        bkey = str(owner or uid_hint or api_key or sid)
+                        text = handle_buddy_command(raw, bkey, egg=_egg_snapshot(bkey))
                         if text:
                             if text == "BUDDY_ON":
                                 msg, bmeta = "Buddy on.", {"buddy": True, "buddy_ui": "on"}
@@ -1965,14 +1998,18 @@ def create_app(
         user_id: Optional[str] = None,
     ):
         from sentinel.buddy import hatch_buddy
-        owner = (user_id or "").strip() or (_owner(api_key) if api_key else "anonymous")
-        b = hatch_buddy(str(owner or "anonymous"))
-        return {
+        owner = str((user_id or "").strip() or (_owner(api_key) if api_key else "anonymous") or "anonymous")
+        b = hatch_buddy(owner)
+        out: dict = {
             "product": "Buddy",
             "buddy": b.to_public_dict(),
             "ascii": b.render(),
             "placement": "float_below_navbar",
         }
+        egg = _egg_snapshot(owner)
+        if egg is not None:
+            out["egg"] = egg
+        return out
 
     @app.post("/v1/buddy")
     def buddy_post(body: dict, api_key: Optional[str] = Depends(require_api_key)):
@@ -1982,22 +2019,64 @@ def create_app(
         owner = str(body.get("user_id") or "").strip() or (
             _owner(api_key) if api_key else "anonymous"
         )
+        owner = str(owner or "anonymous")
         cmd = str(body.get("command") or "/buddy").strip()
-        b = hatch_buddy(str(owner))
-        if "pet" in cmd.lower():
-            return {
-                "product": "Buddy",
-                "text": pet_buddy(str(owner)),
-                "buddy": b.to_public_dict(),
-                "placement": "float_below_navbar",
-            }
-        text = handle_buddy_command(cmd if is_buddy_command(cmd) else "/buddy", str(owner))
-        return {
+        b = hatch_buddy(owner)
+        egg = _egg_snapshot(owner)
+        out: dict = {
             "product": "Buddy",
-            "text": text,
             "buddy": b.to_public_dict(),
             "placement": "float_below_navbar",
         }
+        if egg is not None:
+            out["egg"] = egg
+        if "pet" in cmd.lower():
+            out["text"] = pet_buddy(owner)
+            return out
+        out["text"] = handle_buddy_command(
+            cmd if is_buddy_command(cmd) else "/buddy", owner, egg=egg
+        )
+        return out
+
+    @app.post("/v1/buddy/step")
+    def buddy_step(
+        body: dict,
+        request: Request,
+        api_key: Optional[str] = Depends(require_api_key),
+    ):
+        """Egg incubation step — the chat UI calls this after each user message.
+
+        One message = one step; passive time also counts. Once progress reaches
+        the (deterministic) requirement the response flips to ``hatched`` and
+        carries the revealed companion.
+        """
+        from sentinel.buddy import hatch_buddy
+
+        _limit(request, api_key)
+        body = body or {}
+        owner = str(body.get("user_id") or "").strip() or (
+            _owner(api_key) if api_key else "anonymous"
+        )
+        owner = str(owner or "anonymous")
+        try:
+            n = int(body.get("n") or 1)
+        except (TypeError, ValueError):
+            n = 1
+        store = _egg_store()
+        egg: Optional[dict] = None
+        if store is not None:
+            try:
+                egg = store.add_message_steps(owner, n)
+            except Exception as e:  # noqa: BLE001 - never block chat on the pet
+                logger.warning("buddy egg step failed: %s", e)
+        out: dict = {
+            "product": "Buddy",
+            "egg": egg,
+            "hatched": bool(egg and egg.get("hatched")),
+        }
+        if out["hatched"]:
+            out["buddy"] = hatch_buddy(owner).to_public_dict()
+        return out
 
     @app.get("/v1/megha/capabilities")
     def megha_capabilities(api_key: Optional[str] = Depends(require_api_key)):

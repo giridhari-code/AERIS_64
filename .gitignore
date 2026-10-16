@@ -39,6 +39,7 @@ data/raw/
 
 # Local accounts db (signup/login) — user data is never committed
 data/auth/
+data/buddy/
 node_modules/
 apps/web/node_modules/
 apps/web/bun.lock

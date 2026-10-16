@@ -1,17 +1,34 @@
 /**
  * Buddy float controller — imperative port of the legacy inline script.
  * Same DOM ids (#buddy-float, #buddyAscii, #buddyMeta), same window hooks
- * (sentinelBuddyReact / sentinelBuddySetVisible / sentinelBuddyPet).
+ * (sentinelBuddyReact / sentinelBuddySetVisible / sentinelBuddyPet / sentinelBuddyStep).
+ *
+ * Pokémon-style egg stage: while the server reports an unhatched egg the float
+ * shows egg frames + incubation progress instead of the companion. Every user
+ * chat message is one step (App calls window.sentinelBuddyStep()), passive time
+ * also counts; on hatch the float plays the crack sequence and reveals the buddy.
  */
-import { buddyUserId as storedBuddyUserId, readBuddyOn, writeBuddyOn } from "../../buddy";
+import { buddyUserId as storedBuddyUserId, buddyOnChosen, readBuddyOn, writeBuddyOn } from "../../buddy";
 
 const CSS_ANIMS = ["float", "talk", "think", "happy", "sleep", "excited", "wave", "pet"];
 
 interface BuddyData {
   name?: string;
   species_name?: string;
+  shiny?: boolean;
   animations?: Record<string, string[]>;
   sprite_lines?: string[];
+}
+
+interface EggState {
+  messages?: number;
+  progress?: number;
+  required?: number;
+  hatched?: boolean;
+  period_s?: number;
+  next_step_in_s?: number;
+  frames?: string[];
+  crack_frames?: string[];
 }
 
 let inited = false;
@@ -31,7 +48,18 @@ export function initBuddy(): void {
   let buddyAnimMap: Record<string, string[]> = {};
   let buddyCache: BuddyData | null = null;
   let buddyAnimName = "idle";
-  const buddyUserId = storedBuddyUserId();
+
+  // ---- egg incubation state ------------------------------------------------
+  let egg: EggState | null = null; // unhatched snapshot; null = no egg / hatched
+  let eggBaseAt = 0; // Date.now() when the snapshot arrived
+  let eggTickTimer: number | null = null;
+  let eggIdleSpeed = 800;
+  let hatching = false;
+
+  /** Companion identity: signed-in account, else per-browser device id. */
+  function buddyId(): string {
+    return storedBuddyUserId();
+  }
 
   function moodFromChat(text?: string, role?: string): string {
     const t = (text || "").toLowerCase();
@@ -74,6 +102,7 @@ export function initBuddy(): void {
   }
 
   function setBuddyAnim(name?: string): void {
+    if (egg && !egg.hatched) return; // egg keeps wobbling; no mood anims
     buddyAnimName = name || "idle";
     clearBuddyCssAnim();
     if (buddyFloat) {
@@ -99,6 +128,131 @@ export function initBuddy(): void {
     }
   }
 
+  // ---- egg helpers -----------------------------------------------------------
+
+  function eggProgressNow(): number {
+    if (!egg) return 0;
+    const req = egg.required || 1;
+    if (egg.hatched) return req;
+    const period = Math.max(1, (egg.period_s || 300) * 1000);
+    const lead = Math.max(0, period - (egg.next_step_in_s || 0) * 1000);
+    const since = Math.max(0, Date.now() - eggBaseAt);
+    const timePart = Math.floor((lead + since) / period);
+    return Math.min((egg.progress || 0) + timePart, req);
+  }
+
+  function eggNextInS(): number {
+    if (!egg) return 0;
+    const period = Math.max(1, (egg.period_s || 300) * 1000);
+    const lead = Math.max(0, period - (egg.next_step_in_s || 0) * 1000);
+    const since = Math.max(0, Date.now() - eggBaseAt);
+    return Math.ceil((period - ((lead + since) % period)) / 1000);
+  }
+
+  function fmtEta(s: number): string {
+    if (s <= 1) return "now";
+    if (s >= 90) return Math.round(s / 60) + "m";
+    return s + "s";
+  }
+
+  function eggMetaText(): string {
+    if (!egg) return "Egg";
+    const p = eggProgressNow();
+    const r = egg.required || 1;
+    if (p >= r) return "Egg · ready! hatching…";
+    return "Egg · " + p + "/" + r + " steps · next ~" + fmtEta(eggNextInS());
+  }
+
+  /** Wobble speed rises as the egg gets closer to hatching. */
+  function eggSpeedFor(p: number, r: number): number {
+    if (p >= r) return 240;
+    const frac = Math.min(1, Math.max(0, p / Math.max(1, r)));
+    return Math.round(950 - 600 * frac);
+  }
+
+  function stopEggTicker(): void {
+    if (eggTickTimer) window.clearInterval(eggTickTimer);
+    eggTickTimer = null;
+  }
+
+  function startEggTicker(): void {
+    stopEggTicker();
+    eggTickTimer = window.setInterval(() => {
+      if (!egg || egg.hatched || hatching) return;
+      const p = eggProgressNow();
+      const r = egg.required || 1;
+      if (p >= r) {
+        hatchEgg();
+        return;
+      }
+      if (buddyMeta) buddyMeta.textContent = eggMetaText();
+      const speed = eggSpeedFor(p, r);
+      if (speed !== eggIdleSpeed) {
+        eggIdleSpeed = speed;
+        startBuddyIdle(speed);
+      }
+    }, 3000);
+  }
+
+  function enterEggMode(data: EggState, soft = false): void {
+    if (!data || data.hatched) return;
+    egg = data;
+    eggBaseAt = Date.now();
+    if (hatching) return; // don't yank frames mid-hatch
+    const frames = data.frames && data.frames.length ? data.frames : buddyFrames;
+    if (frames && frames.length) {
+      buddyFrames = frames;
+      if (!soft) {
+        buddyFrameIdx = 0;
+        if (buddyAscii && frames[0] !== undefined) buddyAscii.textContent = frames[0];
+      } else if (buddyAscii) {
+        const f = frames[buddyFrameIdx];
+        if (f !== undefined) buddyAscii.textContent = f;
+      }
+    }
+    const p = eggProgressNow();
+    const r = data.required || 1;
+    if (buddyMeta) buddyMeta.textContent = p >= r ? "Egg · ready! hatching…" : eggMetaText();
+    eggIdleSpeed = eggSpeedFor(p, r);
+    startBuddyIdle(eggIdleSpeed);
+    startEggTicker();
+  }
+
+  /** Crack sequence → revealed companion (freshBuddy skips the re-fetch). */
+  function hatchEgg(freshBuddy?: BuddyData | null): void {
+    if (hatching) return;
+    hatching = true;
+    stopEggTicker();
+    stopBuddyIdle();
+    const cracks = (egg && egg.crack_frames) || [];
+    let i = 0;
+    const finish = () => {
+      egg = null;
+      if (freshBuddy) {
+        hatching = false;
+        buddyCache = freshBuddy;
+        applyBuddyData(freshBuddy);
+        setBuddyAnim("wave");
+        return;
+      }
+      hatching = false;
+      void loadBuddy().then(() => {
+        if (buddyOn) setBuddyAnim("wave");
+      });
+    };
+    const step = () => {
+      if (i < cracks.length) {
+        const f = cracks[i];
+        if (buddyAscii && f !== undefined) buddyAscii.textContent = f;
+        i += 1;
+        window.setTimeout(step, 430);
+        return;
+      }
+      finish();
+    };
+    step();
+  }
+
   function setBuddyVisible(on: boolean): void {
     buddyOn = !!on;
     writeBuddyOn(buddyOn);
@@ -118,6 +272,7 @@ export function initBuddy(): void {
     }
     if (!buddyOn) {
       stopBuddyIdle();
+      stopEggTicker();
       if (ascii) ascii.textContent = "";
       if (meta) meta.textContent = "";
       clearBuddyCssAnim();
@@ -140,6 +295,7 @@ export function initBuddy(): void {
     if (!b) return;
     if (buddyMeta) {
       buddyMeta.textContent = b.name ? b.name + " · " + (b.species_name || "") : "Buddy";
+      if (b.shiny) buddyMeta.textContent += " ✨";
     }
     if (b.animations && typeof b.animations === "object") {
       buddyAnimMap = b.animations;
@@ -155,7 +311,7 @@ export function initBuddy(): void {
   }
 
   async function loadBuddy(): Promise<void> {
-    if (buddyCache && buddyCache.animations) {
+    if (buddyCache && buddyCache.animations && !egg) {
       applyBuddyData(buddyCache);
       return;
     }
@@ -166,13 +322,20 @@ export function initBuddy(): void {
           "Content-Type": "application/json",
           ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}),
         },
-        body: JSON.stringify({ command: "/buddy", user_id: buddyUserId }),
+        body: JSON.stringify({ command: "/buddy", user_id: buddyId() }),
       });
       if (!r.ok) {
         localBuddyFallback();
         return;
       }
       const data = await r.json();
+      const eggData = data.egg as EggState | undefined;
+      if (eggData && !eggData.hatched) {
+        enterEggMode(eggData);
+        return;
+      }
+      egg = null;
+      stopEggTicker();
       const b = data.buddy || {};
       buddyCache = b;
       applyBuddyData(b);
@@ -194,7 +357,56 @@ export function initBuddy(): void {
   };
   window.sentinelBuddyPet = function () {
     if (!buddyOn) return;
+    if (egg && !egg.hatched && !hatching) {
+      // Petting the egg = excited wobble burst
+      startBuddyIdle(180);
+      window.setTimeout(() => {
+        if (egg && !egg.hatched && !hatching) startBuddyIdle(eggIdleSpeed || 800);
+      }, 900);
+      return;
+    }
     setBuddyAnim("pet");
+  };
+
+  /**
+   * One incubation step — App calls this after each real user message.
+   * Response flips to `hatched` near the goal, which triggers the reveal.
+   */
+  window.sentinelBuddyStep = function () {
+    try {
+      void fetch("/v1/buddy/step", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}),
+        },
+        body: JSON.stringify({ user_id: buddyId() }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { hatched?: boolean; egg?: EggState; buddy?: BuddyData } | null) => {
+          if (!data) return;
+          if (data.egg && !data.egg.hatched) {
+            if (buddyOn) enterEggMode(data.egg, true);
+            return;
+          }
+          if (!data.hatched) return;
+          const b = data.buddy || null;
+          if (!buddyOn) {
+            if (b) buddyCache = b; // hidden float: reveal happens on next open
+            return;
+          }
+          if (egg && !hatching) {
+            hatchEgg(b);
+          } else if (b) {
+            buddyCache = b;
+            applyBuddyData(b);
+            setBuddyAnim("wave");
+          }
+        })
+        .catch(() => {});
+    } catch (_) {
+      /* never block chat on the pet */
+    }
   };
 
   if (buddyFloat) {
@@ -211,5 +423,12 @@ export function initBuddy(): void {
       });
     }
   }
-  if (buddyOn) setBuddyVisible(true);
+  if (buddyOn) {
+    setBuddyVisible(true);
+  } else if (!buddyOnChosen()) {
+    // First visit: the egg is the discovery moment — pop the float just once.
+    void loadBuddy().then(() => {
+      if (egg && !egg.hatched) setBuddyVisible(true);
+    });
+  }
 }

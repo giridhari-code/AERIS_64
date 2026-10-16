@@ -2,6 +2,7 @@
  * Buddy UI controller — /buddy on|off syncs float + navbar everywhere.
  * Used by the chat page; pure client logic (no model).
  */
+import { loadSession } from "./app/lib/auth";
 
 export type BuddyState = {
   on: boolean;
@@ -27,7 +28,25 @@ export function writeBuddyOn(on: boolean): void {
   }
 }
 
+/** True once the user has ever toggled the float (so we respect an explicit off). */
+export function buddyOnChosen(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_ON) !== null;
+  } catch {
+    return true; // storage unavailable → never auto-open
+  }
+}
+
 export function buddyUserId(): string {
+  // Signed-in accounts carry their companion (egg + buddy + steps) with them:
+  // the same login hatches the same egg on any device. Guests keep the
+  // per-browser device id (unchanged legacy behavior).
+  try {
+    const s = loadSession();
+    if (s && s.kind === "user" && s.user && s.user.id) return "u-" + s.user.id;
+  } catch {
+    /* fall through to the device id */
+  }
   try {
     let id = localStorage.getItem(STORAGE_UID);
     if (!id) {
