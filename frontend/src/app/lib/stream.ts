@@ -22,6 +22,8 @@ export interface ChatRequest {
   sessionId: string | null;
   /** stable per-chat id, used as the AG-UI threadId (session continuity) */
   threadId: string;
+  /** companion identity (account id or device id) — buddy/egg commands stay per-user */
+  userId: string;
 }
 
 export interface ChatMeta {
@@ -178,6 +180,7 @@ async function chatViaAgUi(
         max_new_tokens: req.maxNewTokens,
         temperature: req.temperature,
         auto_length: req.autoLength,
+        user_id: req.userId,
       },
     }),
     signal,
@@ -242,6 +245,7 @@ async function chatViaStream(
       temperature: req.temperature,
       auto_length: req.autoLength,
       session_id: req.sessionId,
+      user_id: req.userId,
     }),
     signal,
   });
@@ -303,6 +307,7 @@ async function chatViaJson(
       temperature: req.temperature,
       auto_length: req.autoLength,
       session_id: req.sessionId,
+      user_id: req.userId,
     }),
     signal,
   });

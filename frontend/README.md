@@ -75,6 +75,24 @@ token gaps are not reset mid-stream.
   the chat endpoints require a login (or X-API-Key),
   `NEUROFIELD_AUTH_TTL_DAYS` (default 30).
 
+## Buddy companion (egg hatching)
+
+- Pokémon-style reveal gate: while the egg is unhatched the float shows the
+  egg instead of the buddy. Every user chat message is one incubation step
+  (`POST /v1/buddy/step`, fired by `App.send`); passive time also counts
+  (default one step per 5 min). The meta line reads
+  `Egg · 3/8 steps · next ~4m` and the wobble speeds up near hatching.
+- The float auto-opens once on the first visit (the egg is the discovery
+  moment); an explicit `/buddy off` is respected. On hatching it plays the
+  crack sequence and reveals the buddy — deterministic per identity and
+  unchanged, so existing devices keep theirs. `/buddy egg` shows incubation
+  status in the transcript; plain `/buddy` stays the on/off toggle.
+- Identity follows the account: signed-in users incubate `u-<account id>`
+  (same egg on any device), guests keep the per-browser device id.
+- Server side: `packages/sentinel/buddy/eggs.py` (stdlib JSON store
+  `NEUROFIELD_BUDDY_DB`, default `data/buddy/eggs.json`; passive period
+  `NEUROFIELD_BUDDY_EGG_PERIOD`, default 300 s).
+
 Model weights and training code do **not** live here — see `packages/sentinel/` and `backend/README.md`.
 
 ## Vendored browser libs

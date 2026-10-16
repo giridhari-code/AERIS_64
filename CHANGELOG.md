@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased — buddy: Pokémon-style egg hatching
+
+- **Egg incubation (backend).** `packages/sentinel/buddy/eggs.py`: small
+  stdlib JSON store (`NEUROFIELD_BUDDY_DB`, default `data/buddy/eggs.json` —
+  gitignored). One chat message = one step; passive time adds one step per
+  `NEUROFIELD_BUDDY_EGG_PERIOD` seconds (default 300). The requirement is
+  deterministic per user (6–10 steps) and "hatched" is derived — the
+  companion itself stays `hatch_buddy()`-deterministic, so existing devices
+  keep their buddy; the egg only delays the reveal. ASCII wobble + crack
+  frames included.
+- **API.** `POST /v1/buddy/step` (rate-limited) returns the egg snapshot and
+  flips to `hatched: true` + the revealed buddy at the goal. `GET/POST
+  /v1/buddy` now carry an `egg` block; `/buddy` (and `/buddy egg`) answers
+  with incubation status while unhatched. Chat + AG-UI buddy commands now key
+  on the caller's `user_id` (chat body / forwardedProps), falling back to API
+  key then session id — so the float and `/buddy` agree. Tests:
+  `tests/test_buddy_egg.py` (11).
+- **Frontend.** `lib/buddy-float.ts` renders the egg (meta
+  `Egg · 3/8 steps · next ~4m`, wobble accelerates near hatching), auto-opens
+  the float on the first visit (respects an explicit `/buddy off`), and plays
+  the crack → reveal animation. `App.send` fires one
+  `window.sentinelBuddyStep()` per real user message and chat calls carry
+  `user_id` (`stream.ts`); signed-in accounts incubate `u-<account id>` so
+  the egg follows the login, guests keep the per-browser device id. The Bun
+  edge proxies `/v1/buddy/step`. Tests: `buddy_egg_test.mjs` (12) + live
+  `buddy_egg_live.mjs` (16).
+
 ## Unreleased — accounts: login / signup for the web client
 
 - **Backend accounts.** `packages/sentinel/serving/accounts.py`: stdlib-only

@@ -93,6 +93,31 @@ Token-id interface for low-level clients.
 ### POST /v1/reset?session_id=...
 Clear fast-memory session state.
 
+### GET /v1/buddy?user_id=…
+Decorative ASCII companion + egg state for that identity.
+
+### POST /v1/buddy
+`{"command":"/buddy|/buddy egg|/buddy pet","user_id":"…"}` →
+`{"text":…,"buddy":{…},"egg":{…}}`. While the egg is unhatched, `/buddy`
+answers with incubation status instead of the reveal.
+
+### POST /v1/buddy/step
+`{"user_id":"…","n":1}` → one incubation step (the chat UI calls this after
+each user message):
+
+```json
+{"hatched":false,"egg":{"messages":3,"progress":5,"required":8,"hatched":false,
+ "period_s":300,"next_step_in_s":240,"frames":["…"],"crack_frames":["…"]}}
+```
+
+Once progress reaches the requirement the response flips to `"hatched":true`
+and carries the revealed `buddy`. Egg env:
+
+| Env | Effect |
+| --- | --- |
+| `NEUROFIELD_BUDDY_DB` | egg store JSON (default `data/buddy/eggs.json`) |
+| `NEUROFIELD_BUDDY_EGG_PERIOD` | passive seconds per step (default 300 = 5 min) |
+
 ## Start server
 
 ```bash

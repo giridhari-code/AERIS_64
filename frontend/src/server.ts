@@ -210,6 +210,13 @@ app.post("/v1/buddy", async (c) => {
   return c.json(r.body, r.status as 200);
 });
 
+// Egg incubation: the chat UI posts one step per user message
+app.post("/v1/buddy/step", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/buddy/step", body);
+  return c.json(r.body, r.status as 200);
+});
+
 // ---- React app bundle (built in memory; rebuilt when src/app changes) ------
 
 let APP_JS = "";

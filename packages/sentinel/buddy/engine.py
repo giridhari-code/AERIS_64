@@ -187,8 +187,13 @@ def is_buddy_command(text: str) -> bool:
     return t.startswith("/buddy ")
 
 
-def handle_buddy_command(text: str, user_id: str) -> Optional[str]:
-    """Return reply text if this is a buddy command, else None."""
+def handle_buddy_command(text: str, user_id: str, egg: Optional[dict] = None) -> Optional[str]:
+    """Return reply text if this is a buddy command, else None.
+
+    ``egg`` is an optional public egg snapshot (``sentinel.buddy.eggs``).
+    While the egg is unhatched, show/status commands report incubation
+    instead of revealing the companion early.
+    """
     t = _norm_buddy_text(text)
     if not is_buddy_command(t):
         return None
@@ -200,7 +205,11 @@ def handle_buddy_command(text: str, user_id: str) -> Optional[str]:
         return "BUDDY_ON"
     if sub in {"off", "hide", "disable"}:
         return "BUDDY_OFF"
-    if len(parts) == 1 or sub in {"show", "hatch", "status"}:
+    if len(parts) == 1 or sub in {"show", "hatch", "status", "egg"}:
+        if egg is not None and not egg.get("hatched"):
+            from sentinel.buddy.eggs import egg_status_text
+
+            return egg_status_text(egg)
         return hatch_buddy(uid).render(frame=0)
     if sub == "pet":
         return pet_buddy(uid)
@@ -209,8 +218,9 @@ def handle_buddy_command(text: str, user_id: str) -> Optional[str]:
             "Buddy commands:\n"
             "  /buddy on    — show companion\n"
             "  /buddy off   — hide companion\n"
-            "  /buddy       — status\n"
+            "  /buddy       — status (egg until hatched)\n"
+            "  /buddy egg   — incubation progress\n"
             "(--buddy on|off bhi chalta hai)\n"
-            "Auto mood follows chat."
+            "Auto mood follows chat · every message incubates the egg."
         )
     return "Unknown. Try `/buddy on` or `/buddy off`."
