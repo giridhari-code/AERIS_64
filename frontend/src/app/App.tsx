@@ -4,6 +4,15 @@ import { Welcome } from "./components/Welcome";
 import { Message, TypingIndicator, type ChatMessage } from "./components/Message";
 import { Composer } from "./components/Composer";
 import { BuddyFloat } from "./components/BuddyFloat";
+import { ModeSheet } from "./components/ModeSheet";
+import {
+  DEFAULT_EFFORT,
+  DEFAULT_MODEL,
+  modelById,
+  resolveGenParams,
+  type EffortId,
+  type ModelId,
+} from "./lib/models";
 import { Sidebar } from "./components/Sidebar";
 import { AuthGate } from "./components/AuthGate";
 import { initBuddy } from "./lib/buddy-float";
@@ -35,18 +44,32 @@ interface Settings {
   maxTok: string;
   temp: string;
   autoLen: boolean;
+  model: ModelId;
+  effort: EffortId;
 }
 
 function loadSettings(): Settings {
   try {
     const s = JSON.parse(localStorage.getItem("sentinel_ui") || "{}");
+    const model = (s.model as ModelId) || DEFAULT_MODEL;
+    const effort = (s.effort as EffortId) || DEFAULT_EFFORT;
+    const resolved = resolveGenParams(model, effort);
     return {
-      maxTok: s.maxTok != null ? String(s.maxTok) : "64",
-      temp: s.temp != null ? String(s.temp) : "0.4",
+      maxTok: s.maxTok != null ? String(s.maxTok) : String(resolved.maxNewTokens),
+      temp: s.temp != null ? String(s.temp) : String(resolved.temperature),
       autoLen: s.autoLen != null ? !!s.autoLen : true,
+      model,
+      effort,
     };
   } catch (_) {
-    return { maxTok: "64", temp: "0.4", autoLen: true };
+    const r = resolveGenParams(DEFAULT_MODEL, DEFAULT_EFFORT);
+    return {
+      maxTok: String(r.maxNewTokens),
+      temp: String(r.temperature),
+      autoLen: true,
+      model: DEFAULT_MODEL,
+      effort: DEFAULT_EFFORT,
+    };
   }
 }
 
@@ -84,6 +107,7 @@ export function App() {
   const [latencyText, setLatencyText] = useState("");
   const [health, setHealth] = useState<Health>({ state: "unknown", label: "…" });
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [modeOpen, setModeOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(isDesktop);
   const [session, setSession] = useState<Session | null>(() => loadSession());
@@ -344,7 +368,7 @@ export function App() {
       try {
         localStorage.setItem(
           "sentinel_ui",
-          JSON.stringify({ maxTok: next.maxTok, temp: next.temp, autoLen: next.autoLen }),
+          JSON.stringify({ maxTok: next.maxTok, temp: next.temp, autoLen: next.autoLen, model: next.model, effort: next.effort }),
         );
       } catch (_) {}
       return next;
@@ -443,8 +467,11 @@ export function App() {
         appendDelta(delta);
       };
 
-      const maxTok = parseInt(settings.maxTok, 10) || 64;
-      const temp = parseFloat(settings.temp);
+      const resolved = resolveGenParams(settings.model, settings.effort);
+      const maxTok = parseInt(settings.maxTok, 10) || resolved.maxNewTokens;
+      const temp = Number.isFinite(parseFloat(settings.temp))
+        ? parseFloat(settings.temp)
+        : resolved.temperature;
       const req: ChatRequest = {
         prompt: text,
         maxNewTokens: maxTok,
@@ -680,10 +707,12 @@ export function App() {
           health={health}
           menuOpen={sidebarOpen}
           user={accountUser}
+          modeLabel={`${modelById(settings.model).name} · ${settings.effort}`}
           onMenu={() => setSidebarOpen((v) => !v)}
           onNew={newChat}
           onLogout={handleLogout}
           onLogin={requestLogin}
+          onMode={() => setModeOpen(true)}
         />
         <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
           <div className="thread" id="thread">
@@ -717,6 +746,30 @@ export function App() {
           onCancelEdit={cancelEdit}
         />
       </div>
+      <ModeSheet
+        open={modeOpen}
+        model={settings.model}
+        effort={settings.effort}
+        onClose={() => setModeOpen(false)}
+        onModel={(model) => {
+          const effort = modelById(model).defaultEffort;
+          const r = resolveGenParams(model, effort);
+          updateSettings({
+            model,
+            effort,
+            maxTok: String(r.maxNewTokens),
+            temp: String(r.temperature),
+          });
+        }}
+        onEffort={(effort) => {
+          const r = resolveGenParams(settings.model, effort);
+          updateSettings({
+            effort,
+            maxTok: String(r.maxNewTokens),
+            temp: String(r.temperature),
+          });
+        }}
+      />
       <BuddyFloat />
     </div>
   );
