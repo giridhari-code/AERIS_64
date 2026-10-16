@@ -9,6 +9,8 @@
  * so the UI keeps working against older model servers.
  */
 
+import { authHeaders } from "./auth";
+
 export type TransportName = "ag-ui" | "chat/stream" | "chat";
 
 export interface ChatRequest {
@@ -69,7 +71,10 @@ function isSse(res: Response): boolean {
 }
 
 function apiHeaders(): Record<string, string> {
-  return window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {};
+  return {
+    ...authHeaders(),
+    ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}),
+  };
 }
 
 async function errorDetail(res: Response): Promise<string> {
@@ -177,6 +182,7 @@ async function chatViaAgUi(
     }),
     signal,
   });
+  if (res.status === 401) throw new ChatError(await errorDetail(res));
   if (!res.ok) throw new TransportUnavailable("ag-ui", res.status, await errorDetail(res));
   if (!isSse(res)) throw new TransportUnavailable("ag-ui", res.status);
 
@@ -239,6 +245,7 @@ async function chatViaStream(
     }),
     signal,
   });
+  if (res.status === 401) throw new ChatError(await errorDetail(res));
   if (!res.ok) throw new TransportUnavailable("chat/stream", res.status, await errorDetail(res));
   if (!isSse(res)) throw new TransportUnavailable("chat/stream", res.status);
 

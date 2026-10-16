@@ -51,6 +51,30 @@ Both streaming endpoints are proxied unbuffered by `proxyStream()` in
 `src/proxy.ts`; the Bun server sets `idleTimeout: 255` so slow multi-second
 token gaps are not reset mid-stream.
 
+## Accounts (login / signup)
+
+- The app probes `/v1/auth/status` on load. When the backend has accounts
+  enabled it shows a full-screen **log in / sign up** card
+  (`src/app/components/AuthGate.tsx`); "Continue as guest" skips it in one
+  click (hidden when the server sets `required: true`).
+- If the auth API is missing (older server, offline dev, stubbed tests) the
+  app falls back to guest mode silently — chat is never blocked by auth.
+- Sessions: localStorage `sentinel_auth_v1` (`{kind:"user", token, user}` or
+  `{kind:"guest"}`). Stored tokens are re-validated through `/v1/auth/me`;
+  a 401 clears the session and returns to the gate.
+- Chats are per identity: `sentinel_chats_v1` entries carry an `owner`
+  (`"guest"` or the account id) and the sidebar only shows the current
+  user's chats. The topbar chip (`#btnUser`) shows the account and offers
+  log out / log in.
+- `Authorization: Bearer <token>` rides every model call
+  (`src/app/lib/auth.ts`, `src/app/lib/stream.ts`) and the Bun edge forwards
+  it (`bearerOf` in `src/server.ts`).
+- Server side: `packages/sentinel/serving/accounts.py`, routes `/v1/auth/*`.
+  Env: `NEUROFIELD_AUTH_DB` (default `data/auth/accounts.db`),
+  `NEUROFIELD_AUTH=0` disables accounts, `NEUROFIELD_AUTH_REQUIRED=1` makes
+  the chat endpoints require a login (or X-API-Key),
+  `NEUROFIELD_AUTH_TTL_DAYS` (default 30).
+
 Model weights and training code do **not** live here — see `packages/sentinel/` and `backend/README.md`.
 
 ## Vendored browser libs

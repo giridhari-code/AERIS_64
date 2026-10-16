@@ -28,11 +28,14 @@ export async function proxyHealth(): Promise<{
   }
 }
 
-export async function proxyChat(body: unknown): Promise<{
+export async function proxyChat(
+  body: unknown,
+  headers?: Record<string, string>,
+): Promise<{
   status: number;
   body: unknown;
 }> {
-  return proxyJson("POST", "/v1/chat", body);
+  return proxyJson("POST", "/v1/chat", body, headers);
 }
 
 /**
@@ -44,6 +47,7 @@ export async function proxyStream(
   method: string,
   path: string,
   body?: unknown,
+  headers?: Record<string, string>,
 ): Promise<Response> {
   try {
     const upstream = await fetch(`${pythonBase()}${path}`, {
@@ -51,6 +55,7 @@ export async function proxyStream(
       headers: {
         Accept: "text/event-stream",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(headers || {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
@@ -90,11 +95,15 @@ export async function proxyJson(
   method: string,
   path: string,
   body?: unknown,
+  headers?: Record<string, string>,
 ): Promise<{ status: number; body: unknown }> {
   try {
     const res = await fetch(`${pythonBase()}${path}`, {
       method,
-      headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      headers: {
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(headers || {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(120_000),
     });

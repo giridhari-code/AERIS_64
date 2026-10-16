@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from "react";
+import type { AuthUser } from "../lib/auth";
+
 export interface Health {
   state: "unknown" | "ok" | "err";
   label: string;
@@ -6,13 +9,39 @@ export interface Health {
 interface TopbarProps {
   health: Health;
   menuOpen: boolean;
+  /** Signed-in account, or null for guests / undecided. */
+  user: AuthUser | null;
   onMenu: () => void;
   onNew: () => void;
+  onLogout: () => void;
+  onLogin: () => void;
 }
 
-export function Topbar({ health, menuOpen, onMenu, onNew }: TopbarProps) {
+export function Topbar({ health, menuOpen, user, onMenu, onNew, onLogout, onLogin }: TopbarProps) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+
+  /* Close the account menu on outside click / Escape. */
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setAccountOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAccountOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [accountOpen]);
+
   const cls =
     "status" + (health.state === "ok" ? " ok" : health.state === "err" ? " err" : "");
+  const initial = user ? (user.name.trim()[0] || "?").toUpperCase() : "👤";
+
   return (
     <header className="topbar" role="banner">
       <button
@@ -52,6 +81,53 @@ export function Topbar({ health, menuOpen, onMenu, onNew }: TopbarProps) {
         >
           ↻
         </button>
+        <div className="user-box" ref={boxRef}>
+          <button
+            type="button"
+            className={"user-chip" + (user ? " signed-in" : "")}
+            id="btnUser"
+            title={user ? `${user.name} (${user.email})` : "Guest — log in or sign up"}
+            aria-label="Account"
+            aria-haspopup="menu"
+            aria-expanded={accountOpen}
+            onClick={() => setAccountOpen((v) => !v)}
+          >
+            {initial}
+          </button>
+          {accountOpen && (
+            <div className="user-menu" id="userMenu" role="menu">
+              <div className="user-menu-head">
+                <strong>{user ? user.name : "Guest"}</strong>
+                <span>{user ? user.email : "Chats stay on this device"}</span>
+              </div>
+              {user ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  id="btnLogout"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    onLogout();
+                  }}
+                >
+                  Log out
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  id="btnLogin"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    onLogin();
+                  }}
+                >
+                  Log in / Sign up
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
