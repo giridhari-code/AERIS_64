@@ -26,10 +26,21 @@ jobs:
       - name: Lint
         run: |
           # hard-fail on real errors (syntax, undefined names); style stays advisory
-          ruff check packages/ tests/ scripts/ --select E9,F63,F7,F82
-          ruff check packages/ tests/ scripts/ || true
+          ruff check packages/ scripts/ --select E9,F63,F7,F82
+          ruff check packages/ scripts/ || true
+          # tests are local-only (never uploaded to git)
+          if [ -d tests ]; then
+            ruff check tests/ --select E9,F63,F7,F82
+            ruff check tests/ || true
+          fi
       - name: Test
-        run: PYTHONPATH=packages pytest tests/ -v --tb=short
+        run: |
+          # tests/ is kept out of git — local-only suite; CI skips when absent
+          if [ -d tests ]; then
+            PYTHONPATH=packages pytest tests/ -v --tb=short
+          else
+            echo "tests/ not in repo — local-only suite skipped"
+          fi
 
   docker:
     runs-on: ubuntu-latest
