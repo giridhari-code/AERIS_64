@@ -1115,11 +1115,17 @@ def create_app(
                     if text:
                         # Control tokens for UI; short human message for transcript
                         if text == "BUDDY_ON":
-                            msg = "Buddy on."
+                            msg = "Buddy on — float only; linked to you + AERIS-64."
                             meta = {"buddy": True, "buddy_ui": "on"}
                         elif text == "BUDDY_OFF":
-                            msg = "Buddy off."
+                            msg = "Buddy hidden."
                             meta = {"buddy": True, "buddy_ui": "off"}
+                        elif text == "BUDDY_EGG_UI":
+                            msg = "Egg incubating — see Buddy float (hatch is not shown in chat)."
+                            meta = {"buddy": True, "buddy_egg": True}
+                        elif text in ("BUDDY_MIMIC_ON", "BUDDY_JOKER_ON"):
+                            msg = "Buddy mimic/joker mode: mirrors your chat emotion on the float."
+                            meta = {"buddy": True, "buddy_mimic": True}
                         else:
                             msg = text
                             meta = {"buddy": True}

@@ -186,12 +186,22 @@ export function initBuddy(): void {
         return;
       }
       if (buddyMeta) buddyMeta.textContent = eggMetaText();
+      updateProgressBar(p, r);
       const speed = eggSpeedFor(p, r);
       if (speed !== eggIdleSpeed) {
         eggIdleSpeed = speed;
         startBuddyIdle(speed);
       }
     }, 3000);
+  }
+
+  function updateProgressBar(p: number, r: number): void {
+    const wrap = document.getElementById("buddyProgress");
+    const bar = document.getElementById("buddyProgressBar");
+    if (!wrap || !bar) return;
+    wrap.hidden = false;
+    const pct = Math.min(100, Math.round((100 * p) / Math.max(1, r)));
+    bar.style.width = pct + "%";
   }
 
   function enterEggMode(data: EggState, soft = false): void {
@@ -212,7 +222,9 @@ export function initBuddy(): void {
     }
     const p = eggProgressNow();
     const r = data.required || 1;
-    if (buddyMeta) buddyMeta.textContent = p >= r ? "Egg · ready! hatching…" : eggMetaText();
+    if (buddyFloat) buddyFloat.classList.add("egg-mode");
+    if (buddyMeta) buddyMeta.textContent = p >= r ? "Egg · ready!" : eggMetaText();
+    updateProgressBar(p, r);
     eggIdleSpeed = eggSpeedFor(p, r);
     startBuddyIdle(eggIdleSpeed);
     startEggTicker();
@@ -228,6 +240,9 @@ export function initBuddy(): void {
     let i = 0;
     const finish = () => {
       egg = null;
+      if (buddyFloat) buddyFloat.classList.remove("egg-mode");
+      const wrap = document.getElementById("buddyProgress");
+      if (wrap) wrap.hidden = true;
       if (freshBuddy) {
         hatching = false;
         buddyCache = freshBuddy;
