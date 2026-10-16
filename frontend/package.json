@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "TypeScript + Bun edge layer for AERIS_64 (API gateway, git helpers). Python keeps the neural model.",
+  "description": "SENTINEL frontend \u2014 Bun + TypeScript UI and API gateway to the Python model server.",
   "scripts": {
     "dev": "bun run --hot src/server.ts",
     "start": "bun run src/server.ts",

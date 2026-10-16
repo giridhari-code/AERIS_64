@@ -1,7 +1,8 @@
-.PHONY: install install-dev test lint format build docker-build docker-run backend frontend serve serve-chat count-1b ablation clean
+.PHONY: install install-dev test lint format build docker-build docker-run backend frontend serve serve-chat clean
 
 PYTHON ?= python
 IMAGE  = sentinel:2.3.1
+export PYTHONPATH := packages$(if $(PYTHONPATH),:$(PYTHONPATH),)
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -13,10 +14,10 @@ test:
 	PYTHONPATH=packages $(PYTHON) -m pytest tests/ -v --tb=short
 
 lint:
-	ruff check src/ tests/
+	ruff check packages/sentinel tests/
 
 format:
-	ruff format src/ tests/
+	ruff format packages/sentinel tests/
 
 build:
 	$(PYTHON) -m build
@@ -27,38 +28,19 @@ docker-build:
 docker-run:
 	docker compose -f deploy/docker/docker-compose.yml up --build
 
-# Requires NEUROFIELD_CHECKPOINT=path/to/dir with model.safetensors
 backend:
-	PYTHONPATH=packages uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
+	./backend/run.sh
 
-serve:
-	PYTHONPATH=packages uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
+serve: backend
 
 frontend:
 	cd frontend && bun install && bun run dev
 
 serve-chat:
-	@test -n "$$NEUROFIELD_CHECKPOINT" || (echo "Set NEUROFIELD_CHECKPOINT to a folder with model.safetensors"; exit 1)
-	PYTHONPATH=packages uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
-
-count-1b:
-	PYTHONPATH=packages $(PYTHON) scripts/research/count_params.py configs/aeris_1b.yaml
-
-ablation:
-	PYTHONPATH=packages $(PYTHON) scripts/research/contribution_ablation.py \
-		--steps 400 --seeds 0 --device cpu --out artifacts/contrib.json
+	@echo "Terminal 1: make backend"
+	@echo "Terminal 2: make frontend"
+	@echo "Open http://localhost:3000"
 
 clean:
-	rm -rf build/ dist/ *.egg-info .pytest_cache .ruff_cache
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-
-# --- quality / scale gates ---
-.PHONY: e2e redteam test-quick
-test-quick:
-	PYTHONPATH=packages pytest tests/ -q --tb=no 2>/dev/null || true
-
-e2e:
-	PYTHONPATH=packages python scripts/eval/run_e2e_tasks.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main} --tasks data/e2e_tasks/full_tasks.jsonl
-
-redteam:
-	PYTHONPATH=packages python scripts/eval/red_team.py --checkpoint $${CKPT:-checkpoints/examples/AERIS_main}
+	find . -type d -name __pycache__ -not -path "./.git/*" -exec rm -rf {} + 2>/dev/null || true
+	rm -rf .pytest_cache dist build *.egg-info 2>/dev/null || true

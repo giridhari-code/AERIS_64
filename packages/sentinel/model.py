@@ -8,6 +8,12 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import torch
+
+# Inference-friendly defaults (safe; does not change numerics of the architecture)
+try:
+    torch.set_float32_matmul_precision("high")
+except Exception:
+    pass
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor

@@ -420,7 +420,7 @@ def _token_stream(
                 if _amp_dtype is not None
                 else contextlib.nullcontext()
             )
-            with torch.no_grad(), amp_ctx:
+            with torch.inference_mode(), amp_ctx:
                 if 0 < replay_len < cur.size(1):
                     # re-fed history: rebuilds the fast context but must NOT be written into the slow ring again
                     state = _model(cur[:, :replay_len], state=state, write_slow=False).state
