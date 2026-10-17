@@ -165,6 +165,13 @@ app.post("/v1/tools/dataset_builder", async (c) => {
 });
 
 
+
+app.post("/v1/kalo/run", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/kalo/run", body, bearerOf(c));
+  return c.json(r.body, r.status as 200);
+});
+
 app.get("/v1/kalo", async (c) => {
   const r = await proxyJson("GET", "/v1/kalo", undefined, bearerOf(c));
   return c.json(r.body, r.status as 200);
