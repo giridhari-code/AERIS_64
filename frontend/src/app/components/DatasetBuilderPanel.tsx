@@ -99,6 +99,8 @@ export function DatasetBuilderPanel({ onBack }: { onBack: () => void }) {
               <option value="jsonl">jsonl</option><option value="txt">txt</option><option value="csv">csv</option>
             </select>
             <button type="button" className="db-btn" disabled={busy} onClick={() => run("export")}>Export</button>
+            <button type="button" className="db-btn secondary" disabled={busy} onClick={() => run("export_train")}>Training JSONL</button>
+            <button type="button" className="db-btn secondary" disabled={busy} onClick={() => run("imbalance")}>Imbalance</button>
           </div>
         </section>
         {(msg || data?.report) && (
