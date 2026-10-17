@@ -13,7 +13,8 @@ import {
   type EffortId,
   type ModelId,
 } from "./lib/models";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, type SidebarPanel } from "./components/Sidebar";
+import { DatasetBuilderPanel } from "./components/DatasetBuilderPanel";
 import { AuthGate } from "./components/AuthGate";
 import { initBuddy } from "./lib/buddy-float";
 import { buddyUserId, matchBuddyOnOff } from "../buddy";
@@ -114,6 +115,7 @@ export function App() {
   const [modeOpen, setModeOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(isDesktop);
+  const [panel, setPanel] = useState<SidebarPanel>("chat");
   const [session, setSession] = useState<Session | null>(() => loadSession());
   /** "checking" while probing; null = auth unavailable (auto-guest fallback). */
   const [authStatus, setAuthStatus] = useState<AuthStatus | "checking" | null>("checking");
@@ -701,82 +703,91 @@ export function App() {
         chats={visibleChats}
         currentId={store.currentId}
         open={sidebarOpen}
+        activePanel={panel}
+        onOpenDataset={() => setPanel("dataset")}
+        onOpenChat={() => setPanel("chat")}
         onSelect={selectChat}
         onDelete={deleteChat}
         onNew={newChat}
         onClose={() => setSidebarOpen(false)}
       />
       <div className="main-col">
-        <Topbar
-          health={health}
-          menuOpen={sidebarOpen}
-          user={accountUser}
-          onMenu={() => setSidebarOpen((v) => !v)}
-          onNew={newChat}
-          onLogout={handleLogout}
-          onLogin={requestLogin}
-        />
-        <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
-          <div className="thread" id="thread">
-            {messages.length === 0 && !typing && (
-              <Welcome onChip={(q) => send(q)} userName={accountUser?.name || null} />
-            )}
-            {messages.map((m, i) => (
-              <Message
-                key={m.id}
-                msg={m}
-                canEdit={!busy && m.role === "user"}
-                canRegenerate={!busy && i === lastAssistantIdx}
-                onEdit={startEdit}
-                onRegenerate={regenerate}
-              />
-            ))}
-            {typing && <TypingIndicator />}
-          </div>
-        </main>
-        <Composer
-          promptRef={promptRef}
-          busy={busy}
-          editing={editingId != null}
-          maxTok={settings.maxTok}
-          temp={settings.temp}
-          autoLen={settings.autoLen}
-          latencyText={latencyText}
-          modeLabel={`${modelById(settings.model).name} · ${settings.effort}`}
-          onMode={() => setModeOpen(true)}
-          onSettings={updateSettings}
-          onInput={autoGrow}
-          onSubmit={() => send()}
-          onStop={stop}
-          onClear={clearChat}
-          onCancelEdit={cancelEdit}
-        />
-      </div>
-      <ModeSheet
-        open={modeOpen}
-        model={settings.model}
-        effort={settings.effort}
-        onClose={() => setModeOpen(false)}
-        onModel={(model) => {
-          const effort = modelById(model).defaultEffort;
-          const r = resolveGenParams(model, effort);
-          updateSettings({
-            model,
-            effort,
-            maxTok: String(r.maxNewTokens),
-            temp: String(r.temperature),
-          });
-        }}
-        onEffort={(effort) => {
-          const r = resolveGenParams(settings.model, effort);
-          updateSettings({
-            effort,
-            maxTok: String(r.maxNewTokens),
-            temp: String(r.temperature),
-          });
-        }}
-      />
-      <BuddyFloat />
+        {panel === "dataset" ? (
+          <DatasetBuilderPanel onBack={() => setPanel("chat")} />
+        ) : (
+          <>
+            <Topbar
+                      health={health}
+                      menuOpen={sidebarOpen}
+                      user={accountUser}
+                      onMenu={() => setSidebarOpen((v) => !v)}
+                      onNew={newChat}
+                      onLogout={handleLogout}
+                      onLogin={requestLogin}
+                    />
+                    <main id="chat" role="log" aria-live="polite" aria-relevant="additions" ref={chatRef}>
+                      <div className="thread" id="thread">
+                        {messages.length === 0 && !typing && (
+                          <Welcome onChip={(q) => send(q)} userName={accountUser?.name || null} />
+                        )}
+                        {messages.map((m, i) => (
+                          <Message
+                            key={m.id}
+                            msg={m}
+                            canEdit={!busy && m.role === "user"}
+                            canRegenerate={!busy && i === lastAssistantIdx}
+                            onEdit={startEdit}
+                            onRegenerate={regenerate}
+                          />
+                        ))}
+                        {typing && <TypingIndicator />}
+                      </div>
+                    </main>
+                    <Composer
+                      promptRef={promptRef}
+                      busy={busy}
+                      editing={editingId != null}
+                      maxTok={settings.maxTok}
+                      temp={settings.temp}
+                      autoLen={settings.autoLen}
+                      latencyText={latencyText}
+                      modeLabel={`${modelById(settings.model).name} · ${settings.effort}`}
+                      onMode={() => setModeOpen(true)}
+                      onSettings={updateSettings}
+                      onInput={autoGrow}
+                      onSubmit={() => send()}
+                      onStop={stop}
+                      onClear={clearChat}
+                      onCancelEdit={cancelEdit}
+                    />
+                  </div>
+                  <ModeSheet
+                    open={modeOpen}
+                    model={settings.model}
+                    effort={settings.effort}
+                    onClose={() => setModeOpen(false)}
+                    onModel={(model) => {
+                      const effort = modelById(model).defaultEffort;
+                      const r = resolveGenParams(model, effort);
+                      updateSettings({
+                        model,
+                        effort,
+                        maxTok: String(r.maxNewTokens),
+                        temp: String(r.temperature),
+                      });
+                    }}
+                    onEffort={(effort) => {
+                      const r = resolveGenParams(settings.model, effort);
+                      updateSettings({
+                        effort,
+                        maxTok: String(r.maxNewTokens),
+                        temp: String(r.temperature),
+                      });
+                    }}
+                  />
+                  <BuddyFloat />
+          </>
+        )}
     </div>
   );
 }

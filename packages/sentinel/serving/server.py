@@ -1945,6 +1945,28 @@ def create_app(
         tz = str(body.get("timezone") or "").strip() or None
         return {"report": now_report(tz)}
 
+
+    @app.post("/v1/tools/dataset_builder")
+    async def tools_dataset_builder(request: Request):
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        try:
+            from sentinel.tools.dataset_builder import dataset_builder_json
+            return dataset_builder_json(
+                action=str(payload.get("action") or "progress"),
+                paths=payload.get("paths"), urls=payload.get("urls"),
+                category=str(payload.get("category") or "general_language"),
+                license_note=str(payload.get("license_note") or "unknown"),
+                export_format=str(payload.get("export_format") or "jsonl"),
+                work_dir=payload.get("work_dir"), text=payload.get("text"),
+            )
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
     @app.post("/v1/tools/calculator")
     def tools_calculator(body: dict, api_key: Optional[str] = Depends(require_api_key)):
         expr = str((body or {}).get("expression") or "").strip()
