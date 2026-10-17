@@ -1,23 +1,19 @@
-"""KALO BOT mother agent — orchestrates children; does not invent tool results.
+"""KALO BOT mother agent — production orchestrator.
 
-Production path:
-  1. Route intent (router)
-  2. Bhutu gate (policy) when tools may run
-  3. Dispatch to buddy / megha / dataset_builder / tool enrich / plain chat
-  4. Return structured KaloTurn (answer + route + events)
-
-The language model generate_fn is injected by the server so this module stays
-free of hard-coded replies and checkpoint paths.
+Dispatches to real subsystems only. No canned product demos as answers.
+Generate is injected by the serving layer when a checkpoint is loaded.
 """
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from sentinel.kalo.identity import MODEL_NAME, PRODUCT_NAME, TAGLINE, system_preamble
-from sentinel.kalo.router import Route, route_intent
+from sentinel.kalo.router import route_intent
 
 GenerateFn = Callable[[str], str]
 
@@ -53,14 +49,49 @@ def _timed(name: str, fn: Callable[[], str]) -> KaloEvent:
     t0 = time.perf_counter()
     try:
         out = fn()
-        return KaloEvent(name, True, (out or "")[:4000], (time.perf_counter() - t0) * 1000)
+        return KaloEvent(name, True, (out or "")[:8000], (time.perf_counter() - t0) * 1000.0)
     except Exception as e:
-        return KaloEvent(name, False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000)
+        return KaloEvent(
+            name, False, f"{type(e).__name__}: {e}", (time.perf_counter() - t0) * 1000.0
+        )
+
+
+def _egg_snapshot(user_id: str) -> Optional[dict[str, Any]]:
+    try:
+        from sentinel.buddy.eggs import EggStore
+
+        path = Path(
+            os.environ.get("NEUROFIELD_BUDDY_EGG_PATH")
+            or os.environ.get("AERIS_BUDDY_EGG_PATH")
+            or "artifacts/buddy/eggs.json"
+        )
+        return EggStore(path).snapshot(user_id)
+    except Exception:
+        return None
+
+
+def _dataset_action(text: str) -> str:
+    low = text.lower()
+    if re_search(low, r"export\s*train|training\s*jsonl|export_train"):
+        return "export_train"
+    if "export" in low:
+        return "export"
+    if "balance" in low and "imbalance" not in low:
+        return "balance"
+    if "imbalance" in low:
+        return "imbalance"
+    if re_search(low, r"collect|fetch|url|ingest|add\s+file"):
+        return "help"
+    return "progress"
+
+
+def re_search(text: str, pat: str) -> bool:
+    import re
+
+    return bool(re.search(pat, text, re.I))
 
 
 class KaloBot:
-    """Mother agent. One instance can serve many turns (stateless per call)."""
-
     def __init__(self, generate: Optional[GenerateFn] = None) -> None:
         self._generate = generate
 
@@ -72,7 +103,6 @@ class KaloBot:
         prompt: str,
         *,
         user_id: str = "anonymous",
-        session_id: Optional[str] = None,
         generate: Optional[GenerateFn] = None,
     ) -> KaloTurn:
         t0 = time.perf_counter()
@@ -81,35 +111,22 @@ class KaloBot:
         events: list[KaloEvent] = []
         facts: Optional[str] = None
         answer = ""
-
         gen = generate or self._generate
 
-        # --- Buddy ----------------------------------------------------------
         if route.target == "buddy":
             def _buddy() -> str:
-                from sentinel.buddy import handle_buddy_command, is_buddy_command
-                from sentinel.buddy.eggs import EggStore
-                import os
-                from pathlib import Path
+                from sentinel.buddy import handle_buddy_command, is_buddy_command, resolve_buddy_reply
 
-                egg = None
-                try:
-                    store = EggStore(
-                        Path(os.environ.get("NEUROFIELD_BUDDY_EGG_PATH") or "artifacts/buddy/eggs.json")
-                    )
-                    egg = store.snapshot(user_id)
-                except Exception:
-                    egg = None
-                if is_buddy_command(text):
-                    out = handle_buddy_command(text, user_id, egg=egg)
-                    return out or "Buddy: no reply"
-                return handle_buddy_command("/buddy status", user_id, egg=egg) or "Buddy status"
+                egg = _egg_snapshot(user_id)
+                cmd = text if is_buddy_command(text) else "/buddy status"
+                raw = handle_buddy_command(cmd, user_id, egg=egg) or ""
+                msg, _meta = resolve_buddy_reply(raw)
+                return msg or raw or "Buddy: no reply"
 
             ev = _timed("buddy", _buddy)
             events.append(ev)
             answer = ev.detail if ev.ok else f"Buddy error: {ev.detail}"
 
-        # --- Megha ----------------------------------------------------------
         elif route.target == "megha":
             def _megha() -> str:
                 from sentinel.tools.megha_tool import megha_report
@@ -120,89 +137,94 @@ class KaloBot:
             events.append(ev)
             answer = ev.detail if ev.ok else f"Megha error: {ev.detail}"
 
-        # --- Dataset Builder ------------------------------------------------
         elif route.target == "dataset":
             def _ds() -> str:
                 from sentinel.tools.dataset_builder import dataset_builder_report
 
-                # map rough verbs
-                low = text.lower()
-                if "export" in low and "train" in low:
-                    return dataset_builder_report("export_train")
-                if "export" in low:
-                    return dataset_builder_report("export")
-                if "balance" in low:
-                    return dataset_builder_report("balance")
-                if "imbalance" in low:
-                    return dataset_builder_report("imbalance")
-                return dataset_builder_report("progress")
+                return dataset_builder_report(_dataset_action(text))
 
             ev = _timed("dataset_builder", _ds)
             events.append(ev)
             answer = ev.detail if ev.ok else f"DatasetBuilder error: {ev.detail}"
 
-        # --- Tools (+ Bhutu gate) -------------------------------------------
-        elif route.target in {"tools", "bhutu", "ajeebwork", "kalofacts", "chat"}:
-            # Bhutu pre-check for toolish routes
-            if route.target in {"tools", "bhutu"}:
+        elif route.target == "kalofacts":
+            def _kf() -> str:
+                try:
+                    from sentinel.kalofacts.store import list_artifacts
+
+                    items = list_artifacts() if callable(list_artifacts) else []
+                    n = len(items) if items is not None else 0
+                    return f"Kalofacts: {n} artifact(s). API: GET/POST /v1/kalofacts"
+                except Exception as e:
+                    return f"Kalofacts API: /v1/kalofacts ({type(e).__name__})"
+
+            ev = _timed("kalofacts", _kf)
+            events.append(ev)
+            answer = ev.detail
+
+        elif route.target == "ajeebwork":
+            def _aw() -> str:
+                try:
+                    from sentinel.tools import ajeebwork_tools  # noqa: F401
+
+                    return "AjeebWork tools registered. Drive multi-step file work via agent tools catalog."
+                except Exception as e:
+                    return f"AjeebWork unavailable: {type(e).__name__}: {e}"
+
+            ev = _timed("ajeebwork", _aw)
+            events.append(ev)
+            answer = ev.detail
+
+        else:
+            # tools | bhutu | chat
+            allow_tools = True
+            if route.target in {"tools", "bhutu", "chat"}:
                 def _bhutu() -> str:
                     from sentinel.modules.bhutu import bhutu_decide
 
                     d = bhutu_decide(text)
-                    allowed = getattr(d, "allowed_tools", None) or getattr(d, "tools", None) or []
-                    refuse = getattr(d, "refuse", False) or getattr(d, "block", False)
-                    note = getattr(d, "reason", None) or getattr(d, "message", "") or ""
-                    return f"refuse={refuse} allowed={list(allowed)[:12]} {note}"
+                    allow = bool(getattr(d, "allow", True))
+                    msg = getattr(d, "user_message", "") or getattr(d, "reason", "") or ""
+                    tools = getattr(d, "allowed_tools", None) or []
+                    return f"allow={allow} tools={list(tools)[:16]} {msg}".strip()
 
-                events.append(_timed("bhutu", _bhutu))
+                bev = _timed("bhutu", _bhutu)
+                events.append(bev)
+                if bev.ok and bev.detail.startswith("allow=False"):
+                    allow_tools = False
+                    answer = bev.detail
 
-            if route.target == "tools" or route.target == "chat":
+            if allow_tools and route.target in {"tools", "chat"}:
                 def _enrich() -> str:
                     from sentinel.tools.orchestrate import enrich_prompt_with_tools
 
-                    enriched, note = enrich_prompt_with_tools(text)
-                    return note or ""
+                    _enriched, note = enrich_prompt_with_tools(text)
+                    return (note or "").strip()
 
-                ev = _timed("tools_enrich", _enrich)
-                events.append(ev)
-                if ev.ok and ev.detail:
-                    facts = ev.detail
+                eev = _timed("tools_enrich", _enrich)
+                events.append(eev)
+                if eev.ok and eev.detail:
+                    facts = eev.detail
 
-            # Generate via injected model
-            if gen is not None:
-                def _gen() -> str:
-                    block = system_preamble()
-                    user = text
-                    if facts:
-                        user = f"{text}\n\n[tool_facts]\n{facts}\n[/tool_facts]"
-                    return gen(f"{block}\n\nUser: {user}\n\nAssistant:")
+            if not answer:
+                if gen is not None:
+                    def _gen() -> str:
+                        user = text
+                        if facts:
+                            user = f"{text}\n\n[tool_facts]\n{facts}\n[/tool_facts]"
+                        return gen(f"{system_preamble()}\n\nUser: {user}\n\nAssistant:")
 
-                gev = _timed("generate", _gen)
-                events.append(gev)
-                answer = gev.detail if gev.ok else f"Generate error: {gev.detail}"
-            else:
-                # No model bound — still return useful child/tool output
-                if facts:
+                    gev = _timed("generate", _gen)
+                    events.append(gev)
+                    answer = gev.detail if gev.ok else f"Generate error: {gev.detail}"
+                elif facts:
                     answer = facts
-                elif events:
-                    answer = events[-1].detail
                 else:
                     answer = (
-                        f"{PRODUCT_NAME} routed to `{route.target}` ({route.reason}) "
-                        "but no generate_fn is bound. Start the AERIS_64 backend with a checkpoint."
+                        f"{PRODUCT_NAME} routed to `{route.target}` ({route.reason}). "
+                        "No model checkpoint bound — load NEUROFIELD_CHECKPOINT for generation, "
+                        "or ask a tool/buddy/dataset command."
                     )
-
-            if route.target == "ajeebwork":
-                events.append(
-                    KaloEvent("ajeebwork", True, "AjeebWork dispatch is available via tools/ajeebwork; use plan in chat.", 0)
-                )
-            if route.target == "kalofacts":
-                events.append(
-                    KaloEvent("kalofacts", True, "Kalofacts API: /v1/kalofacts", 0)
-                )
-
-        else:
-            answer = f"Unhandled route: {route.target}"
 
         return KaloTurn(
             answer=(answer or "").strip() or "(empty)",
@@ -211,7 +233,7 @@ class KaloBot:
             confidence=route.confidence,
             events=events,
             facts=facts,
-            latency_ms=(time.perf_counter() - t0) * 1000,
+            latency_ms=(time.perf_counter() - t0) * 1000.0,
         )
 
 
