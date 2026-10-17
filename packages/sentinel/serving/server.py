@@ -2118,6 +2118,22 @@ def create_app(
         return run_si_v1(prompt, config=SI_v1Config(max_steps=max_steps)).to_dict()
 
     # ---- Megha: defensive cybersecurity / authorized testing assistant ----
+
+    @app.get("/v1/kalo")
+    def kalo_identity():
+        """KALO BOT product identity — face of AERIS_64."""
+        try:
+            from sentinel.kalo import identity_payload
+            return identity_payload()
+        except Exception as e:
+            return {
+                "name": "KALO BOT",
+                "tagline": "Think Smarter. Do More.",
+                "engine": "SENTINEL",
+                "model": "AERIS_64",
+                "error": str(e),
+            }
+
     @app.get("/v1/buddy")
     def buddy_get(
         api_key: Optional[str] = Depends(require_api_key),
