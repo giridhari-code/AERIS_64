@@ -15,7 +15,6 @@ import {
 } from "./lib/models";
 import { Sidebar, type SidebarPanel } from "./components/Sidebar";
 import { DatasetBuilderPanel } from "./components/DatasetBuilderPanel";
-import { KaloBotPanel } from "./components/KaloBotPanel";
 import { AuthGate } from "./components/AuthGate";
 import { initBuddy } from "./lib/buddy-float";
 import { buddyUserId, matchBuddyOnOff } from "../buddy";
@@ -707,7 +706,6 @@ export function App() {
         activePanel={panel}
         onOpenDataset={() => setPanel("dataset")}
         onOpenChat={() => setPanel("chat")}
-        onOpenKalo={() => setPanel("kalo")}
         onSelect={selectChat}
         onDelete={deleteChat}
         onNew={newChat}
@@ -716,12 +714,6 @@ export function App() {
       <div className="main-col">
         {panel === "dataset" ? (
           <DatasetBuilderPanel onBack={() => setPanel("chat")} />
-        ) : panel === "kalo" ? (
-          <KaloBotPanel
-            onBack={() => setPanel("chat")}
-            onOpenDataset={() => setPanel("dataset")}
-            onOpenChat={() => setPanel("chat")}
-          />
         ) : (
           <>
             <Topbar

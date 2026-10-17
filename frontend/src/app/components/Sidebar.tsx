@@ -1,6 +1,6 @@
 import { relTime, type StoredChat } from "../lib/history";
 
-export type SidebarPanel = "chat" | "dataset" | "kalo";
+export type SidebarPanel = "chat" | "dataset";
 
 interface SidebarProps {
   chats: StoredChat[];
@@ -13,7 +13,6 @@ interface SidebarProps {
   onClose: () => void;
   onOpenDataset?: () => void;
   onOpenChat?: () => void;
-  onOpenKalo?: () => void;
 }
 
 export function Sidebar(p: SidebarProps) {
@@ -39,26 +38,6 @@ export function Sidebar(p: SidebarProps) {
             onClick={p.onClose}
           >
             ×
-          </button>
-        </div>
-
-        <div className="sidebar-section">
-          <div className="sidebar-section-label">Product</div>
-          <button
-            type="button"
-            className={"side-tool" + (panel === "kalo" ? " active" : "")}
-            onClick={() => {
-              p.onOpenKalo?.();
-              p.onClose();
-            }}
-          >
-            <span className="side-tool-ico" aria-hidden="true">
-              ◎
-            </span>
-            <span className="side-tool-text">
-              <strong>KALO BOT</strong>
-              <small>Think Smarter. Do More.</small>
-            </span>
           </button>
         </div>
 
@@ -134,7 +113,7 @@ export function Sidebar(p: SidebarProps) {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <a href="/">Chat</a> · KALO BOT · Dataset Builder
+          <a href="/">Chat</a> · <a href="/product">Product</a> · Dataset Builder
         </div>
       </aside>
     </>
