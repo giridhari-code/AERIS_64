@@ -441,6 +441,13 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
 
+
+        {"name": "dataset_builder", "description": "Build training datasets: collect, clean, quality, category budgets, balance, export.",
+         "inputSchema": {"type": "object", "properties": {
+            "action": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}},
+            "urls": {"type": "array", "items": {"type": "string"}}, "text": {"type": "string"},
+            "category": {"type": "string"}, "license_note": {"type": "string"},
+            "export_format": {"type": "string"}, "work_dir": {"type": "string"}}, "required": ["action"]}},
     ]
 
 
