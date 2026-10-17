@@ -1958,11 +1958,14 @@ def create_app(
             from sentinel.tools.dataset_builder import dataset_builder_json
             return dataset_builder_json(
                 action=str(payload.get("action") or "progress"),
-                paths=payload.get("paths"), urls=payload.get("urls"),
+                paths=payload.get("paths"),
+                urls=payload.get("urls"),
                 category=str(payload.get("category") or "general_language"),
                 license_note=str(payload.get("license_note") or "unknown"),
                 export_format=str(payload.get("export_format") or "jsonl"),
-                work_dir=payload.get("work_dir"), text=payload.get("text"),
+                work_dir=payload.get("work_dir"),
+                text=payload.get("text"),
+                training_ready=bool(payload.get("training_ready")),
             )
         except Exception as e:
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
