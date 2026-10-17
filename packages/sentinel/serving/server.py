@@ -2134,6 +2134,60 @@ def create_app(
                 "error": str(e),
             }
 
+
+
+
+
+
+    @app.post("/v1/kalo/run")
+    async def kalo_run(request: Request):
+        """KALO BOT mother-agent turn: route → children / tools / model."""
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        prompt = str(payload.get("prompt") or payload.get("text") or "").strip()
+        user_id = str(payload.get("user_id") or "anonymous").strip() or "anonymous"
+        if not prompt:
+            return {"ok": False, "error": "prompt required"}
+        max_new = int(payload.get("max_new_tokens") or 96)
+        temperature = float(payload.get("temperature") or 0.4)
+
+        def _gen(enriched: str) -> str:
+            if _model is None or _encode is None or _decode is None:
+                raise RuntimeError("model not loaded — start backend with NEUROFIELD_CHECKPOINT")
+            ids = _encode(enriched) or [0]
+            if not isinstance(ids, list):
+                ids = list(ids)
+            sid = "kalo-" + uuid.uuid4().hex[:12]
+            new_ids, _lat, _audit = _generate(
+                ids, max_new, temperature, sid, None, True
+            )
+            try:
+                return _decode(new_ids) if new_ids else ""
+            except Exception:
+                return ""
+
+        try:
+            from sentinel.kalo import KaloBot, identity_payload
+
+            bot = KaloBot(generate=_gen if _model is not None else None)
+            turn = bot.run(prompt, user_id=user_id)
+            result = turn.to_dict()
+            result["ok"] = True
+            result["identity"] = {
+                "name": identity_payload().get("name"),
+                "tagline": identity_payload().get("tagline"),
+                "engine": identity_payload().get("engine"),
+                "model": identity_payload().get("model"),
+            }
+            return result
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
     @app.get("/v1/buddy")
     def buddy_get(
         api_key: Optional[str] = Depends(require_api_key),
