@@ -29,7 +29,7 @@ docker-run:
 	docker compose -f deploy/docker/docker-compose.yml up --build
 
 backend:
-	./backend/run.sh
+	bash backend/run.sh
 
 serve: backend
 
