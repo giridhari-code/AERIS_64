@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Bootstrap EN / Hindi / Bangla chat+prose seed for AERIS-42M (no code).
+"""DEPRECATED for AERIS-42M main pretrain — real high-quality data only.
+
+Bootstrap EN / Hindi / Bangla chat+prose seed for AERIS-42M (no code).
+Do NOT use this as the main training corpus.
 
   python scripts/data/build_pretrain_42m_seed.py --target-chars-per-lang 150000
 

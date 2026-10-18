@@ -1,9 +1,10 @@
-# Source log — AERIS-42M pretrain
+# Source log — AERIS-42M pretrain (real data only)
 
-| Path / name | Language | Licence | Notes |
-|-------------|----------|---------|--------|
-| seed/*.txt (generated) | en/hi/bn | Project synthetic | Bootstrap only — not the main corpus |
+Every file under `en/`, `hi/`, `bn/`, `mixed/` must be listed here before training.
+
+| Path | Language | Licence / rights | Notes |
+|------|----------|------------------|--------|
+| *(example)* `en/gutenberg_….txt` | en | Public domain | |
 | | | | |
-| *(add each real file you drop in)* | | | |
 
-Remove any source if a rights holder objects.
+**Policy:** No synthetic template dumps. No pirated books. No code corpora.

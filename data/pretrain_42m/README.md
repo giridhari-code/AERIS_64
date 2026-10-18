@@ -1,59 +1,70 @@
 # AERIS-42M — first pretrain dataset
 
-**Target model:** ~42M params (`--preset aeris_42m`)  
-**Languages:** English · Hindi · Bangla (Bengali)  
-**No code** in this corpus.
+**Only real, high-quality text.** No synthetic bootstrap corpora.
 
-## Size targets (first pretrain)
+| | |
+|--|--|
+| Model | `--preset aeris_42m` (~42M params) |
+| Languages | English · Hindi · Bangla |
+| Code | **None** — do not add source-code dumps |
+| Synthetic | **Forbidden** for this recipe |
 
-| Level | Words (approx) | Tokens (approx) |
-|-------|----------------|-----------------|
-| Smoke / pipeline test | 0.5–2M | ~1–3M |
-| **Minimum useful** | **50–100M** | ~70–150M |
-| **Recommended first full** | **200–250M** | ~250–400M |
+## Size targets
 
-Balance roughly **1/3 each** language by tokens when possible.
+| Level | Words (approx) | Notes |
+|-------|----------------|--------|
+| Smoke (pipeline only) | small sample of *real* text | still real, not generated templates |
+| Minimum useful | **50–100M** | |
+| Recommended first full | **200–250M+** | balanced EN / HI / BN |
 
-## Folder layout
+## Folders
 
 ```text
 data/pretrain_42m/
-  en/          # English .txt / .jsonl
-  hi/          # Hindi (Devanagari)
-  bn/          # Bangla
-  mixed/       # optional multilingual dialogues
-  SOURCES.md   # licence notes for every real source you add
-  seed/        # small synthetic bootstrap only
+  en/         # English — real prose, dialogue, articles you may use
+  hi/         # Hindi (Devanagari)
+  bn/         # Bangla
+  mixed/      # optional real multilingual
+  SOURCES.md  # required: every source + licence
 ```
 
-## Build steps
+Put **`.txt` / `.jsonl` / `.md`** files only from sources you document in `SOURCES.md`.
+
+## What counts as high quality
+
+| Use | Avoid |
+|-----|--------|
+| Clean books/articles with a **clear licence** (public domain, CC that allows ML, or your own writing) | Pirated ebooks / shadow libraries |
+| Well-edited news or explainers you have rights to use | Random low-quality scrape spam |
+| Real human Q&A / chat you own or licensed | Template “User:/Assistant:” spam loops |
+| Educational text under an open licence | Full commercial books without rights |
+| Balanced topics across the three languages | Code repos, stacktraces, minified JS |
+
+Follow `docs/guides/COPYRIGHT_POLICY.md`.
+
+## Stats
 
 ```bash
-# 1) Small seed (NOT enough alone for quality)
-python scripts/data/build_pretrain_42m_seed.py --target-chars-per-lang 150000
-
-# 2) Add REAL text under en/ hi/ bn/ (public domain, your writing, clear licence)
-#    No commercial ebooks, no pirated dumps — see docs/guides/COPYRIGHT_POLICY.md
-
-# 3) Stats
 python scripts/data/stats_pretrain_42m.py
-
-# 4) Train when data is large enough
-PYTHONPATH=packages python scripts/train/train_company.py \
-  --preset aeris_42m --tokenizer bpe --bpe-vocab 32000 \
-  --data data/pretrain_42m/en data/pretrain_42m/hi data/pretrain_42m/bn data/pretrain_42m/mixed data/pretrain_42m/seed \
-  --steps 20000 --device cuda --bf16 --out checkpoints/AERIS_42m
 ```
 
-If `train_company` needs file paths not directories, expand:
+## Train (when real data is large enough)
 
 ```bash
-find data/pretrain_42m -name '*.txt' -type f | sort > /tmp/42m_files.txt
-# pass those paths to --data
+PYTHONPATH=packages python scripts/train/train_company.py \
+  --preset aeris_42m \
+  --tokenizer bpe --bpe-vocab 32000 \
+  --data data/pretrain_42m/en data/pretrain_42m/hi data/pretrain_42m/bn \
+  --steps 20000 --batch-size 8 --seq-len 512 --grad-accum 4 \
+  --lr 3e-4 --warmup 500 --cosine \
+  --device cuda --bf16 \
+  --out checkpoints/AERIS_42m --product AERIS_42m
 ```
+
+Directories are expanded automatically (all `.txt` under each folder).
 
 ## Do not
 
-- Code corpora (Python/JS dumps, GitHub bulk)
-- Full copyrighted books
-- Same 20 lines repeated millions of times
+- Run `build_pretrain_42m_seed.py` for the main corpus (legacy seed script is not part of this recipe)
+- Mix synthetic identity spam as the bulk of training
+- Add programming code corpora
