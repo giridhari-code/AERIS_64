@@ -380,6 +380,8 @@ def _expand_corpus_path(path: Path) -> list[Path]:
                 continue
             suf = f.suffix.lower()
             name = f.name.lower()
+            if name.upper().startswith("README"):
+                continue
             if suf in _CORPUS_SUFFIXES or name.endswith(".txt.gz") or name.endswith(".jsonl.gz"):
                 found.append(f)
         return found

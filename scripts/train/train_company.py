@@ -63,6 +63,8 @@ def main() -> None:
                     help="Corpus: .txt .md .jsonl .json .csv .tsv .parquet .html (+.gz) or hf:dataset[:config:split]")
     ap.add_argument("--tokenizer", choices=["char", "bpe"], default="bpe")
     ap.add_argument("--bpe-vocab", type=int, default=400)
+    ap.add_argument("--bpe-sample-chars", type=int, default=2_000_000,
+                    help="Train BPE on at most this many chars (0=full text; large corpora are slow)")
     ap.add_argument("--steps", type=int, default=800)
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--seq-len", type=int, default=0, help="0 = from preset")
@@ -125,28 +127,33 @@ def main() -> None:
 
     if args.tokenizer == "bpe":
         try:
-            tok = BPETokenizer.train(text, vocab_size=args.bpe_vocab)
+            sample_n = int(getattr(args, "bpe_sample_chars", 2_000_000) or 0)
+            bpe_src = text if sample_n <= 0 or len(text) <= sample_n else text[:sample_n]
+            print(f"BPE training on {len(bpe_src):,} chars (vocab_size={args.bpe_vocab})…", flush=True)
+            tok = BPETokenizer.train(bpe_src, vocab_size=args.bpe_vocab)
             encode = tok.encode
             decode = tok.decode
             vocab_size = tok.vocab_size
-            print(f"BPE vocab_size={vocab_size} merges={len(tok.merges)}")
+            print(f"BPE vocab_size={vocab_size} merges={len(tok.merges)}", flush=True)
         except Exception as e:
-            print(f"BPE failed ({e}); falling back to char")
+            print(f"BPE failed ({e}); falling back to char", flush=True)
             args.tokenizer = "char"
             tok = CharTokenizer.from_text(text)
             encode = tok.encode
             decode = tok.decode
             vocab_size = tok.vocab_size
-            print(f"Char vocab_size={vocab_size}")
+            print(f"Char vocab_size={vocab_size}", flush=True)
     else:
+        print("Char tokenizer…", flush=True)
         tok = CharTokenizer.from_text(text)
         encode = tok.encode
         decode = tok.decode
         vocab_size = tok.vocab_size
-        print(f"Char vocab_size={vocab_size}")
+        print(f"Char vocab_size={vocab_size}", flush=True)
 
+    print(f"Encoding corpus ({len(text):,} chars)…", flush=True)
     ids = torch.tensor(encode(text), dtype=torch.long)
-    print(f"tokens={len(ids)}")
+    print(f"tokens={len(ids)}", flush=True)
 
     accel = configure_accelerator(
         args.device,
@@ -201,7 +208,9 @@ def main() -> None:
             print(f"resumed from {args.resume} missing={len(missing)} unexpected={len(unexpected)}")
         except Exception as e:
             print(f"resume failed ({e}); training from scratch")
+    print(f"model params≈{model.param_report()['total']:,} device={device}", flush=True)
     opt = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    print("training loop starting…", flush=True)
 
     # Keep corpus on device for faster slice assembly (batch axis = parallel sequences)
     ids = ids.to(device)
