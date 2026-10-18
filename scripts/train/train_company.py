@@ -62,8 +62,8 @@ def main() -> None:
     ap.add_argument("--data", nargs="+", default=["data/company_corpus.txt", "data/code_corpus.txt", "data/india_multilang.txt", "data/skills_real.txt"],
                     help="Corpus: .txt .md .jsonl .json .csv .tsv .parquet .html (+.gz) or hf:dataset[:config:split]")
     ap.add_argument("--tokenizer", choices=["char", "bpe"], default="bpe")
-    ap.add_argument("--bpe-vocab", type=int, default=400)
-    ap.add_argument("--bpe-sample-chars", type=int, default=2_000_000,
+    ap.add_argument("--bpe-vocab", type=int, default=8000, help="BPE vocab size (aeris_2m uses 8000)")
+    ap.add_argument("--bpe-sample-chars", type=int, default=1_000_000,
                     help="Train BPE on at most this many chars (0=full text; large corpora are slow)")
     ap.add_argument("--steps", type=int, default=800)
     ap.add_argument("--batch-size", type=int, default=16)
