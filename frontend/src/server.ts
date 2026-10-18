@@ -229,6 +229,18 @@ app.post("/v1/buddy/step", async (c) => {
 });
 
 // First login: carry the guest (device) egg/buddy into the account
+
+app.post("/v1/buddy/share", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/buddy/share", body);
+  return c.json(r.body, r.status as 200);
+});
+app.post("/v1/buddy/checkin", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const r = await proxyJson("POST", "/v1/buddy/checkin", body);
+  return c.json(r.body, r.status as 200);
+});
+
 app.post("/v1/buddy/adopt", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const r = await proxyJson("POST", "/v1/buddy/adopt", body);

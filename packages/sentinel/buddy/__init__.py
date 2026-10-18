@@ -26,6 +26,7 @@ from sentinel.buddy.engine import (
     resolve_buddy_reply,
 )
 from sentinel.buddy.mood import MOOD_META, mood_from_text, sense_mood
+from sentinel.buddy.progression import Progression, ProgressionStore, get_progression_store
 
 __all__ = [
     "ANIMATION_TYPES",
@@ -44,4 +45,7 @@ __all__ = [
     "required_steps",
     "resolve_buddy_reply",
     "sense_mood",
+    "Progression",
+    "ProgressionStore",
+    "get_progression_store",
 ]

@@ -101,18 +101,28 @@ class Buddy:
 
     def to_public_dict(self) -> dict[str, Any]:
         """Smaller payload for UI float (faster over wire)."""
+        lines = list(self.sprite_lines or [])
+        prog_pub: dict = {}
+        try:
+            from sentinel.buddy.progression import get_progression_store, evolve_sprite
+            prog = get_progression_store().get(self.user_id)
+            lines = evolve_sprite(lines, prog.stage)
+            prog_pub = prog.public()
+        except Exception:
+            pass
         return {
             "name": self.name,
             "species_name": self.species_name,
             "rarity": self.rarity,
             "shiny": self.shiny,
-            "sprite_lines": self.sprite_lines,
+            "sprite_lines": lines,
             "animations": self.animations,
             "user_id": self.user_id,
             "personality": self.personality,
             "stats": self.stats,
             "product": "AERIS-64",
             "linked": True,
+            "progression": prog_pub,
         }
 
 
@@ -174,6 +184,11 @@ def hatch_buddy(user_id: str) -> Buddy:
 
 
 def pet_buddy(user_id: str) -> str:
+    try:
+        from sentinel.buddy.progression import get_progression_store
+        get_progression_store().pet(user_id)
+    except Exception:
+        pass
     b = hatch_buddy(user_id)
     return b.render(frame=1, hearts=True)
 
@@ -245,7 +260,7 @@ def _norm_buddy_text(text: str) -> str:
 _SUBS = (
     "on|off|enable|disable|hide|show|hatch|status|egg|pet|help|who|me|link|linked|"
     "mimic|joker|mirror|mood|stats|about|aeris|aeris64|dance|party|wave|happy|"
-    "sleep|excited|think"
+    "sleep|excited|think|streak|care|evolve|share|memory|equip|checkin|settings"
 )
 
 
@@ -341,6 +356,101 @@ def handle_buddy_command(
         )
     if sub in {"dance", "party", "wave", "happy", "sleep", "excited", "think"}:
         return _anim_token(_ANIM_ALIASES.get(sub, sub))
+
+    if sub in {"streak", "care"}:
+        try:
+            from sentinel.buddy.progression import get_progression_store
+            prog = get_progression_store().touch_day(key)
+            pub = prog.public()
+            nxt = ""
+            if pub.get("next_stage"):
+                nxt = f"Next stage in {pub['next_stage']['remaining']} care\n"
+            else:
+                nxt = "Max stage (apex)\n"
+            return (
+                f"**Care** `{pub['care']}` · **Streak** `{pub['streak']}` day(s)\n"
+                f"Stage: **{pub['stage_name']}** ({pub['stage']})\n"
+                f"{nxt}"
+                f"Unlocked: {', '.join(pub['unlocked']) or '—'}\n"
+                f"Pets: {pub['total_pets']} · Messages: {pub['total_messages']}"
+            )
+        except Exception as e:
+            return f"Progression unavailable: {type(e).__name__}"
+    if sub in {"evolve", "evolution", "stage"}:
+        try:
+            from sentinel.buddy.progression import get_progression_store
+            prog = get_progression_store().get(key)
+            pub = prog.public()
+            b = hatch_buddy(key)
+            extra = (
+                f"Next: stage {pub['next_stage']['stage']} needs {pub['next_stage']['need']} care "
+                f"(have {pub['next_stage']['have']})"
+                if pub.get("next_stage")
+                else "Apex form unlocked."
+            )
+            return f"**{b.name}** evolution\nStage **{pub['stage_name']}** · care {pub['care']}\n{extra}"
+        except Exception as e:
+            return f"Evolution status error: {type(e).__name__}"
+    if sub == "share":
+        try:
+            from sentinel.buddy.progression import get_progression_store, share_card_text
+            b = hatch_buddy(key)
+            prog = get_progression_store().get(key)
+            return share_card_text(b.to_public_dict(), prog)
+        except Exception as e:
+            return f"Share card error: {type(e).__name__}"
+    if sub == "memory":
+        try:
+            from sentinel.buddy.progression import get_progression_store
+            store = get_progression_store()
+            arg_l = (arg or "").lower()
+            if arg_l in {"on", "1", "true", "yes"}:
+                store.set_memory(key, True)
+                return "Buddy memory on — mood continuity saved."
+            if arg_l in {"off", "0", "false", "no"}:
+                store.set_memory(key, False)
+                return "Buddy memory off — no mood history stored."
+            prog = store.get(key)
+            return f"Buddy memory is **{'on' if prog.memory_on else 'off'}**. Try `/buddy memory on|off`."
+        except Exception as e:
+            return f"Memory error: {type(e).__name__}"
+    if sub == "equip":
+        try:
+            from sentinel.buddy.progression import get_progression_store
+            store = get_progression_store()
+            parts_eq = arg.split()
+            hat = eye = ""
+            if parts_eq:
+                if parts_eq[0] in {"hat", "eye"} and len(parts_eq) >= 2:
+                    if parts_eq[0] == "hat":
+                        hat = parts_eq[1]
+                    else:
+                        eye = parts_eq[1]
+                else:
+                    hat = parts_eq[0]
+            prog = store.equip(key, hat=hat, eye=eye)
+            return (
+                f"Equipped hat=`{prog.equipped_hat or '—'}` eye=`{prog.equipped_eye or '—'}`. "
+                f"Unlocked: {', '.join(prog.unlocked) or 'starter only'}."
+            )
+        except Exception as e:
+            return f"Equip error: {type(e).__name__}"
+    if sub in {"checkin", "check-in"}:
+        try:
+            from sentinel.buddy.progression import get_progression_store
+            line = get_progression_store().checkin_line(key)
+            return _anim_token("wave", line)
+        except Exception as e:
+            return f"Check-in error: {type(e).__name__}"
+    if sub == "settings":
+        return (
+            "Buddy settings (UI + commands):\n"
+            "  /buddy memory on|off\n"
+            "  /buddy equip hat <id> | /buddy equip eye <id>\n"
+            "  /buddy care | streak | evolve | share | checkin\n"
+            "  Float: drag to move · double-click hide · size in local settings"
+        )
+
     if sub in {"help", "?"}:
         return (
             "Buddy commands (float UI — hatch is NOT in the chat box):\n"

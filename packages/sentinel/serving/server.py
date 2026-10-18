@@ -2207,14 +2207,48 @@ def create_app(
                 egg = store.add_message_steps(owner, n)
             except Exception as e:  # noqa: BLE001 - never block chat on the pet
                 logger.warning("buddy egg step failed: %s", e)
+        prog_pub = {}
+        try:
+            from sentinel.buddy.progression import get_progression_store
+            from sentinel.buddy.mood import sense_mood
+            mood = sense_mood(str(body.get("text") or ""))
+            prog = get_progression_store().message_step(owner, mood=mood)
+            prog_pub = prog.public()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("buddy progression step failed: %s", e)
         out: dict = {
             "product": "Buddy",
             "egg": egg,
             "hatched": bool(egg and egg.get("hatched")),
+            "progression": prog_pub,
         }
         if out["hatched"]:
             out["buddy"] = _buddy_for(owner).to_public_dict()
         return out
+
+
+    @app.post("/v1/buddy/share")
+    def buddy_share(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        body = body or {}
+        owner = str(body.get("user_id") or "").strip() or "anonymous"
+        try:
+            from sentinel.buddy.progression import get_progression_store, share_card_text
+            b = _buddy_for(owner)
+            prog = get_progression_store().get(owner)
+            return {"ok": True, "card": share_card_text(b.to_public_dict(), prog), "product": "Buddy"}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    @app.post("/v1/buddy/checkin")
+    def buddy_checkin(body: dict, api_key: Optional[str] = Depends(require_api_key)):
+        body = body or {}
+        owner = str(body.get("user_id") or "").strip() or "anonymous"
+        try:
+            from sentinel.buddy.progression import get_progression_store
+            line = get_progression_store().checkin_line(owner)
+            return {"ok": True, "line": line, "progression": get_progression_store().get(owner).public()}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
     @app.post("/v1/buddy/adopt")
     def buddy_adopt(
