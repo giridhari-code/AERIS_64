@@ -12,3 +12,1005 @@ Assistant: Slow memory consolidates information from fast memory over longer tim
 
 User: who are you
 Assistant: I am AERIS, a research model based on the NeuroField AESC architecture.
+
+{"id": 1, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 2, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 3, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 4, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 5, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 6, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 7, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 8, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 9, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 10, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 11, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 12, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 13, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 14, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 15, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 16, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 17, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 18, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 19, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 20, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 21, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 22, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 23, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 24, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 25, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 26, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 27, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 28, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 29, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 30, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 31, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 32, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 33, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 34, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 35, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 36, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 37, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 38, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 39, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 40, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 41, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 42, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 43, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 44, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 45, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 46, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 47, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 48, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 49, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 50, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 51, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 52, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 53, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 54, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 55, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 56, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 57, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 58, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 59, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 60, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 61, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 62, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 63, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 64, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 65, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 66, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 67, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 68, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 69, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 70, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 71, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 72, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 73, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 74, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 75, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 76, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 77, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 78, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 79, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 80, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 81, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 82, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 83, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 84, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 85, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 86, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 87, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 88, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 89, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 90, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 91, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 92, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 93, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 94, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 95, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 96, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 97, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 98, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 99, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 100, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 101, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 102, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 103, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 104, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 105, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 106, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 107, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 108, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 109, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 110, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 111, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 112, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 113, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 114, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 115, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 116, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 117, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 118, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 119, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 120, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 121, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 122, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 123, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 124, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 125, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 126, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 127, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 128, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 129, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 130, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 131, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 132, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 133, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 134, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 135, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 136, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 137, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 138, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 139, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 140, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 141, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 142, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 143, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 144, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 145, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 146, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 147, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 148, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 149, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 150, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 151, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 152, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 153, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 154, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 155, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 156, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 157, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 158, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 159, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 160, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 161, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 162, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 163, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 164, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 165, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 166, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 167, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 168, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 169, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 170, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 171, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 172, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 173, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 174, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 175, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 176, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 177, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 178, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 179, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 180, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 181, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 182, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 183, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 184, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 185, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 186, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 187, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 188, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 189, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 190, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 191, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 192, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 193, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 194, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 195, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 196, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 197, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 198, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 199, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 200, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 201, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 202, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 203, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 204, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 205, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 206, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 207, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 208, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 209, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 210, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 211, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 212, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 213, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 214, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 215, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 216, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 217, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 218, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 219, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 220, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 221, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 222, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 223, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 224, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 225, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 226, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 227, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 228, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 229, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 230, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 231, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 232, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 233, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 234, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 235, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 236, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 237, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 238, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 239, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 240, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 241, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 242, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 243, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 244, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 245, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 246, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 247, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 248, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 249, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 250, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 251, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 252, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 253, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 254, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 255, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 256, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 257, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 258, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 259, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 260, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 261, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 262, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 263, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 264, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 265, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 266, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 267, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 268, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 269, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 270, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 271, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 272, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 273, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 274, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 275, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 276, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 277, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 278, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 279, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 280, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 281, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 282, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 283, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 284, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 285, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 286, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 287, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 288, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 289, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 290, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 291, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 292, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 293, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 294, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 295, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 296, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 297, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 298, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 299, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 300, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 301, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 302, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 303, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 304, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 305, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 306, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 307, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 308, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 309, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 310, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 311, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 312, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 313, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 314, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 315, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 316, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 317, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 318, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 319, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 320, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 321, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 322, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 323, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 324, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 325, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 326, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 327, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 328, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 329, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 330, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 331, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 332, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 333, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 334, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 335, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 336, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 337, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 338, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 339, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 340, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 341, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 342, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 343, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 344, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 345, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 346, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 347, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 348, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 349, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 350, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 351, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 352, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 353, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 354, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 355, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 356, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 357, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 358, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 359, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 360, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 361, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 362, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 363, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 364, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 365, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 366, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 367, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 368, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 369, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 370, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 371, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 372, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 373, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 374, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 375, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 376, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 377, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 378, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 379, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 380, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 381, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 382, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 383, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 384, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 385, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 386, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 387, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 388, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 389, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 390, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 391, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 392, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 393, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 394, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 395, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 396, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 397, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 398, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 399, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 400, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 401, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 402, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 403, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 404, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 405, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 406, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 407, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 408, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 409, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 410, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 411, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 412, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 413, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 414, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 415, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 416, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 417, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 418, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 419, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 420, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 421, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 422, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 423, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 424, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 425, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 426, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 427, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 428, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 429, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 430, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 431, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 432, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 433, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 434, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 435, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 436, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 437, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 438, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 439, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 440, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 441, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 442, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 443, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 444, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 445, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 446, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 447, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 448, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 449, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 450, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 451, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 452, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 453, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 454, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 455, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 456, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 457, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 458, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 459, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 460, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 461, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 462, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 463, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 464, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 465, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 466, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 467, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 468, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 469, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 470, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 471, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 472, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 473, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 474, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 475, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 476, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 477, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 478, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 479, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 480, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 481, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 482, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 483, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 484, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 485, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 486, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 487, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 488, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 489, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 490, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 491, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 492, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 493, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 494, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 495, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 496, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 497, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 498, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 499, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 500, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 501, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 502, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 503, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 504, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 505, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 506, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 507, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 508, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 509, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 510, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 511, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 512, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 513, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 514, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 515, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 516, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 517, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 518, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 519, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 520, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 521, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 522, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 523, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 524, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 525, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 526, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 527, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 528, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 529, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 530, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 531, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 532, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 533, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 534, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 535, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 536, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 537, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 538, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 539, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 540, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 541, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 542, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 543, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 544, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 545, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 546, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 547, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 548, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 549, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 550, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 551, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 552, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 553, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 554, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 555, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 556, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 557, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 558, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 559, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 560, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 561, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 562, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 563, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 564, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 565, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 566, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 567, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 568, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 569, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 570, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 571, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 572, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 573, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 574, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 575, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 576, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 577, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 578, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 579, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 580, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 581, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 582, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 583, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 584, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 585, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 586, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 587, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 588, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 589, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 590, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 591, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 592, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 593, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 594, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 595, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 596, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 597, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 598, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 599, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 600, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 601, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 602, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 603, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 604, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 605, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 606, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 607, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 608, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 609, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 610, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 611, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 612, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 613, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 614, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 615, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 616, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 617, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 618, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 619, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 620, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 621, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 622, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 623, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 624, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 625, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 626, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 627, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 628, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 629, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 630, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 631, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 632, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 633, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 634, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 635, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 636, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 637, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 638, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 639, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 640, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 641, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 642, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 643, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 644, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 645, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 646, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 647, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 648, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 649, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 650, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 651, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 652, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 653, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 654, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 655, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 656, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 657, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 658, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 659, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 660, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 661, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 662, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 663, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 664, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 665, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 666, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 667, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 668, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 669, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 670, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 671, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 672, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 673, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 674, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 675, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 676, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 677, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 678, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 679, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 680, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 681, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 682, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 683, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 684, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 685, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 686, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 687, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 688, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 689, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 690, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 691, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 692, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 693, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 694, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 695, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 696, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 697, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 698, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 699, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 700, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 701, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 702, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 703, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 704, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 705, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 706, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 707, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 708, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 709, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 710, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 711, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 712, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 713, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 714, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 715, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 716, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 717, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 718, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 719, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 720, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 721, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 722, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 723, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 724, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 725, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 726, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 727, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 728, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 729, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 730, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 731, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 732, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 733, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 734, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 735, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 736, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 737, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 738, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 739, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 740, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 741, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 742, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 743, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 744, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 745, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 746, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 747, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 748, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 749, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 750, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 751, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 752, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 753, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 754, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 755, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 756, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 757, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 758, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 759, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 760, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 761, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 762, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 763, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 764, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 765, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 766, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 767, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 768, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 769, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 770, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 771, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 772, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 773, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 774, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 775, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 776, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 777, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 778, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 779, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 780, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 781, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 782, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 783, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 784, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 785, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 786, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 787, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 788, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 789, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 790, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 791, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 792, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 793, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 794, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 795, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 796, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 797, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 798, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 799, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 800, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 801, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 802, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 803, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 804, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 805, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 806, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 807, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 808, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 809, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 810, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 811, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 812, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 813, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 814, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 815, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 816, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 817, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 818, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 819, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 820, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 821, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 822, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 823, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 824, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 825, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 826, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 827, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 828, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 829, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 830, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 831, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 832, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 833, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 834, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 835, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 836, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 837, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 838, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 839, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 840, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 841, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 842, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 843, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 844, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 845, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 846, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 847, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 848, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 849, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 850, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 851, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 852, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 853, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 854, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 855, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 856, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 857, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 858, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 859, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 860, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 861, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 862, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 863, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 864, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 865, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 866, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 867, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 868, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 869, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 870, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 871, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 872, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 873, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 874, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 875, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 876, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 877, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 878, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 879, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 880, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 881, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 882, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 883, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 884, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 885, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 886, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 887, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 888, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 889, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 890, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 891, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 892, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 893, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 894, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 895, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 896, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 897, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 898, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 899, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 900, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 901, "user": "What is a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 902, "user": "What is fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 903, "user": "Explain a language model simply.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 904, "user": "Explain fast memory simply.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 905, "user": "What does a language model do?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 906, "user": "What does fast memory store?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 907, "user": "How does a language model generate text?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 908, "user": "How does fast memory work?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 909, "user": "What is the main job of a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 910, "user": "What is the role of fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 911, "user": "Define language model in one sentence.", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 912, "user": "Define fast memory in one sentence.", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 913, "user": "What does next-token prediction mean?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 914, "user": "What is a key-value association?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 915, "user": "How does context help a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 916, "user": "Why is fast memory called short-term memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 917, "user": "Why does a language model use previous tokens?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 918, "user": "What does a gated delta rule do in fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 919, "user": "What is a language model used for?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 920, "user": "How does fast memory help a model?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 921, "user": "What is a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 922, "user": "What is fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 923, "user": "Explain a language model simply.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 924, "user": "Explain fast memory simply.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 925, "user": "What does a language model do?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 926, "user": "What does fast memory store?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 927, "user": "How does a language model generate text?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 928, "user": "How does fast memory work?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 929, "user": "What is the main job of a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 930, "user": "What is the role of fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 931, "user": "Define language model in one sentence.", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 932, "user": "Define fast memory in one sentence.", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 933, "user": "What does next-token prediction mean?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 934, "user": "What is a key-value association?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 935, "user": "How does context help a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 936, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 937, "user": "Why does a language model use previous tokens?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 938, "user": "What does a gated delta rule do in fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 939, "user": "What is a language model used for?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 940, "user": "How does fast memory help a model?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 941, "user": "What is a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 942, "user": "What is fast memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 943, "user": "Explain a language model simply.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 944, "user": "Explain fast memory simply.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 945, "user": "What does a language model do?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 946, "user": "What does fast memory store?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 947, "user": "How does a language model generate text?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 948, "user": "How does fast memory work?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 949, "user": "What is the main job of a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 950, "user": "What is the role of fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 951, "user": "Define language model in one sentence.", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 952, "user": "Define fast memory in one sentence.", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 953, "user": "What does next-token prediction mean?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 954, "user": "What is a key-value association?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 955, "user": "How does context help a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 956, "user": "Why is fast memory called short-term memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 957, "user": "Why does a language model use previous tokens?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 958, "user": "What does a gated delta rule do in fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 959, "user": "What is a language model used for?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 960, "user": "How does fast memory help a model?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 961, "user": "What is a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 962, "user": "What is fast memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 963, "user": "Explain a language model simply.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 964, "user": "Explain fast memory simply.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 965, "user": "What does a language model do?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 966, "user": "What does fast memory store?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 967, "user": "How does a language model generate text?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 968, "user": "How does fast memory work?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 969, "user": "What is the main job of a language model?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 970, "user": "What is the role of fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 971, "user": "Define language model in one sentence.", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 972, "user": "Define fast memory in one sentence.", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 973, "user": "What does next-token prediction mean?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 974, "user": "What is a key-value association?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 975, "user": "How does context help a language model?", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 976, "user": "Why is fast memory called short-term memory?", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 977, "user": "Why does a language model use previous tokens?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 978, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 979, "user": "What is a language model used for?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 980, "user": "How does fast memory help a model?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 981, "user": "What is a language model?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 982, "user": "What is fast memory?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+{"id": 983, "user": "Explain a language model simply.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 984, "user": "Explain fast memory simply.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 985, "user": "What does a language model do?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 986, "user": "What does fast memory store?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 987, "user": "How does a language model generate text?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 988, "user": "How does fast memory work?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 989, "user": "What is the main job of a language model?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 990, "user": "What is the role of fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 991, "user": "Define language model in one sentence.", "assistant": "Its core task is to estimate the next token based on preceding tokens.", "topic": "language model"}
+{"id": 992, "user": "Define fast memory in one sentence.", "assistant": "It provides a temporary store for associations that can change quickly during processing.", "topic": "fast memory"}
+{"id": 993, "user": "What does next-token prediction mean?", "assistant": "A language model predicts the next token from context.", "topic": "language model"}
+{"id": 994, "user": "What is a key-value association?", "assistant": "Fast memory stores short-term key-value associations with a gated delta rule.", "topic": "fast memory"}
+{"id": 995, "user": "How does context help a language model?", "assistant": "It uses the tokens seen so far to estimate what token should come next.", "topic": "language model"}
+{"id": 996, "user": "Why is fast memory called short-term memory?", "assistant": "It keeps temporary associations that can be written and retrieved as a sequence is processed.", "topic": "fast memory"}
+{"id": 997, "user": "Why does a language model use previous tokens?", "assistant": "A language model learns patterns in text and uses them to predict likely continuations.", "topic": "language model"}
+{"id": 998, "user": "What does a gated delta rule do in fast memory?", "assistant": "Fast memory uses keys to address information and values to represent what is stored.", "topic": "fast memory"}
+{"id": 999, "user": "What is a language model used for?", "assistant": "It reads the available context and predicts a distribution over possible next tokens.", "topic": "language model"}
+{"id": 1000, "user": "How does fast memory help a model?", "assistant": "A gated delta rule controls how new information updates the fast-memory state.", "topic": "fast memory"}
+

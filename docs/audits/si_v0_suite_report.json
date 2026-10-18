@@ -27,7 +27,7 @@
       "id": "time_or_facts",
       "ok": true,
       "stopped": "facts_only",
-      "answer_preview": "Current datetime (UTC): 2026-10-14 05:03:34 UTC (weekday Wednesday).",
+      "answer_preview": "Current datetime (+0630): 2026-10-14 11:47:38 +0630 (weekday Wednesday).",
       "steps": 2
     }
   ]
