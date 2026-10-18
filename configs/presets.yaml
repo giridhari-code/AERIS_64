@@ -60,6 +60,19 @@ large:
 # Matches configs/aeris_1b.yaml width (~1B with vocab 32k)
 # ~42M params @ vocab 32k (EN + Hindi + Bangla, no-code pretrain target)
 # Measured: d_model=640 → ~41.7M with tied embeddings
+# ~2.3M params — matched to first corpus ~2–2.5M words (24 lakh)
+# vocab 8k: EN-heavy now; raise vocab later when HI/BN grow
+aeris_2m:
+  d_model: 160
+  d_k: 80
+  d_v: 80
+  n_skills: 8
+  top_k: 2
+  k_max: 4
+  dendrite_window: 3
+  max_seq_len: 256
+  dropout: 0.05
+
 aeris_42m:
   d_model: 640
   d_k: 160
