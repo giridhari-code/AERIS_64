@@ -242,8 +242,10 @@ def run_agent(
             )
             reason = "no_model_no_facts"
 
-    if steps >= cfg.max_steps:
-        reason = reason if reason.startswith("answer") else "max_steps"
+    # Budget exhausted: keep semantic terminal reasons; label the rest as max_steps.
+    terminal_reasons = {"answered", "facts_only", "no_model_no_facts", "generate_empty_fallback"}
+    if steps >= cfg.max_steps and reason not in terminal_reasons:
+        reason = "max_steps"
 
     return AgentResult(
         answer=answer,

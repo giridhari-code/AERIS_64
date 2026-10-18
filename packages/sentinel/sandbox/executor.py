@@ -124,19 +124,33 @@ _NET_ISOLATION_PREFIX: Optional[list[str]] = None
 
 
 def _net_isolation_prefix() -> list[str]:
-    """argv prefix that runs a command in an empty network namespace, or [] if unavailable."""
+    """argv prefix that runs a command in an empty network namespace, or [] if unavailable.
+
+    Probes by comparing the network-namespace inode inside the candidate prefix
+    with the parent process. Some sandboxes report success for ``unshare --net``
+    without actually switching namespaces — inode check catches that.
+    """
     global _NET_ISOLATION_PREFIX
     if _NET_ISOLATION_PREFIX is not None:
         return _NET_ISOLATION_PREFIX
     prefix: list[str] = []
     exe = shutil.which("unshare")
     if exe:
+        try:
+            parent_ns = os.readlink("/proc/self/ns/net")
+        except OSError:
+            parent_ns = ""
         for flags in (["--net"], ["--user", "--map-root-user", "--net"]):
             try:
-                r = subprocess.run([exe, *flags, "--", "true"], capture_output=True, timeout=5)
+                r = subprocess.run(
+                    [exe, *flags, "--", "readlink", "/proc/self/ns/net"],
+                    capture_output=True,
+                    timeout=5,
+                )
             except (OSError, subprocess.SubprocessError):
                 continue
-            if r.returncode == 0:
+            child_ns = (r.stdout or b"").decode("utf-8", "replace").strip()
+            if r.returncode == 0 and child_ns and child_ns != parent_ns:
                 prefix = [exe, *flags, "--"]
                 break
     _NET_ISOLATION_PREFIX = prefix

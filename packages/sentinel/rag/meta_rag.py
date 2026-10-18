@@ -85,12 +85,14 @@ def estimate_prompt_confidence(prompt: str) -> tuple[float, float, float, str]:
     arousal = 0.3
     conflict = 0.2
     reasons: list[str] = []
+    is_opinion = bool(_OPINION_RE.search(text))
 
     if _QUESTION_RE.search(text):
         conf -= 0.12
         arousal += 0.15
         reasons.append("question")
-    if _FACTUAL_RE.search(text):
+    if _FACTUAL_RE.search(text) and not is_opinion:
+        # opinion prompts ("best", "recommend", ...) are not factual lookups
         conf -= 0.18
         arousal += 0.25
         conflict += 0.1
@@ -99,7 +101,7 @@ def estimate_prompt_confidence(prompt: str) -> tuple[float, float, float, str]:
         conf -= 0.2
         conflict += 0.25
         reasons.append("uncertainty_markers")
-    if _OPINION_RE.search(text):
+    if is_opinion:
         conf += 0.1  # opinions need less external retrieval
         reasons.append("opinion")
     if n_tokens < 6:
