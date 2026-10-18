@@ -363,8 +363,31 @@ def load_corpus_file(path: str | Path) -> str:
     return load_txt(path)
 
 
+_CORPUS_SUFFIXES = {
+    ".txt", ".text", ".md", ".markdown", ".jsonl", ".json",
+    ".csv", ".tsv", ".parquet", ".html", ".htm",
+}
+
+
+def _expand_corpus_path(path: Path) -> list[Path]:
+    """File as-is; directory → recursive supported files (sorted)."""
+    if path.is_file():
+        return [path]
+    if path.is_dir():
+        found: list[Path] = []
+        for f in sorted(path.rglob("*")):
+            if not f.is_file():
+                continue
+            suf = f.suffix.lower()
+            name = f.name.lower()
+            if suf in _CORPUS_SUFFIXES or name.endswith(".txt.gz") or name.endswith(".jsonl.gz"):
+                found.append(f)
+        return found
+    return []
+
+
 def load_corpus(paths: list[str | Path]) -> tuple[str, list[dict[str, Any]]]:
-    """Load many paths (files or hf: specs). Returns (merged_text, manifest)."""
+    """Load many paths (files, directories, or hf: specs). Returns (merged_text, manifest)."""
     parts: list[str] = []
     manifest: list[dict[str, Any]] = []
     for p in paths:
@@ -377,19 +400,21 @@ def load_corpus(paths: list[str | Path]) -> tuple[str, list[dict[str, Any]]]:
             logger.info("loaded %s (%d chars, format=hf)", s, n)
             continue
         path = Path(p)
-        if not path.is_file():
-            logger.warning("skip missing data file: %s", path)
+        files = _expand_corpus_path(path)
+        if not files:
+            logger.warning("skip missing data path: %s", path)
             continue
-        text = load_corpus_file(path)
-        n = len(text)
-        parts.append(text)
-        manifest.append({
-            "path": str(path),
-            "bytes": path.stat().st_size,
-            "chars": n,
-            "format": _strip_gz_suffix(path) or path.suffix.lower() or ".txt",
-        })
-        logger.info("loaded %s (%s, %d chars)", path, manifest[-1]["format"], n)
+        for fpath in files:
+            text = load_corpus_file(fpath)
+            n = len(text)
+            parts.append(text)
+            manifest.append({
+                "path": str(fpath),
+                "bytes": fpath.stat().st_size,
+                "chars": n,
+                "format": _strip_gz_suffix(fpath) or fpath.suffix.lower() or ".txt",
+            })
+            logger.info("loaded %s (%s, %d chars)", fpath, manifest[-1]["format"], n)
     merged = "\n\n".join(t for t in parts if t).strip() + "\n"
     return merged, manifest
 
