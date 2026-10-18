@@ -24,7 +24,7 @@ def _signals(surprise: float, conflict: float, batch: int = 4) -> tuple[torch.Te
 
 
 def trial(name: str, surprise: float, conflict: float, force: str | None = None) -> dict[str, Any]:
-    meta = Metacognition(k_max=4, track_global=False)
+    meta = Metacognition(k_max=5, track_global=False)
     meta.training = False
     rel_S = torch.full((4,), surprise)
     confl = torch.full((4,), conflict)
@@ -68,7 +68,7 @@ def main() -> None:
     assert cases[0]["process_mode"] == "system1" and cases[0]["k"] == 1
     assert cases[3]["process_mode"] == "system2" and cases[3]["k"] >= 2
     assert cases[4]["process_mode"] == "system1" and cases[4]["k"] == 1
-    assert cases[5]["process_mode"] == "system2" and cases[5]["k"] == 4
+    assert cases[5]["process_mode"] == "system2" and cases[5]["k"] == 5
     print("\nOK — dual-process thresholds behave as expected.")
 
 

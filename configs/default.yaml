@@ -7,10 +7,10 @@ model:
   d_v: 64
   n_skills: 8
   top_k: 2
-  k_max: 4
+  k_max: 5
   dendrite_window: 3
   vocab_size: 32000          # change to 65 for char-level
-  max_seq_len: 2048
+  max_seq_len: 3072
   tie_embeddings: true
   dropout: 0.0
 
@@ -26,7 +26,7 @@ training:
   lambda_bal: 0.01
   replay_every: 75
   replay_eta: 0.02
-  truncate_write_window: 32   # truncated BPTT for fast write
+  truncate_write_window: 24   # truncated BPTT for fast write
   device: "cuda"
   seed: 42
   log_every: 50

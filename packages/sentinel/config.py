@@ -17,10 +17,10 @@ class ModelConfig:
     d_v: int = 64
     n_skills: int = 8
     top_k: int = 2
-    k_max: int = 4
+    k_max: int = 5  # accuracy bias (was 4; speed cost)
     dendrite_window: int = 3
     vocab_size: int = 32000
-    max_seq_len: int = 2048  # Long-context ceiling (token ids); slow ring sized from this
+    max_seq_len: int = 3072  # Long-context ceiling (was 2048); more yaad, more compute
     context_slots: int = 0  # 0 => auto max_seq_len // truncate_window; slow mem ring size
     slow_compact: bool = True  # ring full => fold the OLDEST slot into its neighbour instead of erasing it
     tie_embeddings: bool = True
@@ -43,7 +43,7 @@ class TrainingConfig:
     lambda_bal: float = 0.01
     replay_every: int = 75
     replay_eta: float = 0.02
-    truncate_write_window: int = 32  # Fast-M segment length before slow-ring snapshot
+    truncate_write_window: int = 24  # smaller segment → more slow slots (yaad granularity)
     device: str = "cuda"
     seed: int = 42
     log_every: int = 50
@@ -76,7 +76,7 @@ class SafetyConfig:
     freeze_after_alarms: int = 3    # consecutive/cumulative z-alarms before freeze
     anomaly_min_history: int = 30   # samples before z-score is trusted
     per_session_state: bool = True
-    truncate_write_window: int = 32
+    truncate_write_window: int = 24
 
 
 @dataclass

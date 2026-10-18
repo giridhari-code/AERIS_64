@@ -55,7 +55,7 @@ class Metacognition:
 
     def __init__(
         self,
-        k_max: int = 4,
+        k_max: int = 5,
         momentum: float = 0.95,
         track_global: bool = True,
         # Replay: consolidate after enough cumulative surprise (brain: offline replay)
@@ -257,15 +257,15 @@ class Metacognition:
             conf = float(confidence.median().item())
 
         last = getattr(self, "_last_process_mode", "system1")
-        enter_s2 = (s > 1.05) or (c > 0.95) or (conf < 0.32)
-        stay_s2 = (s > 0.75) or (c > 0.7) or (conf < 0.45)
+        # Accuracy bias: enter/stay System-2 a bit earlier (speed cost accepted)
+        enter_s2 = (s > 0.9) or (c > 0.85) or (conf < 0.38)
+        stay_s2 = (s > 0.65) or (c > 0.6) or (conf < 0.5)
         deliberate = stay_s2 if last == "system2" else enter_s2
 
         if deliberate:
             k = self._allocate_k(rel_S, conflict)
             k = max(2, min(self.k_max, k)) if self.k_max >= 2 else 1
-            if s < 1.4 and c < 1.0:
-                k = min(k, max(2, (self.k_max + 1) // 2))
+            # Mild soft-cap removed for accuracy bias; S1 still k=1 for speed floor
             self._last_process_mode = "system2"
             return "system2", max(1, min(self.k_max, k))
         self._last_process_mode = "system1"
