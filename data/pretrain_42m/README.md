@@ -68,3 +68,19 @@ Directories are expanded automatically (all `.txt` under each folder).
 - Run `build_pretrain_42m_seed.py` for the main corpus (legacy seed script is not part of this recipe)
 - Mix synthetic identity spam as the bulk of training
 - Add programming code corpora
+
+
+## English: Project Gutenberg pipeline
+
+```bash
+# default curated PD classics (polite delay between downloads)
+python scripts/data/fetch_gutenberg_en.py --max-books 20
+
+# or specific IDs from https://www.gutenberg.org/ebooks/…
+python scripts/data/fetch_gutenberg_en.py --ids 1342,11,84,1661 --max-books 10
+
+python scripts/data/stats_pretrain_42m.py
+# then update SOURCES.md
+```
+
+Only public-domain works. Confirm PD status for *your* country on Gutenberg.

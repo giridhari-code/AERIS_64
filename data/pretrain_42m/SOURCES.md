@@ -1,10 +1,11 @@
 # Source log — AERIS-42M pretrain (real data only)
 
-Every file under `en/`, `hi/`, `bn/`, `mixed/` must be listed here before training.
-
 | Path | Language | Licence / rights | Notes |
 |------|----------|------------------|--------|
-| *(example)* `en/gutenberg_….txt` | en | Public domain | |
-| | | | |
+| `en/gutenberg_11.txt` | en | Public domain (Project Gutenberg) | Alice in Wonderland |
+| `en/gutenberg_84.txt` | en | Public domain (Project Gutenberg) | Frankenstein |
+| `en/gutenberg_1342.txt` | en | Public domain (Project Gutenberg) | Pride and Prejudice |
+| | | | Add every new file below |
 
-**Policy:** No synthetic template dumps. No pirated books. No code corpora.
+**Policy:** Real high-quality only. No synthetic. No code. No pirated modern books.  
+Gutenberg terms: https://www.gutenberg.org/policy/
