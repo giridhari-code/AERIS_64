@@ -296,7 +296,6 @@ export function initBuddy(): void {
    * Fires once per user (localStorage flag) when the egg flips to hatched.
    */
   function celebrateHatch(b: BuddyData | null | undefined): void {
-    playBuddySound("hatch");
     const fresh = b || buddyCache;
     let uid = "anon";
     try {
@@ -401,59 +400,7 @@ export function initBuddy(): void {
     buddyAnimMap = { idle: buddyFrames, blink: buddyFrames, talk: buddyFrames };
   }
 
-  function applyCareUI(b: BuddyData | null | undefined): void {
-    const careEl = document.getElementById("buddyCare");
-    const bar = document.getElementById("buddyCareBar");
-    const lab = document.getElementById("buddyCareLabel");
-    const prog = b?.progression;
-    if (!careEl || !bar || !lab) return;
-    if (!prog) { careEl.hidden = true; return; }
-    careEl.hidden = false;
-    const care = prog.care || 0;
-    const need = prog.next_stage?.need || Math.max(care, 1);
-    bar.style.width = Math.min(100, Math.round((care / need) * 100)) + "%";
-    lab.textContent = (prog.stage_name || "hatch") + " · care " + care + (prog.streak ? " · 🔥" + prog.streak : "");
-  }
-  function playBuddySound(kind: string): void {
-    try {
-      if (localStorage.getItem("sentinel_buddy_sound") !== "1") return;
-      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AC();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = kind === "hatch" ? 520 : kind === "pet" ? 380 : 300;
-      g.gain.value = 0.03; o.start(); o.stop(ctx.currentTime + 0.08);
-    } catch (_) {}
-  }
-  function enableDrag(el: HTMLElement): void {
-    const key = "sentinel_buddy_pos";
-    try {
-      const saved = JSON.parse(localStorage.getItem(key) || "null");
-      if (saved && typeof saved.x === "number") {
-        el.style.left = saved.x + "px"; el.style.top = saved.y + "px";
-        el.style.right = "auto"; el.style.bottom = "auto";
-      }
-    } catch (_) {}
-    let ox = 0, oy = 0, dragging = false;
-    el.addEventListener("pointerdown", (ev) => {
-      if ((ev.target as HTMLElement)?.closest?.("button,select,input,label")) return;
-      dragging = true; el.setPointerCapture(ev.pointerId);
-      const r = el.getBoundingClientRect(); ox = ev.clientX - r.left; oy = ev.clientY - r.top;
-    });
-    el.addEventListener("pointermove", (ev) => {
-      if (!dragging) return;
-      const x = Math.max(0, Math.min(window.innerWidth - 40, ev.clientX - ox));
-      const y = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - oy));
-      el.style.left = x + "px"; el.style.top = y + "px"; el.style.right = "auto"; el.style.bottom = "auto";
-    });
-    el.addEventListener("pointerup", () => {
-      if (!dragging) return; dragging = false;
-      try { localStorage.setItem(key, JSON.stringify({ x: parseInt(el.style.left, 10) || 0, y: parseInt(el.style.top, 10) || 0 })); } catch (_) {}
-    });
-  }
   function applyBuddyData(b: BuddyData | null | undefined): void {
-    applyCareUI(b);
 
     if (!b) return;
     if (buddyMeta) {
@@ -671,24 +618,25 @@ export function initBuddy(): void {
     sizeEl.addEventListener("change", () => {
       localStorage.setItem("sentinel_buddy_size", sizeEl.value);
       if (buddyFloat) {
-        buddyFloat.classList.remove("buddy-size-s", "buddy-size-m", "buddy-size-l");
-        buddyFloat.classList.add("buddy-size-" + sizeEl.value);
-      }
-    });
+    const buddyIsTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    if (buddyIsTouch) {
+      // Touch: tap = pet; no accidental hide (use /buddy off to hide)
+      buddyFloat.title = "Buddy — tap to pet · /buddy off to hide";
+      buddyFloat.addEventListener("click", function () {
+        if (buddyOn && window.sentinelBuddyPet) window.sentinelBuddyPet();
+      });
+    } else {
+      buddyFloat.addEventListener("dblclick", function () {
+        setBuddyVisible(false);
+      });
+    }
   }
-  try {
-    fetch("/v1/buddy/checkin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}) },
-      body: JSON.stringify({ user_id: buddyId() }),
-    }).then((r) => (r.ok ? r.json() : null)).then((j) => {
-      const c = document.getElementById("buddyCheckin");
-      if (c && j?.line) c.textContent = j.line;
-    }).catch(() => {});
-  } catch (_) {}
   if (buddyOn) {
     setBuddyVisible(true);
   } else if (!buddyOnChosen()) {
-    void loadBuddy().then(() => { if (egg && !egg.hatched) setBuddyVisible(true); });
+    // First visit: the egg is the discovery moment — pop the float just once.
+    void loadBuddy().then(() => {
+      if (egg && !egg.hatched) setBuddyVisible(true);
+    });
   }
 }

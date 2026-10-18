@@ -1010,22 +1010,3 @@
 }
 
 
-#buddy-float { touch-action: none; user-select: none; }
-#buddy-float.buddy-size-s { transform: scale(0.85); }
-#buddy-float.buddy-size-l { transform: scale(1.15); }
-.buddy-care { margin-top: 6px; width: 100%; max-width: 140px; }
-.buddy-care-bar {
-  height: 4px; border-radius: 999px;
-  background: linear-gradient(90deg, #6c5ce7, #00e5c0);
-  width: 0%; transition: width 0.35s ease;
-}
-.buddy-care-label { display: block; font-size: 0.65rem; color: var(--text-secondary, #9aa); margin-top: 2px; }
-.buddy-checkin { font-size: 0.65rem; color: var(--text-secondary, #9aa); margin-top: 4px; max-width: 160px; line-height: 1.3; }
-.buddy-toolbar { display: flex; gap: 4px; margin-top: 6px; }
-.buddy-tb {
-  min-width: 28px; min-height: 28px; border-radius: 8px;
-  border: 1px solid var(--border, #333); background: var(--bg, #111);
-  color: var(--text, #eee); cursor: pointer; font-size: 0.75rem;
-}
-.buddy-settings { margin-top: 6px; font-size: 0.65rem; display: flex; flex-direction: column; gap: 4px; }
-.buddy-settings label { display: flex; align-items: center; gap: 6px; }
