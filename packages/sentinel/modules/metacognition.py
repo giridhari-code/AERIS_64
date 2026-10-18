@@ -11,6 +11,7 @@ Mapped onto AESC control path (paper §3 / §6):
   confidence          → feeling-of-knowing (inverse surprise, calibrated)
   arousal             → integrated urgency (surprise + conflict)
   k                   → computational depth ("think longer when unsure")
+  process_mode        → dual-process under control: system1 (fast) | system2 (deliberate)
   gate_bias δ         → encoding priority (what gets written to fast memory)
   replay trigger      → systems consolidation (hippocampus → neocortex analogue)
 
@@ -40,6 +41,8 @@ class ControlDecision:
     conflict: Tensor       # (B,) uncertainty from prior router entropy
     want_replay: bool      # consolidation request (trainer may honour)
     diagnostics: dict[str, float]
+    process_mode: str = "system1"  # system1 (fast) | system2 (deliberate)
+    deliberate: bool = False       # True when system2
 
 
 class Metacognition:
@@ -164,7 +167,8 @@ class Metacognition:
         ).clamp(min=0.0)
 
         # Control: effort (k) and encoding tag (gate_bias)
-        k = self._allocate_k(rel_S, conflict)
+        process_mode, k = self.dual_process(rel_S, conflict, conf)
+        # dual_process owns k; keep allocate available for forced S2 depth
         gate_bias = self._encoding_bias(rel_S, conf, conflict)
 
         # Consolidation request (offline replay analogue)
@@ -192,6 +196,10 @@ class Metacognition:
             "cum_surprise": self.cum_surprise,
         }
 
+        if "process_mode" not in diag:
+            diag = dict(diag)
+            diag["process_mode"] = 1.0 if process_mode == "system2" else 0.0
+            diag["deliberate"] = 1.0 if process_mode == "system2" else 0.0
         return ControlDecision(
             rel_S=rel_S,
             bar_S=new_bar,
@@ -202,6 +210,8 @@ class Metacognition:
             conflict=conflict,
             want_replay=want_replay,
             diagnostics=diag,
+            process_mode=process_mode,
+            deliberate=(process_mode == "system2"),
         )
 
     # ------------------------------------------------------------------ control
@@ -214,6 +224,42 @@ class Metacognition:
         leaks between sessions even if the caller forgot ``track_global = False``.
         """
         return self.track_global and getattr(self, "training", True)
+
+
+    def dual_process(
+        self,
+        rel_S: Tensor,
+        conflict: Optional[Tensor],
+        confidence: Optional[Tensor] = None,
+        *,
+        force: Optional[str] = None,
+    ) -> tuple[str, int]:
+        """Dual-process control under metacognition (System-1 / System-2).
+
+        System-1 (fast): low surprise & conflict → k near 1.
+        System-2 (deliberate): high uncertainty → higher k up to k_max.
+
+        ``force``: "system1" | "system2" | None (auto from monitors).
+        Returns (process_mode, k).
+        """
+        force_l = (force or "").strip().lower()
+        if force_l in {"system1", "s1", "fast"}:
+            return "system1", 1
+        if force_l in {"system2", "s2", "deliberate", "slow"}:
+            return "system2", max(1, int(self.k_max))
+
+        s = float(rel_S.median().item()) if rel_S.numel() else 0.0
+        c = 0.0 if conflict is None else float(conflict.median().item())
+        conf = 1.0
+        if confidence is not None and confidence.numel():
+            conf = float(confidence.median().item())
+        # Deliberate when surprised, conflicted, or low confidence
+        deliberate = (s > 1.0) or (c > 0.9) or (conf < 0.35)
+        if deliberate:
+            k = self._allocate_k(rel_S, conflict)
+            k = max(k, min(2, self.k_max))  # at least mild depth in S2
+            return "system2", max(1, min(self.k_max, k))
+        return "system1", 1
 
     def _allocate_k(self, rel_S: Tensor, conflict: Optional[Tensor]) -> int:
         """
