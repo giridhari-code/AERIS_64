@@ -84,3 +84,30 @@ python scripts/data/stats_pretrain_42m.py
 ```
 
 Only public-domain works. Confirm PD status for *your* country on Gutenberg.
+
+## Current run target (now)
+
+**Corpus size for this first train: ~24 lakh words (≈ 2.4M words)** — whatever is under `en/` / `hi/` / `bn/` today.
+
+| | |
+|--|--|
+| Params | ~41.7M (`aeris_42m`) |
+| Words now | ~2.4M (mostly English PD) |
+| Code | none |
+| Expectation | Pipeline + weak language model — **not** strong multilingual yet |
+
+Later runs can grow toward 50M–200M words; this setting is intentional for **first train on current data**.
+
+```bash
+python scripts/data/stats_pretrain_42m.py   # confirm ~2.4M
+
+PYTHONPATH=packages python scripts/train/train_company.py \
+  --preset aeris_42m --tokenizer bpe --bpe-vocab 32000 \
+  --data data/pretrain_42m/en data/pretrain_42m/hi data/pretrain_42m/bn \
+  --steps 8000 --batch-size 8 --seq-len 512 --grad-accum 4 \
+  --lr 3e-4 --warmup 300 --cosine --dropout 0.05 \
+  --device cuda --bf16 \
+  --out checkpoints/AERIS_42m_2p4M --product AERIS_42m_2p4M
+```
+
+Colab: same flags; OOM → `--batch-size 4 --seq-len 256`.

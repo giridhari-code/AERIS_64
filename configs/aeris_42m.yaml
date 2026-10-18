@@ -40,7 +40,8 @@ training:
 data:
   languages: [en, hi, bn]
   code: false
-  target_tokens_first_pretrain: 300000000
+  target_tokens_first_pretrain: 3000000   # now: ~2.4M words first run; scale up later
+  target_words_now: 2400000
   notes: >
     Balanced English / Hindi / Bengali prose and dialogue only.
     No source-code corpora for this recipe.
