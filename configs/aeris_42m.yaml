@@ -1,0 +1,46 @@
+# AERIS-42M — ~42 million parameters (tied embeddings, vocab 32k)
+# Languages: English, Hindi, Bengali — no code in the recommended corpus.
+# Measured: ~41.7M parameters with ModelConfig below.
+#
+# Train:
+#   PYTHONPATH=packages python scripts/train/train_company.py \
+#     --preset aeris_42m --tokenizer bpe --bpe-vocab 32000 \
+#     --data data/decent/*.txt \
+#     --steps 20000 --batch-size 8 --seq-len 512 --grad-accum 4 \
+#     --lr 3e-4 --warmup 500 --cosine --device cuda --bf16 \
+#     --out checkpoints/AERIS_42m --product AERIS_42m
+#
+# First pretrain data (no code): aim 200M+ words (~250–400M tokens), balanced EN/HI/BN.
+
+model:
+  d_model: 640
+  d_k: 160
+  d_v: 160
+  n_skills: 12
+  top_k: 3
+  k_max: 4
+  dendrite_window: 4
+  vocab_size: 32000
+  max_seq_len: 512
+  tie_embeddings: true
+  dropout: 0.05
+
+training:
+  batch_size: 8
+  grad_accum_steps: 4
+  seq_len: 512
+  precision: "bf16"
+  lr: 3.0e-4
+  weight_decay: 0.01
+  warmup_steps: 500
+  max_steps: 20000
+  device: "cuda"
+  seed: 42
+
+data:
+  languages: [en, hi, bn]
+  code: false
+  target_tokens_first_pretrain: 300000000
+  notes: >
+    Balanced English / Hindi / Bengali prose and dialogue only.
+    No source-code corpora for this recipe.

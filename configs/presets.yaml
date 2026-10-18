@@ -58,6 +58,19 @@ large:
   dropout: 0.1
 
 # Matches configs/aeris_1b.yaml width (~1B with vocab 32k)
+# ~42M params @ vocab 32k (EN + Hindi + Bangla, no-code pretrain target)
+# Measured: d_model=640 → ~41.7M with tied embeddings
+aeris_42m:
+  d_model: 640
+  d_k: 160
+  d_v: 160
+  n_skills: 12
+  top_k: 3
+  k_max: 4
+  dendrite_window: 4
+  max_seq_len: 512
+  dropout: 0.05
+
 xl:
   d_model: 3584
   d_k: 128

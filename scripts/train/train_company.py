@@ -67,7 +67,7 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--seq-len", type=int, default=0, help="0 = from preset")
     ap.add_argument("--d-model", type=int, default=0, help="0 = use --preset")
-    ap.add_argument("--preset", default="tiny", choices=["tiny", "small", "demo_1m", "medium", "large", "xl"])
+    ap.add_argument("--preset", default="tiny", choices=["tiny", "small", "demo_1m", "medium", "large", "aeris_42m", "xl"])
     ap.add_argument("--lr", type=float, default=3e-3)
     ap.add_argument("--grad-accum", type=int, default=1, help="Gradient accumulation steps")
     ap.add_argument("--warmup", type=int, default=50, help="LR warmup steps")
