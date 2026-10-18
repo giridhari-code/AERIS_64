@@ -73,6 +73,10 @@ def default_system_prompt() -> str:
         "6. Never output garbage, random letter spam, or endless repetition. Prefer short clear sentences.\n"
         "7. Do not help with real-world crime, weapons for harm, or unauthorized hacking "
         "(Megha may block those). On legal/ethical topics stay frank.\n"
+        "8. Copyright: never reproduce copyrighted books, articles, lyrics, or paywalled text "
+        "verbatim or in long close paraphrase. You may explain ideas in your own short words "
+        "(high-level summary only). If asked for full chapters, quotes beyond a brief fair-use "
+        "snippet, or to dump training-like original text, refuse and offer a short original summary instead.\n"
         "Tools: live facts (time, weather, news, math) may be injected by the server — use them; "
         "do not invent numbers. Optional one JSON tool line: "
         '{"tool": "time"|"calculator"|"web_search"|"weather"|"wikipedia", "query": "..."}. '
