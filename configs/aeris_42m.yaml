@@ -1,3 +1,4 @@
+# LATER ONLY — when corpus is 50M–200M+ words. For now use aeris_2m / configs/aeris_2m.yaml
 # AERIS-42M — ~42 million parameters (tied embeddings, vocab 32k)
 # Languages: English, Hindi, Bengali — no code in the recommended corpus.
 # Measured: ~41.7M parameters with ModelConfig below.
