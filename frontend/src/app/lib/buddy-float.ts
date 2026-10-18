@@ -560,67 +560,9 @@ export function initBuddy(): void {
   };
 
   if (buddyFloat) {
-    enableDrag(buddyFloat as HTMLElement);
     const buddyIsTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
     if (buddyIsTouch) {
-      buddyFloat.title = "Buddy — drag · tap pet · /buddy off";
-      buddyFloat.addEventListener("click", function (ev) {
-        if ((ev.target as HTMLElement)?.closest?.("button,select,input,label")) return;
-        if (buddyOn && window.sentinelBuddyPet) window.sentinelBuddyPet();
-      });
-    } else {
-      buddyFloat.addEventListener("dblclick", function () { setBuddyVisible(false); });
-    }
-    const sz = localStorage.getItem("sentinel_buddy_size") || "m";
-    buddyFloat.classList.add("buddy-size-" + sz);
-  }
-  document.getElementById("buddyPetBtn")?.addEventListener("click", (e) => {
-    e.stopPropagation(); playBuddySound("pet"); window.sentinelBuddyPet?.();
-  });
-  document.getElementById("buddyShareBtn")?.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    try {
-      const r = await fetch("/v1/buddy/share", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(window.__API_KEY ? { "X-API-Key": window.__API_KEY } : {}) },
-        body: JSON.stringify({ user_id: buddyId() }),
-      });
-      const j = await r.json();
-      const text = j.card || "";
-      if (text && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        const c = document.getElementById("buddyCheckin");
-        if (c) c.textContent = "Share card copied";
-      }
-    } catch (_) {}
-  });
-  document.getElementById("buddySetBtn")?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const s = document.getElementById("buddySettings");
-    if (s) s.hidden = !s.hidden;
-  });
-  const soundEl = document.getElementById("buddySound") as HTMLInputElement | null;
-  const reduceEl = document.getElementById("buddyReduceMotion") as HTMLInputElement | null;
-  const sizeEl = document.getElementById("buddySize") as HTMLSelectElement | null;
-  if (soundEl) {
-    soundEl.checked = localStorage.getItem("sentinel_buddy_sound") === "1";
-    soundEl.addEventListener("change", () => localStorage.setItem("sentinel_buddy_sound", soundEl.checked ? "1" : "0"));
-  }
-  if (reduceEl) {
-    reduceEl.checked = localStorage.getItem("sentinel_buddy_reduce") === "1";
-    reduceEl.addEventListener("change", () => {
-      localStorage.setItem("sentinel_buddy_reduce", reduceEl.checked ? "1" : "0");
-      if (reduceEl.checked) stopBuddyIdle(); else startBuddyIdle();
-    });
-  }
-  if (sizeEl) {
-    sizeEl.value = localStorage.getItem("sentinel_buddy_size") || "m";
-    sizeEl.addEventListener("change", () => {
-      localStorage.setItem("sentinel_buddy_size", sizeEl.value);
-      if (buddyFloat) {
-    const buddyIsTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    if (buddyIsTouch) {
-      // Touch: tap = pet; no accidental hide (use /buddy off to hide)
+      // Touch: tap = pet; hide with /buddy off
       buddyFloat.title = "Buddy — tap to pet · /buddy off to hide";
       buddyFloat.addEventListener("click", function () {
         if (buddyOn && window.sentinelBuddyPet) window.sentinelBuddyPet();
@@ -634,7 +576,7 @@ export function initBuddy(): void {
   if (buddyOn) {
     setBuddyVisible(true);
   } else if (!buddyOnChosen()) {
-    // First visit: the egg is the discovery moment — pop the float just once.
+    // First visit: egg discovery — show float once
     void loadBuddy().then(() => {
       if (egg && !egg.hatched) setBuddyVisible(true);
     });
