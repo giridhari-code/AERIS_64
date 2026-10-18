@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 
 from sentinel.config import load_config, SENTINELConfig
-from sentinel.data import build_dataloader
+from sentinel.data.dataset import build_dataloader
 from sentinel.model import SENTINEL
 from sentinel.training import Trainer
 

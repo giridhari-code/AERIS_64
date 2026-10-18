@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "packages"))
 
 from sentinel.agent import AgentConfig, run_agent
 from sentinel.agent.generate import make_generate_fn

@@ -9,7 +9,7 @@ from pathlib import Path
 
 # allow running from repo root
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "packages"))
 
 from sentinel.serving.production import load_profile, is_production  # noqa: E402
 
