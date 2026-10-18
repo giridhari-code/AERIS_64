@@ -253,6 +253,10 @@ class SlowMemory(nn.Module):
             merged = (
                 c_old.view(B, 1, 1) * slots[:, ptr] + c_nxt.view(B, 1, 1) * slots[:, nxt]
             ) / tot.view(B, 1, 1)
+            # Trade-off soften: keep a small global-prior anchor so fold does not
+            # wash long-term structure entirely (hippocampus→cortex-ish residual).
+            prior = self.M_s.detach().unsqueeze(0).expand(B, -1, -1)
+            merged = 0.95 * merged + 0.05 * prior
             new_slots[:, nxt] = torch.where(full.view(B, 1, 1), merged, slots[:, nxt])
             new_filled[:, nxt] = torch.where(full, c_old + c_nxt, c_nxt)
         new_slots[:, ptr] = snap
@@ -280,6 +284,7 @@ class SlowMemory(nn.Module):
         if slots is None or filled is None:
             return u_prior
 
+        B = d_t.size(0)
         # Per-slot value read: (B, S, d_v)
         r = torch.einsum("bskd,bk->bsd", slots, q)
         # Content address over slots
@@ -295,7 +300,7 @@ class SlowMemory(nn.Module):
         u_ctx = torch.einsum("bs,bsd->bd", alpha, r)
 
         # Prefer context ring when slots exist; keep a small prior residual
-        return any_fill * (0.9 * u_ctx + 0.1 * u_prior) + (1.0 - any_fill) * u_prior
+        return any_fill * ((0.85 + 0.1 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1).clamp(0, 1)) * u_ctx + (0.15 - 0.1 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1).clamp(0, 1)) * u_prior) + (1.0 - any_fill) * u_prior
 
     def read_seq(
         self,
@@ -321,7 +326,7 @@ class SlowMemory(nn.Module):
         any_fill = (filled.sum(dim=-1) > 0).float().view(B, 1, 1)
         alpha = torch.softmax(scores, dim=-1) * any_fill
         u_ctx = torch.einsum("bts,btsd->btd", alpha, r)
-        return any_fill * (0.9 * u_ctx + 0.1 * u_prior) + (1.0 - any_fill) * u_prior
+        return any_fill * ((0.85 + 0.1 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1, 1).clamp(0, 1)) * u_ctx + (0.15 - 0.1 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1, 1).clamp(0, 1)) * u_prior) + (1.0 - any_fill) * u_prior
 
     def replay(self, M: Tensor, surprises: Tensor, eta: float) -> None:
         """Legacy global prior update (batch-level consolidation)."""

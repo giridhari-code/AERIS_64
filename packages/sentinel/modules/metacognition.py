@@ -65,6 +65,7 @@ class Metacognition:
         bar_floor: float = 0.05,
     ):
         self.k_max = max(1, int(k_max))
+        self._last_process_mode = "system1"  # hysteresis for dual-process
         self.momentum = float(momentum)
         self.track_global = bool(track_global)
         self.training = True  # mirrored from the owning model's train()/eval() on every forward
@@ -236,16 +237,17 @@ class Metacognition:
     ) -> tuple[str, int]:
         """Dual-process control under metacognition (System-1 / System-2).
 
-        System-1 (fast): low surprise & conflict → k near 1.
-        System-2 (deliberate): high uncertainty → higher k up to k_max.
-
-        ``force``: "system1" | "system2" | None (auto from monitors).
-        Returns (process_mode, k).
+        Trade-off mitigation:
+          - System-1 keeps k=1 (latency)
+          - System-2 uses smooth k, not always k_max
+          - light hysteresis avoids flicker S1↔S2 on noise
         """
         force_l = (force or "").strip().lower()
         if force_l in {"system1", "s1", "fast"}:
+            self._last_process_mode = "system1"
             return "system1", 1
         if force_l in {"system2", "s2", "deliberate", "slow"}:
+            self._last_process_mode = "system2"
             return "system2", max(1, int(self.k_max))
 
         s = float(rel_S.median().item()) if rel_S.numel() else 0.0
@@ -253,12 +255,20 @@ class Metacognition:
         conf = 1.0
         if confidence is not None and confidence.numel():
             conf = float(confidence.median().item())
-        # Deliberate when surprised, conflicted, or low confidence
-        deliberate = (s > 1.0) or (c > 0.9) or (conf < 0.35)
+
+        last = getattr(self, "_last_process_mode", "system1")
+        enter_s2 = (s > 1.05) or (c > 0.95) or (conf < 0.32)
+        stay_s2 = (s > 0.75) or (c > 0.7) or (conf < 0.45)
+        deliberate = stay_s2 if last == "system2" else enter_s2
+
         if deliberate:
             k = self._allocate_k(rel_S, conflict)
-            k = max(k, min(2, self.k_max))  # at least mild depth in S2
+            k = max(2, min(self.k_max, k)) if self.k_max >= 2 else 1
+            if s < 1.4 and c < 1.0:
+                k = min(k, max(2, (self.k_max + 1) // 2))
+            self._last_process_mode = "system2"
             return "system2", max(1, min(self.k_max, k))
+        self._last_process_mode = "system1"
         return "system1", 1
 
     def _allocate_k(self, rel_S: Tensor, conflict: Optional[Tensor]) -> int:
@@ -268,7 +278,6 @@ class Metacognition:
         """
         s = rel_S.median().item()
         c = 0.0 if conflict is None else float(conflict.median().item())
-        # surprise channel (paper formula) + conflict boost
         frac_s = max(0.0, min(1.0, (s - 0.5) / 1.5))
         frac_c = max(0.0, min(1.0, (c - 0.5) / 1.5))
         frac = max(0.0, min(1.0, 0.75 * frac_s + 0.25 * frac_c))
@@ -308,6 +317,7 @@ class Metacognition:
         return periodic or self._should_consolidate()
 
     def reset(self) -> None:
+        self._last_process_mode = "system1"
         self.bar_S = None
         self.bar_ent = None
         self.cum_surprise = 0.0
