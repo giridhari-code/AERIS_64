@@ -98,126 +98,82 @@ class FastMemory(nn.Module):
         q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
         return torch.einsum("bkd,bk->bd", M, q)
 
+
+
     def write_seq(
         self,
-        M: Tensor,              # (B, d_k, d_v) initial
-        D: Tensor,              # (B, T, d_model) dendrite keys at each t
-        O: Tensor,              # (B, T, d_model) skill values
-        G: Tensor,              # (B, T, 1) gates
-        d_prev0: Tensor | None = None,  # (B, d_model) key before first token (carry)
+        M: Tensor,
+        D: Tensor,
+        O: Tensor,
+        G: Tensor,
+        d_prev0: Tensor | None = None,
         truncate_window: int = 0,
         max_memory_norm: float = 0.0,
         segment_len: int = 0,
         seg_cnt0: int = 0,
-        surprises: Tensor | None = None,  # (B, T) optional for ring snaps
+        surprises: Tensor | None = None,
         collect_stats: bool = False,
     ) -> tuple[Tensor, Tensor, list, int, list, list]:
-        """Delta-rule scan with **chunk-parallel** P-matrix composition.
-
-        Update (exact, same as ``write``)::
-
-            M_t = (I - g_t k_t k_t^T) diag(λ) M_{t-1} + g_t k_t v_t^T
-
-        Within each ``truncate_window`` chunk we:
-          1. Build all P_t (B,C,d_k,d_k) and b_t (B,C,d_k,d_v) in parallel
-          2. Inclusive prefix-compose P via a sequential-of-C matmul chain
-             (C is small; matmul is fully batched over B — GPU-friendly)
-          3. Apply the composed affine map to M_0 to get every M_t
-
-        Rank-1 dependency is preserved exactly; only the *implementation*
-        is parallel across the batch and across feature dims. BPTT detach
-        still happens on chunk boundaries. ``max_memory_norm`` is applied
-        once per chunk end (same stability, cheaper than every step).
-        """
+        """Full parallel prefix-scan: M_t = P_t M_{t-1} + b_t (no sequential token loop)."""
         B, T, _ = D.shape
         if T == 0:
             return M, D.new_zeros(B, 0, self.d_v), [], int(seg_cnt0), [], []
-
         if d_prev0 is None:
             d_prev0 = D.new_zeros(B, D.size(-1))
         d_prev = torch.cat([d_prev0.unsqueeze(1), D[:, :-1]], dim=1)
-
         k = self.W_k(d_prev)
         k = k / (k.norm(dim=-1, keepdim=True) + 1e-8)
         v = self.W_v(O)
         q = self.W_q(D)
         q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
-
         prev_norm = d_prev.norm(dim=-1, keepdim=True).clamp(min=1e-8)
-        g_eff = G * (prev_norm > 1e-4).float()  # (B, T, 1)
-        lam = self.lambda_diag  # (d_k,)
-
+        g_eff = G * (prev_norm > 1e-4).float()
+        lam = self.lambda_diag
         tw = max(1, int(truncate_window)) if truncate_window else T
         seg_len = max(0, int(segment_len))
         seg_cnt = int(seg_cnt0)
         max_n = float(max_memory_norm or 0.0)
-        dk = self.d_k
-
-        reads_t: list[Tensor] = []
-        snaps: list[tuple] = []  # (ti, M, S)
-        w_norms: list[Tensor] = []
-        m_norms: list[Tensor] = []
-
+        dk, dv = self.d_k, self.d_v
+        reads_t, snaps, w_norms, m_norms = [], [], [], []
         eye = torch.eye(dk, device=M.device, dtype=M.dtype).view(1, 1, dk, dk)
-
         t = 0
         while t < T:
             t_end = min(T, t + tw)
             C = t_end - t
-            kc = k[:, t:t_end]          # (B, C, dk)
-            vc = v[:, t:t_end]          # (B, C, dv)
-            gc = g_eff[:, t:t_end]      # (B, C, 1)
-            qc = q[:, t:t_end]          # (B, C, dk)
-
-            # P_i = (I - g k k^T) diag(λ)   shape (B, C, dk, dk)
-            # b_i = g k v^T                shape (B, C, dk, dv)
-            kkT = torch.einsum("bck,bcj->bckj", kc, kc)  # (B,C,dk,dk)
-            gkkT = gc.unsqueeze(-1) * kkT                 # (B,C,dk,dk)
-            # (I - g k k^T) @ diag(λ): column j scaled by λ_j
-            P = (eye - gkkT) * lam.view(1, 1, 1, dk)      # (B,C,dk,dk)
-            b = gc.unsqueeze(-1) * torch.einsum("bck,bcd->bckd", kc, vc)  # (B,C,dk,dv)
-
-            # Sequential-of-C prefix composition, fully batched over B.
-            # M_local[i] = P_i ... P_0 M_0 + ... + b_i
-            # Store every M after step i for reads.
-            M_hist = M.new_empty(B, C, dk, self.d_v)
-            M_cur = M
-            M_before = M
-            for i in range(C):
-                # M_cur = P[:,i] @ M_cur + b[:,i]
-                M_cur = torch.einsum("bkj,bjd->bkd", P[:, i], M_cur) + b[:, i]
-                # Per-step norm (same as token write / T=1 decode) — required for
-                # full-sequence ↔ token-by-token ring snap parity.
-                if max_n > 0:
-                    mn = M_cur.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                    M_cur = M_cur * (max_n / mn).clamp(max=1.0)
-                M_hist[:, i] = M_cur
-                if collect_stats:
-                    w_norms.append((M_cur - M_before).detach().norm())
-                    m_norms.append(M_cur.detach().norm())
-                    M_before = M_cur
-                if seg_len > 0:
+            kc, vc, gc, qc = k[:, t:t_end], v[:, t:t_end], g_eff[:, t:t_end], q[:, t:t_end]
+            kkT = torch.einsum("bck,bcj->bckj", kc, kc)
+            P = (eye - gc.unsqueeze(-1) * kkT) * lam.view(1, 1, 1, dk)
+            b = gc.unsqueeze(-1) * torch.einsum("bck,bcd->bckd", kc, vc)
+            # parallel prefix scan
+            Pw, bw = P.clone(), b.clone()
+            step = 1
+            while step < C:
+                P_prev, b_prev = Pw[:, :-step], bw[:, :-step]
+                P_cur, b_cur = Pw[:, step:], bw[:, step:]
+                P_new = torch.einsum("bcij,bcjk->bcik", P_cur, P_prev)
+                b_new = torch.einsum("bcij,bcjd->bcid", P_cur, b_prev) + b_cur
+                Pw = torch.cat([Pw[:, :step], P_new], dim=1)
+                bw = torch.cat([bw[:, :step], b_new], dim=1)
+                step *= 2
+            M_hist = torch.einsum("bcij,bjd->bcid", Pw, M) + bw
+            if max_n > 0:
+                mn = M_hist[:, -1].norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                M_hist = M_hist * (max_n / mn).clamp(max=1.0).unsqueeze(1)
+            if seg_len > 0:
+                for i in range(C):
                     seg_cnt += 1
                     if seg_cnt >= seg_len:
                         ti = t + i
-                        s_t = (
-                            surprises[:, ti].detach()
-                            if surprises is not None
-                            else M.new_ones(B)
-                        )
-                        snaps.append((ti, M_cur.detach(), s_t))
+                        s_t = surprises[:, ti].detach() if surprises is not None else M.new_ones(B)
+                        snaps.append((ti, M_hist[:, i].detach(), s_t))
                         seg_cnt = 0
-
-            # reads: r_i = M_i^T q_i  (after per-step norm)
             reads_t.append(torch.einsum("bckd,bck->bcd", M_hist, qc))
-            M = M_cur
+            M = M_hist[:, -1]
             t = t_end
             if t < T:
                 M = M.detach()
-
         R = torch.cat(reads_t, dim=1) if reads_t else M.new_zeros(B, 0, self.d_v)
         return M, R, snaps, seg_cnt, w_norms, m_norms
-
 
 
 class SlowMemory(nn.Module):
