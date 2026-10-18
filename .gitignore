@@ -13,6 +13,9 @@ build/
 # Tests stay local — never uploaded to git
 /tests/
 
+# Docs stay local — not pushed to the public repo
+docs/**/*.md
+
 # Env / secrets
 .env
 *.pem
