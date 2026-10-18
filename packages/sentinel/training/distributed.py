@@ -3,10 +3,10 @@
 Launch examples
 ---------------
   # 1 GPU / CPU (no change)
-  PYTHONPATH=src python scripts/train/train_company.py --data ... --out ...
+  PYTHONPATH=packages python scripts/train/train_company.py --data ... --out ...
 
   # 2+ GPUs
-  PYTHONPATH=src torchrun --standalone --nproc_per_node=2 \\
+  PYTHONPATH=packages torchrun --standalone --nproc_per_node=2 \\
     scripts/train/train_company.py --data ... --out ... --device cuda
 
   # module entry

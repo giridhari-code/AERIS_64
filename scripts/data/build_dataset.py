@@ -16,9 +16,9 @@ Outputs:
   data/ready/manifest.json
 
 Usage:
-  PYTHONPATH=src python scripts/data/build_dataset.py
-  PYTHONPATH=src python scripts/data/build_dataset.py --synthetic-chars 200000
-  PYTHONPATH=src python scripts/data/build_dataset.py --bpe --vocab-size 4000
+  PYTHONPATH=packages python scripts/data/build_dataset.py
+  PYTHONPATH=packages python scripts/data/build_dataset.py --synthetic-chars 200000
+  PYTHONPATH=packages python scripts/data/build_dataset.py --bpe --vocab-size 4000
 """
 
 from __future__ import annotations

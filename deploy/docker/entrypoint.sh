@@ -27,7 +27,7 @@ case "$MODE" in
     echo "  device:     $NEUROFIELD_DEVICE"
     echo "  listen:     $HOST:$PORT"
 
-    exec python -m uvicorn "neurofield.serving.server:create_app" --factory \
+    exec python -m uvicorn "sentinel.api.app:create_app" --factory \
       --host "$HOST" --port "$PORT" --workers "$WORKERS" \
       --log-level info --no-access-log
     ;;

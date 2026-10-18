@@ -44,8 +44,6 @@ data/raw/
 data/auth/
 data/buddy/
 node_modules/
-apps/web/node_modules/
-apps/web/bun.lock
 
 # Local pretrain corpora (not in git)
 data/pretrain_42m/**/*.txt

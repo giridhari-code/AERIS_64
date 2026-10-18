@@ -23,7 +23,7 @@ python scripts/data/build_dataset.py --extra data/raw/my_books.txt data/raw/wiki
 ## Train on it
 
 ```bash
-export PYTHONPATH=src
+export PYTHONPATH=packages
 python scripts/train/train_company.py \
   --data data/ready/train.txt \
   --tokenizer char \

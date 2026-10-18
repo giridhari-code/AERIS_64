@@ -16,8 +16,8 @@ checkpoints/
 ```bash
 # After training into checkpoints/local_run (must include model.safetensors)
 export NEUROFIELD_CHECKPOINT=checkpoints/local_run
-export PYTHONPATH=src
-uvicorn "neurofield.serving.server:create_app" --factory --port 8000
+export PYTHONPATH=packages
+uvicorn "sentinel.api.app:create_app" --factory --port 8000
 ```
 
 ## Why examples have no weights

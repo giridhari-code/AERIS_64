@@ -721,7 +721,7 @@ def create_app(
         if issues:
             logger.error(
                 "Refusing soft-start: fix env before exposing this process. "
-                "Run: PYTHONPATH=src python scripts/ops/production_check.py"
+                "Run: PYTHONPATH=packages python scripts/ops/production_check.py"
             )
 
     _prof = load_profile()

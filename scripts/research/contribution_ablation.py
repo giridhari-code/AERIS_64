@@ -16,7 +16,7 @@ Presets:
   skills_only       fast+slow+neuromod+meta off
 
 Example:
-  PYTHONPATH=src python scripts/contribution_ablation.py \\
+  PYTHONPATH=packages python scripts/contribution_ablation.py \\
       --steps 800 --seeds 0,1,2 --device cpu --out runs/contrib.json
 """
 

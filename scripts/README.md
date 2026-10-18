@@ -7,4 +7,4 @@
 | `data/` | `prepare_data.py`, `fetch_cc_sample.py` |
 | `research/` | `contribution_ablation.py`, `ablate_memory.py`, `count_params.py`, `benchmark_cost.py`, `run_evidence.py` |
 
-All commands assume repo root and `PYTHONPATH=src`.
+All commands assume repo root and `PYTHONPATH=packages`.

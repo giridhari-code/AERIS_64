@@ -259,7 +259,7 @@ def main() -> None:
     replay_eta = 0.02
     print(
         f"Training steps={args.steps} device={device} accum={args.grad_accum} world={world} "
-        f"schedule={getattr(args, "lr_schedule", "constant")} cosine={args.cosine} smooth={getattr(args, "label_smoothing", 0)} drop={getattr(args, "dropout", 0)} bf16={use_bf16} compile={accel.use_compile} "
+        f"schedule={getattr(args, 'lr_schedule', 'constant')} cosine={args.cosine} smooth={getattr(args, 'label_smoothing', 0)} drop={getattr(args, 'dropout', 0)} bf16={use_bf16} compile={accel.use_compile} "
         f"tf32={accel.tf32} replay_every={replay_every}"
     )
 
