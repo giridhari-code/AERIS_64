@@ -1,71 +1,49 @@
 # Training (company standard)
 
-**One entry point only.** Do not add parallel training loops.
-
-```text
-raw text
-  → scripts/data/prepare_data.py     # tokenize → train.bin / val.bin
-  → python -m sentinel.cli train     # packages/sentinel/cli.py
-       → data/dataset.py             # DataLoader
-       → model.py + modules/         # forward / loss
-       → training/trainer.py         # optim, EMA, ckpt, eval, DDP
-  → runs/<exp>/checkpoint_*.pt + safetensors export
-```
-
-## Commands
+## Single-stage LM
 
 ```bash
 export PYTHONPATH=packages
-
-# 1) Tokenize
-python scripts/data/prepare_data.py \
-  --input "data/raw/*.txt" \
-  --out-dir data/tokens \
-  --vocab-size 32000
-
-# 2) Train
-python -m sentinel.cli train \
-  --config configs/default.yaml \
-  --data-dir data/tokens \
-  --output-dir runs/exp1 \
-  --precision bf16
-
-# Large corpus
-python -m sentinel.cli train \
-  --data-dir data/tokens \
-  --streaming \
-  --batch-size 8 --seq-len 256 \
-  --max-steps 50000 \
-  --output-dir runs/exp1
-
-# Multi-GPU
-torchrun --nproc_per_node=2 -m sentinel.cli train \
-  --data-dir data/tokens --streaming --precision bf16 \
-  --output-dir runs/exp1
-
-# Resume
-python -m sentinel.cli train \
-  --data-dir data/tokens \
-  --output-dir runs/exp1 \
-  --resume
+python scripts/data/prepare_data.py --input "data/raw/*.txt" --out-dir data/tokens
+python -m sentinel.cli train --config configs/default.yaml --data-dir data/tokens --output-dir runs/exp1
 ```
 
-## Equivalent
+## Full multi-stage pipeline
+
+| Stage | Purpose |
+|-------|---------|
+| `pretrain` | Next-token pretraining on token bins |
+| `midtrain` | Continued pretrain, lower LR, higher-quality mix |
+| `long_context` | Longer `seq_len`, context extension |
+| `sft` | Supervised fine-tuning (instruction / chat) |
+| `reasoning` | CoT / reasoning-trace SFT |
+| `preference_bt` | Bradley-Terry reward model |
+| `dpo` | Direct Preference Optimization |
+| `orpo` | Odds-Ratio Preference Optimization |
+| `lora_pref` | LoRA + DPO (PEFT preference) |
+| `grpo` | Group Relative Policy Optimization |
+| `rlhf_ppo` | On-policy PPO + KL to reference |
+| `opd` | Online Preference Distillation |
 
 ```bash
-python scripts/train/train.py   # same as python -m sentinel.cli train
-# or after pip install -e .
-sentinel-train --data-dir data/tokens --config configs/default.yaml
+python -m sentinel.cli pipeline --list-stages
+
+python -m sentinel.cli pipeline \
+  --config configs/colab.yaml \
+  --stages sft,dpo,grpo \
+  --sft-data data/align/sft_demos.txt \
+  --prefs data/demo/preferences.jsonl \
+  --output-dir runs/align
+
+python -m sentinel.cli pipeline \
+  --pipeline-config configs/pipeline/default.yaml \
+  --config configs/default.yaml \
+  --data-dir data/tokens \
+  --sft-data data/align/sft_demos.txt \
+  --prefs data/demo/preferences.jsonl \
+  --output-dir runs/full_pipeline
 ```
 
-## What lives where
+Preference JSONL: `{"prompt":"...","chosen":"...","rejected":"..."}`
 
-| Path | Role |
-|------|------|
-| `packages/sentinel/cli.py` | CLI flags + wiring |
-| `packages/sentinel/training/trainer.py` | Training loop |
-| `packages/sentinel/data/dataset.py` | Token loaders |
-| `scripts/data/prepare_data.py` | Text → binary tokens |
-| `configs/default.yaml` | Defaults |
-
-Research / RL / SFT experiments belong under `scripts/research/` or a future dedicated package — **not** a second `train_*.py` loop under `scripts/train/`.
+Artifacts: `runs/<exp>/<stage>/` (safetensors + checkpoint.pt).

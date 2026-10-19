@@ -196,5 +196,104 @@ def eval_main(argv: list[str] | None = None) -> None:
     print(f"Held-out cross-entropy: {ce:.4f} nats/token  (ppl {torch.exp(torch.tensor(min(ce, 20.0))).item():.2f}) over {n} batches")
 
 
+def pipeline_main(argv: list[str] | None = None) -> None:
+    """Multi-stage company pipeline: pretrain → … → dpo / grpo / rlhf / opd."""
+    from sentinel.pipeline.registry import list_stages
+    from sentinel.pipeline.runner import DEFAULT_ORDER, run_pipeline
+
+    parser = argparse.ArgumentParser(
+        description="SENTINEL multi-stage training pipeline (company standard)"
+    )
+    parser.add_argument(
+        "--stages",
+        type=str,
+        default=None,
+        help=f"Comma-separated stages. Default full order. Known: {', '.join(list_stages() or DEFAULT_ORDER)}",
+    )
+    parser.add_argument("--config", type=str, default=None, help="Base model/training YAML")
+    parser.add_argument(
+        "--pipeline-config",
+        type=str,
+        default=None,
+        help="Pipeline YAML (stages + per-stage overrides). See configs/pipeline/default.yaml",
+    )
+    parser.add_argument("--data-dir", type=str, default=None, help="Folder with train.bin / val.bin")
+    parser.add_argument("--train-data", type=str, default=None)
+    parser.add_argument("--val-data", type=str, default=None)
+    parser.add_argument("--sft-data", type=str, default=None, help="SFT jsonl or txt")
+    parser.add_argument("--prefs", type=str, default=None, help="Preference jsonl (prompt/chosen/rejected)")
+    parser.add_argument("--reasoning-data", type=str, default=None)
+    parser.add_argument("--output-dir", type=str, default="runs/pipeline")
+    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--resume", type=str, default=None, help="checkpoint.pt to warm-start")
+    parser.add_argument("--list-stages", action="store_true")
+    args = parser.parse_args(argv)
+
+    setup_logging()
+    # ensure stages registered
+    import sentinel.pipeline.stages  # noqa: F401
+
+    if args.list_stages:
+        print("Available stages:")
+        for s in list_stages():
+            print(f"  - {s}")
+        print("Default order:", " → ".join(DEFAULT_ORDER))
+        return
+
+    train_bin = args.train_data
+    val_bin = args.val_data
+    if args.data_dir:
+        d = Path(args.data_dir)
+        if train_bin is None:
+            for name in ("train.bin", "train.npy"):
+                if (d / name).exists():
+                    train_bin = str(d / name)
+                    break
+            else:
+                train_bin = str(d)
+        if val_bin is None:
+            for name in ("val.bin", "valid.bin", "val.npy"):
+                if (d / name).exists():
+                    val_bin = str(d / name)
+                    break
+
+    stages = [s.strip() for s in args.stages.split(",") if s.strip()] if args.stages else None
+    run_pipeline(
+        stages=stages,
+        config_path=args.config,
+        pipeline_yaml=args.pipeline_config,
+        output_dir=args.output_dir,
+        train_bin=train_bin,
+        val_bin=val_bin,
+        sft_path=args.sft_data,
+        prefs_path=args.prefs,
+        reasoning_path=args.reasoning_data,
+        device=args.device,
+        resume_checkpoint=args.resume,
+    )
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Dispatcher: train | eval | pipeline."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or argv[0] in ("-h", "--help"):
+        print("Usage: python -m sentinel.cli <train|eval|pipeline> [options]")
+        print("  train     — single-stage LM training (pretrain-style)")
+        print("  eval      — held-out CE evaluation")
+        print("  pipeline  — multi-stage: pretrain,sft,dpo,grpo,rlhf_ppo,...")
+        print("  pipeline --list-stages")
+        sys.exit(0)
+    cmd, rest = argv[0], argv[1:]
+    if cmd == "train":
+        train_main(rest)
+    elif cmd == "eval":
+        eval_main(rest)
+    elif cmd == "pipeline":
+        pipeline_main(rest)
+    else:
+        # backward compat: flags without subcommand → train
+        train_main(argv)
+
+
 if __name__ == "__main__":
-    train_main()
+    main()

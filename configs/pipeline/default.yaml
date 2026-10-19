@@ -1,0 +1,77 @@
+# Company-standard multi-stage pipeline
+# Usage:
+#   PYTHONPATH=packages python -m sentinel.cli pipeline \
+#     --pipeline-config configs/pipeline/default.yaml \
+#     --data-dir data/tokens \
+#     --sft-data data/align/sft_demos.txt \
+#     --prefs data/demo/preferences.jsonl \
+#     --output-dir runs/full_pipeline
+
+stages:
+  - pretrain
+  - midtrain
+  - long_context
+  - sft
+  - reasoning
+  - preference_bt
+  - dpo
+  - orpo
+  - lora_pref
+  - grpo
+  - rlhf_ppo
+  - opd
+
+# Optional: only run a subset via CLI --stages sft,dpo,grpo
+
+stage_cfg:
+  pretrain:
+    max_steps: 2000
+    streaming: false
+  midtrain:
+    max_steps: 1000
+    lr: 1.5e-4
+  long_context:
+    seq_len: 512
+    max_steps: 500
+    batch_size: 2
+  sft:
+    max_steps: 800
+    lr: 1.0e-4
+    max_len: 256
+  reasoning:
+    max_steps: 400
+    lr: 8.0e-5
+  preference_bt:
+    max_steps: 400
+    lr: 5.0e-5
+    beta: 1.0
+  dpo:
+    max_steps: 400
+    lr: 5.0e-5
+    beta: 0.1
+  orpo:
+    max_steps: 400
+    lr: 5.0e-5
+    beta: 0.1
+  lora_pref:
+    max_steps: 300
+    lr: 1.0e-4
+    rank: 8
+    alpha: 16.0
+    beta: 0.1
+    merge: true
+  grpo:
+    max_steps: 300
+    lr: 5.0e-5
+    clip_eps: 0.2
+  rlhf_ppo:
+    max_steps: 300
+    lr: 3.0e-5
+    clip_eps: 0.2
+    kl_coef: 0.05
+  opd:
+    max_steps: 300
+    lr: 5.0e-5
+    kl_weight: 0.5
+
+# Base model size can still come from --config configs/colab.yaml / default.yaml

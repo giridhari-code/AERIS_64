@@ -49,6 +49,7 @@ all = [
 [project.scripts]
 sentinel-train = "sentinel.cli:train_main"
 sentinel-eval  = "sentinel.cli:eval_main"
+sentinel-pipeline = "sentinel.cli:pipeline_main"
 
 [tool.setuptools.package-data]
 sentinel = ["serving/static/README.md"]
