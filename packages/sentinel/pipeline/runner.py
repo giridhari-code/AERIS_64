@@ -47,6 +47,7 @@ def run_pipeline(
     reasoning_path: str | None = None,
     device: str | None = None,
     resume_checkpoint: str | None = None,
+    tokenizer_json: str | None = None,
 ) -> PipelineContext:
     """Run selected stages in order. Unknown stage names raise."""
     cfg = load_config(config_path)
@@ -102,6 +103,7 @@ def run_pipeline(
         sft_path=sft_path,
         prefs_path=prefs_path,
         reasoning_path=reasoning_path,
+        tokenizer_json=tokenizer_json,
     )
 
     logger.info("pipeline stages: %s", " → ".join(order))

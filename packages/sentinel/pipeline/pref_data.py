@@ -1,16 +1,18 @@
-"""Preference / SFT data loaders (jsonl). Company formats only — no hardcoded demos."""
+"""Preference / SFT data loaders (jsonl + text). Schema normalization only — no demo data."""
 
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Callable
 
 import torch
 from torch.utils.data import DataLoader, Dataset
 
 logger = logging.getLogger(__name__)
+
+EncodeFn = Callable[[str], list[int]]
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -25,7 +27,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def normalize_pref_row(row: dict[str, Any]) -> dict[str, str]:
-    """Map common schemas → {prompt, chosen, rejected}."""
+    """Map common industry schemas → {prompt, chosen, rejected}."""
     prompt = (
         row.get("prompt")
         or row.get("user")
@@ -35,9 +37,6 @@ def normalize_pref_row(row: dict[str, Any]) -> dict[str, str]:
     )
     chosen = row.get("chosen") or row.get("response_chosen") or row.get("answer") or ""
     rejected = row.get("rejected") or row.get("response_rejected") or row.get("bad") or ""
-    if not chosen and "conversations" in row:
-        # ShareGPT-ish: last assistant = chosen (rejected must be explicit)
-        pass
     return {
         "prompt": str(prompt),
         "chosen": str(chosen),
@@ -55,9 +54,49 @@ def normalize_sft_row(row: dict[str, Any]) -> dict[str, str]:
     return {"text": str(row.get("content") or row.get("body") or "")}
 
 
+def build_encode_fn(
+    tokenizer_json: str | Path | None = None,
+    vocab_size: int = 32000,
+) -> EncodeFn:
+    """Production encode: HF tokenizer.json. No silent demo corpus paths."""
+    if tokenizer_json:
+        path = Path(tokenizer_json)
+        if not path.is_file():
+            raise FileNotFoundError(f"tokenizer not found: {path}")
+        try:
+            from tokenizers import Tokenizer
+
+            tok = Tokenizer.from_file(str(path))
+
+            def encode(text: str) -> list[int]:
+                return list(tok.encode(text).ids)
+
+            logger.info("using tokenizer: %s", path)
+            return encode
+        except ImportError as e:
+            raise ImportError(
+                "Install tokenizers package for production encode: pip install tokenizers"
+            ) from e
+
+    vs = max(2, min(int(vocab_size), 256))
+
+    def encode_bytes(text: str) -> list[int]:
+        return [b % vs for b in text.encode("utf-8", errors="ignore")]
+
+    logger.warning(
+        "No --tokenizer-json; using UTF-8 byte encode (cap %d). "
+        "Pass tokenizer.json from prepare_data.py for production.",
+        vs,
+    )
+    return encode_bytes
+
+
 class PreferenceDataset(Dataset):
-    def __init__(self, path: str, tokenizer_encode, max_len: int = 256):
-        self.rows = [normalize_pref_row(r) for r in _read_jsonl(Path(path))]
+    def __init__(self, path: str, tokenizer_encode: EncodeFn, max_len: int = 256):
+        path_p = Path(path)
+        if not path_p.is_file():
+            raise FileNotFoundError(f"preference file not found: {path}")
+        self.rows = [normalize_pref_row(r) for r in _read_jsonl(path_p)]
         self.rows = [r for r in self.rows if r["chosen"] and r["rejected"]]
         self.encode = tokenizer_encode
         self.max_len = max_len
@@ -82,14 +121,16 @@ class PreferenceDataset(Dataset):
         text = f"{prompt}\n{response}"
         ids = self.encode(text)[: self.max_len + 1]
         if len(ids) < 2:
-            ids = ids + [0] * (2 - len(ids))
+            raise ValueError("encoded sequence too short; check tokenizer and data")
         t = torch.tensor(ids, dtype=torch.long)
         return {"x": t[:-1], "y": t[1:]}
 
 
 class SFTTextDataset(Dataset):
-    def __init__(self, path: str, tokenizer_encode, max_len: int = 256):
+    def __init__(self, path: str, tokenizer_encode: EncodeFn, max_len: int = 256):
         p = Path(path)
+        if not p.is_file():
+            raise FileNotFoundError(f"SFT file not found: {path}")
         rows: list[str] = []
         if p.suffix == ".jsonl":
             for r in _read_jsonl(p):
@@ -111,7 +152,7 @@ class SFTTextDataset(Dataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         ids = self.encode(self.rows[idx])[: self.max_len + 1]
         if len(ids) < 2:
-            ids = ids + [0] * (2 - len(ids))
+            raise ValueError("encoded sequence too short; check tokenizer and data")
         t = torch.tensor(ids, dtype=torch.long)
         return {"input_ids": t[:-1], "targets": t[1:]}
 
@@ -128,31 +169,18 @@ def collate_pad(batch: list[dict[str, torch.Tensor]], keys: list[str]) -> dict[s
     return out
 
 
-def preference_loader(path: str, encode, batch_size: int, max_len: int, num_workers: int = 0) -> DataLoader:
+def preference_loader(path, encode, batch_size, max_len, num_workers=0):
     ds = PreferenceDataset(path, encode, max_len=max_len)
     keys = ["chosen_x", "chosen_y", "rejected_x", "rejected_y"]
     return DataLoader(
-        ds,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        collate_fn=lambda b: collate_pad(b, keys),
-        drop_last=True,
+        ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+        collate_fn=lambda b: collate_pad(b, keys), drop_last=True,
     )
 
 
-def sft_loader(path: str, encode, batch_size: int, max_len: int, num_workers: int = 0) -> DataLoader:
+def sft_loader(path, encode, batch_size, max_len, num_workers=0):
     ds = SFTTextDataset(path, encode, max_len=max_len)
     return DataLoader(
-        ds,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        collate_fn=lambda b: collate_pad(b, ["input_ids", "targets"]),
-        drop_last=True,
+        ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+        collate_fn=lambda b: collate_pad(b, ["input_ids", "targets"]), drop_last=True,
     )
-
-
-def byte_encode(text: str, vocab_size: int = 256) -> list[int]:
-    """Fallback tokenizer: UTF-8 bytes mod vocab (for demos without HF tokenizer)."""
-    return [b % max(2, min(vocab_size, 256)) for b in text.encode("utf-8", errors="ignore")]

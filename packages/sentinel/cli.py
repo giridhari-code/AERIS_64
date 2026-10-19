@@ -226,6 +226,8 @@ def pipeline_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--output-dir", type=str, default="runs/pipeline")
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--resume", type=str, default=None, help="checkpoint.pt to warm-start")
+    parser.add_argument("--tokenizer-json", type=str, default=None,
+                        help="tokenizer.json from prepare_data.py (required for production SFT/prefs)")
     parser.add_argument("--list-stages", action="store_true")
     args = parser.parse_args(argv)
 
@@ -257,6 +259,14 @@ def pipeline_main(argv: list[str] | None = None) -> None:
                     val_bin = str(d / name)
                     break
 
+
+    tok = args.tokenizer_json
+    if tok is None and args.data_dir:
+        cand = Path(args.data_dir) / "tokenizer.json"
+        if cand.is_file():
+            tok = str(cand)
+    args.tokenizer_json = tok
+
     stages = [s.strip() for s in args.stages.split(",") if s.strip()] if args.stages else None
     run_pipeline(
         stages=stages,
@@ -270,6 +280,7 @@ def pipeline_main(argv: list[str] | None = None) -> None:
         reasoning_path=args.reasoning_data,
         device=args.device,
         resume_checkpoint=args.resume,
+        tokenizer_json=args.tokenizer_json,
     )
 
 

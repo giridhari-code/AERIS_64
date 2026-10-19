@@ -29,6 +29,7 @@ class PipelineContext:
     prefs_path: Optional[str] = None        # preference jsonl
     prompts_path: Optional[str] = None      # RL prompts
     reasoning_path: Optional[str] = None
+    tokenizer_json: Optional[str] = None
     # runtime
     ref_model: Optional[SENTINEL] = None    # frozen reference for DPO/PPO/GRPO
     reward_model: Optional[SENTINEL] = None

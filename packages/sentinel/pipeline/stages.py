@@ -11,7 +11,7 @@ from torch.optim import AdamW
 from sentinel.data.dataset import build_dataloader
 from sentinel.pipeline.context import PipelineContext
 from sentinel.pipeline.lora import apply_lora, lora_parameters, merge_lora_
-from sentinel.pipeline.pref_data import byte_encode, preference_loader, sft_loader
+from sentinel.pipeline.pref_data import build_encode_fn, preference_loader, sft_loader
 from sentinel.pipeline.registry import register
 from sentinel.rlhf.dpo import dpo_loss
 from sentinel.rlhf.ppo import ppo_policy_loss
@@ -22,12 +22,16 @@ logger = logging.getLogger(__name__)
 
 
 def _encode_fn(ctx: PipelineContext):
-    vs = int(ctx.cfg.model.vocab_size)
+    return build_encode_fn(
+        tokenizer_json=getattr(ctx, "tokenizer_json", None),
+        vocab_size=int(ctx.cfg.model.vocab_size),
+    )
 
-    def enc(text: str) -> list[int]:
-        return byte_encode(text, vocab_size=vs)
 
-    return enc
+def _require_path(path: str | None, stage: str, flag: str) -> str:
+    if not path:
+        raise ValueError(f"{stage}: missing data. Pass {flag} (no default paths).")
+    return path
 
 
 def _lm_train(ctx: PipelineContext, stage: str, overrides: dict[str, Any] | None = None) -> None:
@@ -107,9 +111,7 @@ def stage_long_context(ctx: PipelineContext) -> None:
 def stage_sft(ctx: PipelineContext) -> None:
     """Supervised fine-tuning on instruction / dialogue data."""
     sc = ctx.stage_cfg.get("sft", {})
-    path = ctx.sft_path or sc.get("data")
-    if not path:
-        raise ValueError("sft: set --sft-data or stage_cfg.sft.data")
+    path = _require_path(ctx.sft_path or sc.get("data"), "sft", "--sft-data")
     logger.info("=== STAGE: sft (%s) ===", path)
     steps = int(sc.get("max_steps", 1000))
     lr = float(sc.get("lr", 1e-4))
@@ -141,9 +143,7 @@ def stage_sft(ctx: PipelineContext) -> None:
 def stage_reasoning(ctx: PipelineContext) -> None:
     """SFT on chain-of-thought / reasoning traces (same loop, dedicated data)."""
     sc = dict(ctx.stage_cfg.get("reasoning", {}))
-    path = ctx.reasoning_path or sc.get("data") or ctx.sft_path
-    if not path:
-        raise ValueError("reasoning: set --reasoning-data or --sft-data")
+    path = _require_path(ctx.reasoning_path or sc.get("data") or ctx.sft_path, "reasoning", "--reasoning-data")
     ctx.sft_path = path
     ctx.stage_cfg["sft"] = {**sc, "data": path}
     logger.info("=== STAGE: reasoning ===")
@@ -156,9 +156,7 @@ def stage_reasoning(ctx: PipelineContext) -> None:
 def stage_preference_bt(ctx: PipelineContext) -> None:
     """Bradley-Terry reward model: P(chosen ≻ rejected) = σ(s_c - s_r)."""
     sc = ctx.stage_cfg.get("preference_bt", {})
-    path = ctx.prefs_path or sc.get("data")
-    if not path:
-        raise ValueError("preference_bt: set --prefs")
+    path = _require_path(ctx.prefs_path or sc.get("data"), "preference_bt", "--prefs")
     logger.info("=== STAGE: preference_bt (Bradley-Terry) ===")
     steps = int(sc.get("max_steps", 500))
     lr = float(sc.get("lr", 5e-5))
@@ -193,9 +191,7 @@ def stage_preference_bt(ctx: PipelineContext) -> None:
 def stage_dpo(ctx: PipelineContext) -> None:
     """Direct Preference Optimization (Rafailov et al.)."""
     sc = ctx.stage_cfg.get("dpo", {})
-    path = ctx.prefs_path or sc.get("data")
-    if not path:
-        raise ValueError("dpo: set --prefs")
+    path = _require_path(ctx.prefs_path or sc.get("data"), "dpo", "--prefs")
     if ctx.ref_model is None:
         ctx.freeze_as_ref()
     logger.info("=== STAGE: dpo ===")
@@ -234,9 +230,7 @@ def stage_dpo(ctx: PipelineContext) -> None:
 def stage_orpo(ctx: PipelineContext) -> None:
     """Odds-Ratio Preference Optimization (reference-free preference)."""
     sc = ctx.stage_cfg.get("orpo", {})
-    path = ctx.prefs_path or sc.get("data")
-    if not path:
-        raise ValueError("orpo: set --prefs")
+    path = _require_path(ctx.prefs_path or sc.get("data"), "orpo", "--prefs")
     logger.info("=== STAGE: orpo ===")
     steps = int(sc.get("max_steps", 500))
     lr = float(sc.get("lr", 5e-5))
@@ -279,9 +273,7 @@ def stage_orpo(ctx: PipelineContext) -> None:
 def stage_lora_pref(ctx: PipelineContext) -> None:
     """LoRA adapters + DPO (parameter-efficient preference tuning)."""
     sc = ctx.stage_cfg.get("lora_pref", {})
-    path = ctx.prefs_path or sc.get("data")
-    if not path:
-        raise ValueError("lora_pref: set --prefs")
+    path = _require_path(ctx.prefs_path or sc.get("data"), "lora_pref", "--prefs")
     logger.info("=== STAGE: lora_pref ===")
     rank = int(sc.get("rank", 8))
     alpha = float(sc.get("alpha", 16.0))
@@ -335,9 +327,7 @@ def stage_lora_pref(ctx: PipelineContext) -> None:
 def stage_grpo(ctx: PipelineContext) -> None:
     """Group Relative Policy Optimization (group-normalized advantages)."""
     sc = ctx.stage_cfg.get("grpo", {})
-    path = ctx.prefs_path or sc.get("data")
-    if not path:
-        raise ValueError("grpo: set --prefs")
+    path = _require_path(ctx.prefs_path or sc.get("data"), "grpo", "--prefs")
     if ctx.ref_model is None:
         ctx.freeze_as_ref()
     logger.info("=== STAGE: grpo ===")
@@ -386,9 +376,7 @@ def stage_grpo(ctx: PipelineContext) -> None:
 def stage_rlhf_ppo(ctx: PipelineContext) -> None:
     """On-policy PPO with reward = logprob margin vs rejected (or RM if set)."""
     sc = ctx.stage_cfg.get("rlhf_ppo", {})
-    path = ctx.prefs_path or sc.get("data")
-    if not path:
-        raise ValueError("rlhf_ppo: set --prefs")
+    path = _require_path(ctx.prefs_path or sc.get("data"), "rlhf_ppo", "--prefs")
     if ctx.ref_model is None:
         ctx.freeze_as_ref()
     logger.info("=== STAGE: rlhf_ppo ===")
@@ -439,9 +427,7 @@ def stage_opd(ctx: PipelineContext) -> None:
     plus standard CE — online distillation for deployment-sized models.
     """
     sc = ctx.stage_cfg.get("opd", {})
-    path = ctx.prefs_path or ctx.sft_path or sc.get("data")
-    if not path:
-        raise ValueError("opd: set --prefs or --sft-data")
+    path = _require_path(ctx.prefs_path or ctx.sft_path or sc.get("data"), "opd", "--prefs or --sft-data")
     if ctx.ref_model is None:
         ctx.freeze_as_ref()
     logger.info("=== STAGE: opd (online preference distillation) ===")

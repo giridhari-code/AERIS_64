@@ -1,49 +1,53 @@
 # Training (company standard)
 
-## Single-stage LM
+No demo paths. Pass your own data and tokenizer.
+
+## 1) Tokenize
 
 ```bash
 export PYTHONPATH=packages
-python scripts/data/prepare_data.py --input "data/raw/*.txt" --out-dir data/tokens
-python -m sentinel.cli train --config configs/default.yaml --data-dir data/tokens --output-dir runs/exp1
+python scripts/data/prepare_data.py \
+  --input "/data/corpus/*.txt" \
+  --out-dir /data/tokens \
+  --vocab-size 32000
 ```
 
-## Full multi-stage pipeline
+## 2) Single-stage LM
 
-| Stage | Purpose |
-|-------|---------|
-| `pretrain` | Next-token pretraining on token bins |
-| `midtrain` | Continued pretrain, lower LR, higher-quality mix |
-| `long_context` | Longer `seq_len`, context extension |
-| `sft` | Supervised fine-tuning (instruction / chat) |
-| `reasoning` | CoT / reasoning-trace SFT |
-| `preference_bt` | Bradley-Terry reward model |
-| `dpo` | Direct Preference Optimization |
-| `orpo` | Odds-Ratio Preference Optimization |
-| `lora_pref` | LoRA + DPO (PEFT preference) |
-| `grpo` | Group Relative Policy Optimization |
-| `rlhf_ppo` | On-policy PPO + KL to reference |
-| `opd` | Online Preference Distillation |
+```bash
+python -m sentinel.cli train \
+  --config configs/default.yaml \
+  --data-dir /data/tokens \
+  --output-dir /runs/pretrain \
+  --precision bf16
+```
+
+## 3) Multi-stage pipeline
+
+| Stage | Data flag |
+|-------|-----------|
+| pretrain / midtrain / long_context | `--data-dir` (train.bin) |
+| sft | `--sft-data` |
+| reasoning | `--reasoning-data` |
+| preference_bt / dpo / orpo / lora_pref / grpo / rlhf_ppo | `--prefs` |
+| opd | `--prefs` or `--sft-data` |
 
 ```bash
 python -m sentinel.cli pipeline --list-stages
 
 python -m sentinel.cli pipeline \
-  --config configs/colab.yaml \
-  --stages sft,dpo,grpo \
-  --sft-data data/align/sft_demos.txt \
-  --prefs data/demo/preferences.jsonl \
-  --output-dir runs/align
-
-python -m sentinel.cli pipeline \
   --pipeline-config configs/pipeline/default.yaml \
   --config configs/default.yaml \
-  --data-dir data/tokens \
-  --sft-data data/align/sft_demos.txt \
-  --prefs data/demo/preferences.jsonl \
-  --output-dir runs/full_pipeline
+  --data-dir /data/tokens \
+  --tokenizer-json /data/tokens/tokenizer.json \
+  --sft-data /data/sft.jsonl \
+  --reasoning-data /data/reasoning.jsonl \
+  --prefs /data/preferences.jsonl \
+  --output-dir /runs/pipeline
 ```
 
-Preference JSONL: `{"prompt":"...","chosen":"...","rejected":"..."}`
+Preference JSONL schema: `{"prompt":"...","chosen":"...","rejected":"..."}`
 
-Artifacts: `runs/<exp>/<stage>/` (safetensors + checkpoint.pt).
+SFT: `.jsonl` (`text` or instruction/output) or plain `.txt` chunks.
+
+Artifacts: `/runs/pipeline/<stage>/`

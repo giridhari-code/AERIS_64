@@ -1,41 +1,15 @@
-# Data
+# Data layout (company)
 
 | Path | Role |
 |------|------|
-| `samples/` | Tiny demo corpora (identity, code, multilingual) |
-| `align/` | Alignment / SFT style snippets |
-| `raw/` | Optional: put your own large `.txt` dumps here |
-| `tokens/` | **Generated** tokenized `.bin` (via `prepare_data.py`) — not required in git |
+| Your corpus | Raw text for `prepare_data.py` |
+| Token output | `train.bin` / `val.bin` / `tokenizer.json` from `prepare_data.py` |
+| SFT | Instruction JSONL or dialogue text — pass via `--sft-data` |
+| Preferences | JSONL with `prompt` / `chosen` / `rejected` — pass via `--prefs` |
 
-## Tokenize for training
-
-```bash
-# Your text files → train.bin / val.bin + tokenizer.json
-python scripts/data/prepare_data.py \
-  --input "data/raw/*.txt" "data/samples/*.txt" \
-  --out-dir data/tokens \
-  --vocab-size 32000
-```
-
-## Train
+No default dataset is selected by the training code. All paths are explicit CLI/config inputs.
 
 ```bash
-export PYTHONPATH=packages
-python -m sentinel.cli train \
-  --config configs/default.yaml \
-  --data-dir data/tokens \
-  --output-dir runs/local_run
+python scripts/data/prepare_data.py --input "/data/raw/*.txt" --out-dir /data/tokens --vocab-size 32000
+python -m sentinel.cli train --data-dir /data/tokens --config configs/default.yaml --output-dir /runs/exp1
 ```
-
-Or with streaming for large corpora:
-
-```bash
-python -m sentinel.cli train \
-  --data-dir data/tokens \
-  --streaming \
-  --batch-size 8 --seq-len 256 \
-  --max-steps 10000 \
-  --output-dir runs/exp1
-```
-
-See `docs/guides/TRAIN_1B.md` for large-scale data notes.
