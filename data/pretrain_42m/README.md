@@ -42,11 +42,6 @@ Put **`.txt` / `.jsonl` / `.md`** files only from sources you document in `SOURC
 
 Follow `docs/guides/COPYRIGHT_POLICY.md`.
 
-## Stats
-
-```bash
-python scripts/data/stats_pretrain_42m.py
-```
 
 ## Train (when real data is large enough)
 
@@ -70,20 +65,6 @@ Directories are expanded automatically (all `.txt` under each folder).
 - Add programming code corpora
 
 
-## English: Project Gutenberg pipeline
-
-```bash
-# default curated PD classics (polite delay between downloads)
-python scripts/data/fetch_gutenberg_en.py --max-books 20
-
-# or specific IDs from https://www.gutenberg.org/ebooks/…
-python scripts/data/fetch_gutenberg_en.py --ids 1342,11,84,1661 --max-books 10
-
-python scripts/data/stats_pretrain_42m.py
-# then update SOURCES.md
-```
-
-Only public-domain works. Confirm PD status for *your* country on Gutenberg.
 
 ## Current run target (now)
 
@@ -99,8 +80,6 @@ Only public-domain works. Confirm PD status for *your* country on Gutenberg.
 Later runs can grow toward 50M–200M words; this setting is intentional for **first train on current data**.
 
 ```bash
-python scripts/data/stats_pretrain_42m.py   # confirm ~2.4M
-
 PYTHONPATH=packages python scripts/train/train_company.py \
   --preset aeris_42m --tokenizer bpe --bpe-vocab 32000 \
   --data data/pretrain_42m/en data/pretrain_42m/hi data/pretrain_42m/bn \

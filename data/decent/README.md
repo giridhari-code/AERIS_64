@@ -11,12 +11,13 @@ Put plain `.txt` / `.jsonl` files here. Target: **≥ 1,000,000 tokens** after B
 | 10% | Identity + honesty (no chapluchi) lines |
 | 10% | Domain you care about (security defense, product, …) |
 
-## Bootstrap (small, not 1M)
+## Bootstrap
+Add real `.txt` / `.jsonl` under this folder until you have enough tokens
+(rule of thumb: a few MB of clean text before BPE). Then:
+
 ```bash
-python scripts/data/make_synthetic_100k.py \
-  --out data/decent/synthetic_seed.txt --target-chars 200000
+python scripts/data/prepare_data.py --input "data/decent/*.txt" --out-dir data/tokens_decent
 ```
-Then **add real text** until `wc -c data/decent/*.txt` is roughly 4–8 MB+ (rule of thumb before BPE).
 
 ## Do not
 - Repeat the same 14 lines 20k times (old AERIS_main failure mode)
