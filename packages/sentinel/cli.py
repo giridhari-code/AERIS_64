@@ -26,21 +26,48 @@ def setup_logging(level: str = "INFO") -> None:
 def train_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Train SENTINEL v2")
     parser.add_argument("--config", type=str, default=None, help="Path to YAML config")
-    parser.add_argument("--train-data", type=str, default=None)
+    parser.add_argument("--train-data", type=str, default=None,
+                        help="token .bin/.npy, directory of those, or glob")
     parser.add_argument("--val-data", type=str, default=None)
+    parser.add_argument("--data-dir", type=str, default=None,
+                        help="auto-pick train.bin + val.bin (or train*.bin) from this folder")
     parser.add_argument("--output-dir", type=str, default=None)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--seq-len", type=int, default=None)
+    parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--grad-accum", type=int, default=None)
+    parser.add_argument("--precision", type=str, choices=["fp32", "bf16"], default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--resume", action="store_true", help="continue from <output-dir>/checkpoint_latest.pt")
     parser.add_argument("--tokenizer-json", type=str, default=None, help="copied into the exported checkpoint folders")
-    parser.add_argument("--token-dtype", type=str, default="uint16", choices=["uint16", "int32"],
-                        help="dtype of the .bin token files (uint16 holds vocab <= 65535)")
+    parser.add_argument("--token-dtype", type=str, default="uint16",
+                        choices=["uint16", "int32", "auto"],
+                        help="dtype of the .bin token files (auto = infer from sidecar/name)")
     parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--streaming", action="store_true",
+                        help="infinite random windows (better for multi-GB corpora)")
+    parser.add_argument("--stride", type=int, default=1,
+                        help="map-style window stride (seq_len = non-overlapping packs)")
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
+    if args.data_dir:
+        d = Path(args.data_dir)
+        if args.train_data is None:
+            for name in ("train.bin", "train.npy"):
+                if (d / name).exists():
+                    cfg.data.train_path = str(d / name)
+                    break
+            else:
+                # fall back to whole directory (multi-file)
+                cfg.data.train_path = str(d)
+        if args.val_data is None:
+            for name in ("val.bin", "valid.bin", "val.npy"):
+                if (d / name).exists():
+                    cfg.data.val_path = str(d / name)
+                    break
     if args.train_data:
         cfg.data.train_path = args.train_data
     if args.val_data:
@@ -53,18 +80,27 @@ def train_main(argv: list[str] | None = None) -> None:
         cfg.training.max_steps = args.max_steps
     if args.batch_size is not None:
         cfg.training.batch_size = args.batch_size
+    if args.seq_len is not None:
+        cfg.training.seq_len = args.seq_len
+    if args.lr is not None:
+        cfg.training.lr = args.lr
+    if args.grad_accum is not None:
+        cfg.training.grad_accum_steps = args.grad_accum
+    if args.precision is not None:
+        cfg.training.precision = args.precision
     if args.seed is not None:
         cfg.training.seed = args.seed
 
     setup_logging(cfg.logging.level)
-    from sentinel.training.distributed import cleanup, init_distributed_if_needed
+    from sentinel.training.distributed import cleanup, get_world_size, init_distributed_if_needed
+    from sentinel.data.dataset import estimate_tokens_per_step
 
     init_distributed_if_needed()  # torchrun => data-parallel, plain `python` => unchanged
     torch.manual_seed(cfg.training.seed)
 
     if cfg.data.train_path is None:
         logging.error(
-            "No training data provided. Set data.train_path in config or use --train-data."
+            "No training data provided. Set data.train_path in config, --train-data, or --data-dir."
         )
         sys.exit(1)
 
@@ -76,12 +112,30 @@ def train_main(argv: list[str] | None = None) -> None:
     report = model.param_report()
     logging.info("Parameter report: %s", report)
 
+    tok_step = estimate_tokens_per_step(
+        cfg.training.batch_size * max(1, int(getattr(cfg.training, "grad_accum_steps", 1) or 1)),
+        cfg.training.seq_len,
+        get_world_size(),
+    )
+    logging.info(
+        "Train plan: steps=%d seq_len=%d batch=%d accum=%d precision=%s ~tokens/step=%s",
+        cfg.training.max_steps,
+        cfg.training.seq_len,
+        cfg.training.batch_size,
+        getattr(cfg.training, "grad_accum_steps", 1),
+        cfg.training.precision,
+        f"{tok_step:,}",
+    )
+
     train_loader = build_dataloader(
         cfg.data.train_path,
         seq_len=cfg.training.seq_len,
         batch_size=cfg.training.batch_size,
         num_workers=args.num_workers,
         dtype=args.token_dtype,
+        streaming=args.streaming,
+        stride=max(1, args.stride),
+        shuffle_train=True,
     )
     val_loader = build_dataloader(
         cfg.data.val_path,
@@ -89,6 +143,10 @@ def train_main(argv: list[str] | None = None) -> None:
         batch_size=cfg.training.batch_size,
         num_workers=0,
         dtype=args.token_dtype,
+        streaming=False,
+        stride=max(1, cfg.training.seq_len),  # non-overlapping val packs
+        shuffle_train=False,
+        drop_last=False,
     )
     if val_loader is None:
         logging.warning("No val_path: training WITHOUT held-out validation (no best-checkpoint, no ppl).")
