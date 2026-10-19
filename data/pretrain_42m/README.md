@@ -46,7 +46,7 @@ Follow `docs/guides/COPYRIGHT_POLICY.md`.
 ## Train (when real data is large enough)
 
 ```bash
-PYTHONPATH=packages python scripts/train/train_company.py \
+PYTHONPATH=packages python -m sentinel.cli train \
   --preset aeris_42m \
   --tokenizer bpe --bpe-vocab 32000 \
   --data data/pretrain_42m/en data/pretrain_42m/hi data/pretrain_42m/bn \
@@ -60,7 +60,7 @@ Directories are expanded automatically (all `.txt` under each folder).
 
 ## Do not
 
-- Run `build_pretrain_42m_seed.py` for the main corpus (legacy seed script is not part of this recipe)
+- Run `prepare_data.py` for the main corpus (legacy seed script is not part of this recipe)
 - Mix synthetic identity spam as the bulk of training
 - Add programming code corpora
 
@@ -80,7 +80,7 @@ Directories are expanded automatically (all `.txt` under each folder).
 Later runs can grow toward 50M–200M words; this setting is intentional for **first train on current data**.
 
 ```bash
-PYTHONPATH=packages python scripts/train/train_company.py \
+PYTHONPATH=packages python -m sentinel.cli train \
   --preset aeris_42m --tokenizer bpe --bpe-vocab 32000 \
   --data data/pretrain_42m/en data/pretrain_42m/hi data/pretrain_42m/bn \
   --steps 8000 --batch-size 8 --seq-len 512 --grad-accum 4 \

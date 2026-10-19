@@ -56,9 +56,9 @@ AERIS_64/
 ├── packages/sentinel/     # Model library (train, modules, API, tools)
 ├── configs/                 # YAML configs (default, presets, 1B recipe)
 ├── scripts/
-│   ├── train/               # Training entrypoints
+│   ├── train/               # Alias → python -m sentinel.cli train
 │   ├── eval/                # Evaluation
-│   ├── data/                # Data prep
+│   ├── data/                # prepare_data.py (tokenize)
 │   └── research/            # Ablations, param counts, probes
 ├── tests/                   # pytest
 ├── data/
@@ -96,19 +96,30 @@ make test
 # or: PYTHONPATH=packages pytest tests/ -q
 ```
 
-### Train a small local checkpoint (then serve)
+### Train (company standard)
 
 ```bash
 export PYTHONPATH=packages
-python scripts/train/train_company.py \
-  --data data/samples/company_corpus.txt data/samples/india_multilang.txt \
-  --tokenizer char --steps 500 --d-model 64 \
-  --out checkpoints/local_run
 
-# Serve (folder must contain model.safetensors)
-export NEUROFIELD_CHECKPOINT=checkpoints/local_run
+# Tokenize text → train.bin / val.bin
+python scripts/data/prepare_data.py \
+  --input "data/samples/*.txt" \
+  --out-dir data/tokens \
+  --vocab-size 32000
+
+# Train (single entry point)
+python -m sentinel.cli train \
+  --config configs/default.yaml \
+  --data-dir data/tokens \
+  --max-steps 2000 \
+  --output-dir runs/local_run
+
+# Serve
+export NEUROFIELD_CHECKPOINT=runs/local_run/final   # or best/
 uvicorn "sentinel.api.app:create_app" --factory --host 0.0.0.0 --port 8000
 ```
+
+Full flags: [scripts/train/README.md](scripts/train/README.md).
 
 Open http://127.0.0.1:8000/
 

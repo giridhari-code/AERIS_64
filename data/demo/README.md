@@ -25,7 +25,7 @@ Niyam: training aur inference ka format bilkul same rakho (`System:` / `User:` /
 export PYTHONPATH=packages
 
 # 1) Pretraining — ~1M params, 1000 steps
-python scripts/train/train_company.py \
+python -m sentinel.cli train \
   --data data/demo/pretraining.txt \
   --tokenizer char --preset demo_1m \
   --steps 1000 --cosine \
