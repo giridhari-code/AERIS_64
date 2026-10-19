@@ -105,6 +105,7 @@ class Metacognition:
         bar_S: Optional[Tensor] = None,
         router_entropy: Optional[Tensor] = None,
         mem_norm: Optional[Tensor] = None,
+        n_tokens: int = 1,
     ) -> ControlDecision:
         """
         Full monitor→control step.
@@ -114,10 +115,12 @@ class Metacognition:
           bar_S: optional session baseline (else module / global).
           router_entropy: (B,) or scalar from *previous* step (conflict proxy).
           mem_norm: optional fast-memory norm (load signal).
+          n_tokens: how many tokens this call covers (T in training, 1 in decode).
         """
         S = S.detach()
         device = S.device
         B = S.shape[0]
+        n_tokens = max(1, int(n_tokens))
 
         mean_S = S.mean()
         if bar_S is None and self._use_global:
@@ -172,10 +175,12 @@ class Metacognition:
         # dual_process owns k; keep allocate available for forced S2 depth
         gate_bias = self._encoding_bias(rel_S, conf, conflict)
 
-        # Consolidation request (offline replay analogue)
+        # Consolidation request (offline replay analogue).
+        # n_tokens lets training (T>1) count real tokens so replay_min_tokens /
+        # surprise budget scale correctly; decode stays n_tokens=1.
         if self._use_global:
-            self.tokens_seen += 1
-            self.cum_surprise += float(mean_S.item())
+            self.tokens_seen += n_tokens
+            self.cum_surprise += float(mean_S.item()) * n_tokens
             want_replay = self._should_consolidate()
         else:
             want_replay = False

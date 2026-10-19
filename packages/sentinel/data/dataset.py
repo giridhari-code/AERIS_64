@@ -69,8 +69,14 @@ class StreamingTokenDataset(IterableDataset):
         # distinct stream per DataLoader worker (all workers used the same seed => duplicate batches)
         info = torch.utils.data.get_worker_info()
         rng = np.random.default_rng(self.seed + (info.id if info else 0))
+        hi = self.n_tokens - self.seq_len
+        if hi <= 0:
+            raise ValueError(
+                f"StreamingTokenDataset: file too short ({self.n_tokens} tokens) "
+                f"for seq_len={self.seq_len}"
+            )
         while True:
-            idx = rng.integers(0, self.n_tokens - self.seq_len)
+            idx = int(rng.integers(0, hi))
             chunk = self.data[idx : idx + self.seq_len + 1]
             x = torch.from_numpy(chunk[:-1].astype(np.int64))
             y = torch.from_numpy(chunk[1:].astype(np.int64))

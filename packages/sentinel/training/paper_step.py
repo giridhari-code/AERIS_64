@@ -40,3 +40,5 @@ def maybe_replay(
         dev = device or out.state["M"].device
         S = torch.ones(b, device=dev)
     model.replay_slow(out.state["M"], S, eta)
+    if hasattr(model, "meta") and hasattr(model.meta, "acknowledge_replay"):
+        model.meta.acknowledge_replay()

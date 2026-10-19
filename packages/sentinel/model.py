@@ -62,7 +62,7 @@ class SENTINEL(nn.Module):
     =====================================================================
 
         x_t  →  Embedding
-             →  Dendrite(x_hist, error)     →  d_t   (changes every token)
+             →  Dendrite(x_hist, error)     →  d_t   (past-W window only; no x_t)
              →  Metacognition               →  k, gate_bias
              →  Neural Field(h, d_t, r, k)  →  h     (k recurrent steps)
              →  Predictor(h)                →  pending pred for x_{t+1}
@@ -72,9 +72,9 @@ class SENTINEL(nn.Module):
              →  SlowMemory read (ring)      →  u
              →  logits_t
 
-        Next token: same loop again — d_t is recomputed each step
-        (dendrite window + delayed error), so the field always sees
-        a fresh local feature, not a static context vector.
+        Next token: same loop again — d_t is recomputed each step from the
+        causal past window + delayed error (current x_t is NOT in the window).
+        Parallel (T>1) and decode (T=1) paths are identical.
 
     =====================================================================
     TWO-SPEED MEMORY
@@ -254,6 +254,15 @@ class SENTINEL(nn.Module):
         collect = bool(collect_stats or return_audit)
         if state is None:
             state = self._init_state(B, device)
+        if T == 0:
+            empty_logits = input_ids.new_zeros(B, 0, self.cfg.vocab_size).float()
+            return ModelOutput(
+                logits=empty_logits,
+                loss=None,
+                metrics={"path": "parallel", "k_depth": 0.0},
+                audit=None,
+                state=state,
+            )
 
         # Metacognition: set depth k + encoding bias δ from *previous* step signals
         # (carried in state). Same path for train (T>1) and decode (T=1).
@@ -283,6 +292,7 @@ class SENTINEL(nn.Module):
                 bar_S=bar_S_state if torch.is_tensor(bar_S_state) else None,
                 router_entropy=ent_prev if torch.is_tensor(ent_prev) else None,
                 mem_norm=mem_norm,
+                n_tokens=T,
             )
             gate_bias_meta = decision.gate_bias  # (B,)
             bar_S_state = decision.bar_S
@@ -442,8 +452,11 @@ class SENTINEL(nn.Module):
                 R_shift.reshape(B * T, -1),
             ).view(B, T, -1)
 
-        o_flat, _pi, _w = self.router(H.reshape(B * T, -1))
+        # Final router on refined H — this O feeds logits; keep its π for
+        # entropy regularisation / metacognition (was using last depth-pass π).
+        o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1))
         O = o_flat.view(B, T, -1)
+        pi = pi_flat.view(B, T, -1)
 
         if ab.use_slow_memory:
             slow_slots = state.get("slow_slots")
@@ -453,22 +466,31 @@ class SENTINEL(nn.Module):
             # U[t] only sees segment snapshots completed at positions < t.
             # No end-of-call flush when T>1 (that broke prefix ↔ decode parity).
             if will_write_slow and T > 0 and snaps:
+                # Between snap boundaries the ring is constant → batch-read those
+                # spans with read_seq instead of a Python per-token loop.
                 U_parts: list[Tensor] = []
                 snap_i = 0
-                for t in range(T):
-                    # causal ring: read before applying snapshot that closes at t
-                    U_parts.append(
-                        self.slow_mem.read(D[:, t], slots=slow_slots, filled=slow_filled)
-                    )
-                    # apply any snapshot that closed on this position (visible from t+1)
-                    while snap_i < len(snaps) and snaps[snap_i][0] == t:
+                t0 = 0
+                while t0 < T:
+                    # advance snaps that close exactly at positions we already passed
+                    t1 = T
+                    if snap_i < len(snaps):
+                        t1 = min(T, snaps[snap_i][0] + 1)  # read through the snap position
+                    # read [t0, t1) with current ring (snap at t is visible only from t+1)
+                    if t1 > t0:
+                        U_parts.append(
+                            self.slow_mem.read_seq(D[:, t0:t1], slow_slots, slow_filled)
+                        )
+                    # apply snaps that close at t1-1 (last position just read)
+                    while snap_i < len(snaps) and snaps[snap_i][0] < t1:
                         _ti, M_snap, s_snap = snaps[snap_i]
                         slow_slots, slow_ptr, slow_filled = self.slow_mem.write_slot(
                             slow_slots, slow_ptr, slow_filled, M_snap,
                             weight=s_snap.clamp(0.5, 2.0),
                         )
                         snap_i += 1
-                U = torch.stack(U_parts, dim=1)
+                    t0 = t1
+                U = torch.cat(U_parts, dim=1) if U_parts else D.new_zeros(B, T, self.cfg.d_v)
                 seg_pos = seg_cnt
             else:
                 U = self.slow_mem.read_seq(D, slow_slots, slow_filled)

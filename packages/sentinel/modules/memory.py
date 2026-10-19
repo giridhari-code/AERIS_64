@@ -157,8 +157,14 @@ class FastMemory(nn.Module):
                 step *= 2
             M_hist = torch.einsum("bcij,bjd->bcid", Pw, M) + bw
             if max_n > 0:
-                mn = M_hist[:, -1].norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
-                M_hist = M_hist * (max_n / mn).clamp(max=1.0).unsqueeze(1)
+                # Soft-clamp every position in the chunk (not only the last) so
+                # intermediate reads also stay bounded under long truncate windows.
+                mn = M_hist.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+                M_hist = M_hist * (max_n / mn).clamp(max=1.0)
+            if collect_stats:
+                # write magnitude ≈ ||g * k * delta|| proxy via gate * value norm
+                w_norms.extend(list((gc.squeeze(-1) * vc.norm(dim=-1)).mean(0).detach()))
+                m_norms.extend(list(M_hist.norm(dim=(-2, -1)).mean(0).detach()))
             if seg_len > 0:
                 for i in range(C):
                     seg_cnt += 1
@@ -292,15 +298,19 @@ class SlowMemory(nn.Module):
         scores = torch.einsum("bk,bsk->bs", q, k_slot)
         temp = self.log_temp.exp().clamp(min=0.1, max=10.0)
         scores = scores / temp
-        scores = scores.masked_fill(filled <= 0, -1e9)
+        # dtype-safe mask (bf16 cannot represent -1e9 cleanly)
+        scores = scores.masked_fill(filled <= 0, torch.finfo(scores.dtype).min)
 
         any_fill = (filled.sum(dim=-1, keepdim=True) > 0).float()  # (B, 1)
-        alpha = torch.softmax(scores, dim=-1)
-        alpha = alpha * any_fill  # zero mass if nothing filled
+        alpha = torch.softmax(scores, dim=-1) * any_fill
         u_ctx = torch.einsum("bs,bsd->bd", alpha, r)
 
-        # Prefer context ring when slots exist; keep a small prior residual
-        return any_fill * ((0.88 + 0.10 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1).clamp(0, 1)) * u_ctx + (0.12 - 0.08 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1).clamp(0, 1)) * u_prior) + (1.0 - any_fill) * u_prior
+        # Mix ring context with global prior; more filled slots → trust ring more.
+        fill_frac = (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1).clamp(0, 1)
+        ctx_w = 0.88 + 0.10 * fill_frac   # 0.88 .. 0.98
+        prior_w = 0.12 - 0.08 * fill_frac  # 0.12 .. 0.04
+        mixed = ctx_w * u_ctx + prior_w * u_prior
+        return any_fill * mixed + (1.0 - any_fill) * u_prior
 
     def read_seq(
         self,
@@ -322,11 +332,20 @@ class SlowMemory(nn.Module):
         scores = torch.einsum("btk,bsk->bts", q, k_slot)
         temp = self.log_temp.exp().clamp(min=0.1, max=10.0)
         scores = scores / temp
-        scores = scores.masked_fill((filled <= 0).unsqueeze(1), -1e9)
+        scores = scores.masked_fill(
+            (filled <= 0).unsqueeze(1), torch.finfo(scores.dtype).min
+        )
         any_fill = (filled.sum(dim=-1) > 0).float().view(B, 1, 1)
         alpha = torch.softmax(scores, dim=-1) * any_fill
         u_ctx = torch.einsum("bts,btsd->btd", alpha, r)
-        return any_fill * ((0.88 + 0.10 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1, 1).clamp(0, 1)) * u_ctx + (0.12 - 0.08 * (filled.clamp(max=1).sum(-1) / float(self.n_slots)).view(B, 1, 1).clamp(0, 1)) * u_prior) + (1.0 - any_fill) * u_prior
+
+        fill_frac = (
+            filled.clamp(max=1).sum(-1) / float(self.n_slots)
+        ).view(B, 1, 1).clamp(0, 1)
+        ctx_w = 0.88 + 0.10 * fill_frac
+        prior_w = 0.12 - 0.08 * fill_frac
+        mixed = ctx_w * u_ctx + prior_w * u_prior
+        return any_fill * mixed + (1.0 - any_fill) * u_prior
 
     def replay(self, M: Tensor, surprises: Tensor, eta: float) -> None:
         """Legacy global prior update (batch-level consolidation)."""

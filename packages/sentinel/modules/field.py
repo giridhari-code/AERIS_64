@@ -37,7 +37,10 @@ class NeuralField(nn.Module):
         act = torch.tanh(h).unsqueeze(1)  # (B, 1, D)
         local = self.R(act).squeeze(1)  # (B, D)
         mem = self.W_m(r_prev)
-        pre = self.alpha * h + self.beta * (d_t + local + mem)
+        # Soft-bound alpha/beta so the residual mix cannot explode mid-training
+        alpha = self.alpha.clamp(-2.0, 2.0)
+        beta = self.beta.clamp(-2.0, 2.0)
+        pre = alpha * h + beta * (d_t + local + mem)
         zeta = self.zeta.clamp(0.0, 1.0)
         return (1.0 - zeta) * h + zeta * self.norm(pre)
 

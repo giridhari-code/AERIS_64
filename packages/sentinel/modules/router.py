@@ -49,8 +49,17 @@ class SkillRouter(nn.Module):
         src = F.softmax(topk_vals, dim=-1).to(dtype=w.dtype)
         w.scatter_(-1, topk_idx, src)
 
+        # STE: forward = sparse top-k weights, backward flows through dense π
+        # for the router. Skill-op grads only reach selected experts (w≈0 else).
         w_ste = w + pi - pi.detach()
 
-        outs = torch.stack([op(h) for op in self.skills], dim=1)
+        # For small n_skills the Python loop overhead dominates; only skip
+        # non-selected experts when there are many skills.
+        if self.n_skills > 16 and self.top_k < self.n_skills:
+            outs = h.new_zeros(h.size(0), self.n_skills, h.size(-1))
+            for s in topk_idx.reshape(-1).unique().tolist():
+                outs[:, s] = self.skills[s](h)
+        else:
+            outs = torch.stack([op(h) for op in self.skills], dim=1)
         o = torch.einsum("bs,bsd->bd", w_ste, outs)
         return o, pi, w

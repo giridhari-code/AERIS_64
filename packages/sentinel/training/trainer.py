@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import torch
+from torch import Tensor
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
@@ -50,18 +51,39 @@ def get_cosine_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda)
 
 
-def _decay_groups(model: torch.nn.Module, weight_decay: float) -> list[dict[str, Any]]:
-    """No weight decay on 1-D params (biases, norms, gates) or the tied embedding."""
-    decay, no_decay, seen = [], [], set()
+def _param_groups(
+    model: torch.nn.Module,
+    weight_decay: float,
+    lr: float,
+    memory_lr_scale: float = 0.5,
+) -> list[dict[str, Any]]:
+    """Param groups: no decay on 1-D / embed; lower LR on memory + neuromodulator."""
+    mem_prefixes = ("fast_mem.", "slow_mem.", "neuromod.", "P_f.", "P_s.", "mem_scale", "slow_scale")
+    decay, no_decay, mem_decay, mem_no_decay, seen = [], [], [], [], set()
     for name, p in model.named_parameters():
         if not p.requires_grad or id(p) in seen:
             continue
         seen.add(id(p))
-        (no_decay if (p.ndim < 2 or name.startswith(("embed.", "slow_mem.M_s"))) else decay).append(p)
-    return [
-        {"params": decay, "weight_decay": weight_decay},
-        {"params": no_decay, "weight_decay": 0.0},
+        is_mem = name.startswith(mem_prefixes) or name in ("mem_scale", "slow_scale")
+        is_no_decay = p.ndim < 2 or name.startswith(("embed.", "slow_mem.M_s"))
+        if is_mem and is_no_decay:
+            mem_no_decay.append(p)
+        elif is_mem:
+            mem_decay.append(p)
+        elif is_no_decay:
+            no_decay.append(p)
+        else:
+            decay.append(p)
+    mem_lr = lr * float(memory_lr_scale)
+    groups: list[dict[str, Any]] = [
+        {"params": decay, "weight_decay": weight_decay, "lr": lr},
+        {"params": no_decay, "weight_decay": 0.0, "lr": lr},
     ]
+    if mem_decay:
+        groups.append({"params": mem_decay, "weight_decay": weight_decay, "lr": mem_lr})
+    if mem_no_decay:
+        groups.append({"params": mem_no_decay, "weight_decay": 0.0, "lr": mem_lr})
+    return groups
 
 
 class Trainer:
@@ -109,12 +131,25 @@ class Trainer:
         adamw_kw: dict[str, Any] = {"lr": tc.lr, "betas": (0.9, 0.95)}
         if self.device.type == "cuda":
             adamw_kw["fused"] = True  # one fused kernel for the whole update
-        self.optimizer = AdamW(_decay_groups(self.model, tc.weight_decay), **adamw_kw)
+        mem_scale = float(getattr(tc, "memory_lr_scale", 0.5) or 0.5)
+        self.optimizer = AdamW(
+            _param_groups(self.model, tc.weight_decay, tc.lr, mem_scale),
+            **adamw_kw,
+        )
         self.scheduler = get_cosine_schedule_with_warmup(
             self.optimizer,
             num_warmup_steps=tc.warmup_steps,
             num_training_steps=tc.max_steps,
         )
+        # EMA of weights for stabler eval (0 = off)
+        self.ema_decay = float(getattr(tc, "ema_decay", 0.0) or 0.0)
+        self._ema: dict[str, Tensor] | None = None
+        if self.ema_decay > 0.0:
+            self._ema = {
+                n: p.detach().float().clone()
+                for n, p in self.model.named_parameters()
+                if p.requires_grad
+            }
 
         # Data parallel: wrap AFTER the optimizer is built from the plain module's parameters.
         # `self.model` stays the plain module (meta, replay, export); `self._fwd` is what we call.
@@ -267,6 +302,7 @@ class Trainer:
                 self.optimizer.zero_grad(set_to_none=True)
             else:
                 self.optimizer.step()
+                self._ema_update()
             self.scheduler.step()
 
             self.global_step += 1
@@ -293,6 +329,9 @@ class Trainer:
                             device=self.device,
                         )
                     self.model.replay_slow(last_out.state["M"], S, tc.replay_eta)
+                    # Reset surprise budget so consolidation does not fire every step
+                    # after the first threshold crossing.
+                    self.model.meta.acknowledge_replay()
 
             if self.is_main and self.global_step % tc.log_every == 0:
                 dt = max(1e-9, time.time() - t0)
@@ -331,18 +370,48 @@ class Trainer:
         if self.dist:
             torch.distributed.barrier()
 
+    def _ema_update(self) -> None:
+        if not self._ema:
+            return
+        d = self.ema_decay
+        with torch.no_grad():
+            for n, p in self.model.named_parameters():
+                if n in self._ema and p.requires_grad:
+                    self._ema[n].mul_(d).add_(p.detach().float(), alpha=1.0 - d)
+
+    @contextlib.contextmanager
+    def _ema_weights(self):
+        """Temporarily swap model params to EMA for eval; restore after."""
+        if not self._ema:
+            yield
+            return
+        backup = {}
+        with torch.no_grad():
+            for n, p in self.model.named_parameters():
+                if n in self._ema:
+                    backup[n] = p.data.clone()
+                    p.data.copy_(self._ema[n].to(device=p.device, dtype=p.dtype))
+        try:
+            yield
+        finally:
+            with torch.no_grad():
+                for n, p in self.model.named_parameters():
+                    if n in backup:
+                        p.data.copy_(backup[n])
+
     @torch.no_grad()
     def evaluate(self, max_batches: int = 50) -> float:
         self.model.eval()
         total, n = 0.0, 0
-        for i, batch in enumerate(self.val_loader):
-            if i >= max_batches:
-                break
-            input_ids, targets = self._prep(batch)
-            with self._amp():
-                out = self.model(input_ids, targets=targets)
-            total += float(out.metrics["ce"])  # pure cross-entropy => ppl is meaningful
-            n += 1
+        with self._ema_weights():
+            for i, batch in enumerate(self.val_loader):
+                if i >= max_batches:
+                    break
+                input_ids, targets = self._prep(batch)
+                with self._amp():
+                    out = self.model(input_ids, targets=targets)
+                total += float(out.metrics["ce"])  # pure cross-entropy => ppl is meaningful
+                n += 1
         avg = total / max(1, n)
         logger.info("Validation CE: %.4f (ppl %.2f) on %d batches", avg, math.exp(min(avg, 20)), n)
         return avg

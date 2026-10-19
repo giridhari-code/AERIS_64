@@ -31,19 +31,21 @@ class ModelConfig:
 class TrainingConfig:
     batch_size: int = 8
     grad_accum_steps: int = 1      # effective batch = batch_size * grad_accum_steps
-    precision: str = "fp32"        # "fp32" | "bf16" (autocast; no GradScaler needed)
+    precision: str = "bf16"        # "fp32" | "bf16" (autocast; no GradScaler needed)
     seq_len: int = 256
-    lr: float = 1e-3
+    lr: float = 5e-4               # safer default with memory + error loss
     weight_decay: float = 0.01
-    warmup_steps: int = 100
+    warmup_steps: int = 200
     max_steps: int = 100_000
     grad_clip: float = 1.0
     lambda_err: float = 0.1
-    lambda_err_warmup_steps: int = 0  # v3 audit proposal: ramp lambda_err 0 -> value (0 = off, untested)
+    lambda_err_warmup_steps: int = 2000  # ramp lambda_err 0 → value (avoids early embed collapse)
     lambda_bal: float = 0.01
     replay_every: int = 75
     replay_eta: float = 0.02
     truncate_write_window: int = 24  # smaller segment → more slow slots (yaad granularity)
+    memory_lr_scale: float = 0.5   # fast/slow mem + neuromod get lr * scale
+    ema_decay: float = 0.999       # 0 = disable EMA; eval uses EMA weights when > 0
     device: str = "cuda"
     seed: int = 42
     log_every: int = 50

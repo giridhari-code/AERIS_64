@@ -9,9 +9,14 @@ from torch import Tensor
 
 class Dendrite(nn.Module):
     """
-    Causal local window over recent embeddings + delayed error injection.
+    Causal local window over *past* embeddings + delayed error injection.
 
-    d_t = tanh( sum_{j=0}^{w-1} c_j ⊙ x_{t-j} + b ) + γ ⊙ e_t
+    d_t = tanh( sum_{j=0}^{W-1} c_j ⊙ x_{t-1-j} + b ) + γ ⊙ e_t
+
+    The window is strictly causal: it uses the previous W embeddings only
+    (oldest first). The current token x_t is NOT included. This matches the
+    sequential ``forward`` path and keeps train (T>1 parallel) identical to
+    decode (T=1).
     """
 
     def __init__(self, d_model: int, window: int = 3):
@@ -23,10 +28,15 @@ class Dendrite(nn.Module):
         self.gamma = nn.Parameter(torch.ones(d_model) * 0.1)
 
     def window_features(self, xp: Tensor, T: int) -> Tensor:
-        """Token-parallel part: tanh(sum_j c_j * x_{t-j} + b) for ALL t at once.
+        """Token-parallel causal window: tanh(sum_j c_j * past + b) for all t.
 
-        ``xp`` = cat([x_hist (B, W, D), X (B, T, D)], dim=1) so len = W+T.
-        The window at step t matches the per-token loop (oldest first).
+        ``xp`` = cat([x_hist (B, W, D), X (B, T, D)], dim=1) → length W+T.
+
+        For position t the window is xp[t : t+W] (the W tokens *before* X_t):
+          t=0 → full x_hist
+          t=1 → x_hist[1:] + X[0]
+          ...
+        Never includes the current embedding X_t. Matches ``forward()``.
         """
         W = self.window
         need = W + T
@@ -35,9 +45,11 @@ class Dendrite(nn.Module):
                 f"dendrite.window_features: xp length {xp.size(1)} < W+T={need} "
                 f"(pass cat([x_hist, X], dim=1))"
             )
-        acc = self.coeffs[0] * xp[:, 1 : 1 + T]
+        # Causal past window (no +1 shift). Previously this started at index 1,
+        # which skipped the oldest history token and incorrectly pulled in X_t.
+        acc = self.coeffs[0] * xp[:, 0:T]
         for j in range(1, W):
-            acc = acc + self.coeffs[j] * xp[:, 1 + j : 1 + j + T]
+            acc = acc + self.coeffs[j] * xp[:, j : j + T]
         return torch.tanh(acc + self.bias)
 
     def with_error(self, base: Tensor, error: Tensor | None) -> Tensor:
@@ -55,7 +67,7 @@ class Dendrite(nn.Module):
         Returns:
             dendrite feature d_t of shape (batch, d_model)
         """
-        # Weighted sum over causal window
+        # Weighted sum over causal window (past only — same as window_features)
         # coeffs: (W, D), x_hist: (B, W, D)
         weighted = (self.coeffs.unsqueeze(0) * x_hist).sum(dim=1)  # (B, D)
         base = torch.tanh(weighted + self.bias)
