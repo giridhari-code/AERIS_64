@@ -2,7 +2,7 @@
 """Tokenize raw text into train.bin / val.bin (uint16) for 1B-scale training.
 
     pip install tokenizers numpy
-    python scripts/prepare_data.py --input "data/raw/*.txt" --out-dir data/tokens \
+    python scripts/data/prepare_data.py --input "data/raw/*.txt" --out-dir data/tokens \
         --vocab-size 32000 --val-frac 0.005
 
 What it guarantees (the old pipeline did none of this):

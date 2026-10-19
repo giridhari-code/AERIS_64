@@ -25,21 +25,18 @@ Niyam: training aur inference ka format bilkul same rakho (`System:` / `User:` /
 export PYTHONPATH=packages
 
 # 1) Pretraining — ~1M params, 1000 steps
-python -m sentinel.cli train \
-  --data data/demo/pretraining.txt \
-  --tokenizer char --preset demo_1m \
-  --steps 1000 --cosine \
-  --out checkpoints/demo_1m --product AERIS_64 --device cpu
+python scripts/data/prepare_data.py --input data/demo/pretraining.txt --out-dir data/tokens_demo --vocab-size 512
+PYTHONPATH=packages python -m sentinel.cli train --data-dir data/tokens_demo --output-dir runs/demo --device cpu --max-steps 1000
 
 # 2) SFT + preference (aligned checkpoint)
-python scripts/train/train_align.py \
+# REMOVED — use: python -m sentinel.cli train \
   --resume checkpoints/demo_1m \
   --sft data/demo/sft.txt data/demo/sft_tools.txt data/demo/sft_reasoning.txt data/demo/constitution.txt \
   --prefs data/demo/preferences.jsonl \
   --preset demo_1m --out checkpoints/demo_1m_sft --device cpu
 
 # 3) RLHF (reward -> dpo -> ppo)
-python scripts/train/train_rlhf.py \
+# REMOVED — RLHF scripts deleted; use cli train for LM only \
   --resume checkpoints/demo_1m_sft \
   --prefs data/demo/preferences.jsonl \
   --prompts data/demo/rl_prompts.txt \

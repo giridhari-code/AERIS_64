@@ -118,13 +118,22 @@ class SENTINELConfig:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SENTINELConfig":
+        """Build config from nested dict; ignore unknown keys (forward-compatible YAML)."""
+
+        def _filter(dc_cls: type, section: dict[str, Any] | None) -> dict[str, Any]:
+            raw = section or {}
+            if not isinstance(raw, dict):
+                return {}
+            fields = getattr(dc_cls, "__dataclass_fields__", {})
+            return {k: v for k, v in raw.items() if k in fields}
+
         return cls(
-            model=ModelConfig(**d.get("model", {})),
-            training=TrainingConfig(**d.get("training", {})),
-            data=DataConfig(**d.get("data", {})),
-            safety=SafetyConfig(**d.get("safety", {})),
-            ablation=AblationConfig(**d.get("ablation", {})),
-            logging=LoggingConfig(**d.get("logging", {})),
+            model=ModelConfig(**_filter(ModelConfig, d.get("model"))),
+            training=TrainingConfig(**_filter(TrainingConfig, d.get("training"))),
+            data=DataConfig(**_filter(DataConfig, d.get("data"))),
+            safety=SafetyConfig(**_filter(SafetyConfig, d.get("safety"))),
+            ablation=AblationConfig(**_filter(AblationConfig, d.get("ablation"))),
+            logging=LoggingConfig(**_filter(LoggingConfig, d.get("logging"))),
         )
 
 

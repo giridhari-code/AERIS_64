@@ -2,15 +2,15 @@
 
 Launch examples
 ---------------
-  # 1 GPU / CPU (no change)
-  PYTHONPATH=packages python scripts/train/train_company.py --data ... --out ...
+  # 1 GPU / CPU
+  PYTHONPATH=packages python -m sentinel.cli train --data-dir data/tokens --output-dir runs/exp1
 
   # 2+ GPUs
   PYTHONPATH=packages torchrun --standalone --nproc_per_node=2 \\
-    scripts/train/train_company.py --data ... --out ... --device cuda
+    -m sentinel.cli train --data-dir data/tokens --output-dir runs/exp1 --device cuda
 
-  # module entry
-  torchrun --nproc_per_node=4 -m sentinel.cli train --config ...
+  # with config
+  torchrun --nproc_per_node=4 -m sentinel.cli train --config configs/default.yaml --data-dir data/tokens
 """
 
 from __future__ import annotations
