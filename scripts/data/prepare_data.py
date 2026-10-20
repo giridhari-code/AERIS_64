@@ -93,7 +93,24 @@ def main() -> None:
                     n_train += 1
         print(f"chunks: train={n_train} val={n_val} duplicates_dropped={dup}")
         if n_val == 0:
-            sys.exit("validation split is empty; raise --val-frac or add data")
+            if n_train == 0:
+                sys.exit("no chunks after dedupe; add more input text")
+            # Guarantee a non-empty val split for tiny corpora (hash split can miss)
+            train_text = tr_path.read_text(encoding="utf-8")
+            parts = [c for c in train_text.split("\n\n<EOD>\n\n") if c.strip()]
+            if not parts:
+                sys.exit("validation split is empty and train text could not be re-split")
+            moved, rest = parts[0], parts[1:]
+            va_path.write_text(moved + "\n\n<EOD>\n\n", encoding="utf-8")
+            if rest:
+                tr_path.write_text("".join(p + "\n\n<EOD>\n\n" for p in rest), encoding="utf-8")
+                n_train = len(rest)
+            else:
+                # single unique chunk: keep it in train as well so train.bin is non-empty
+                tr_path.write_text(moved + "\n\n<EOD>\n\n", encoding="utf-8")
+                n_train = 1
+            n_val = 1
+            print(f"note: ensured val split from train (tiny corpus); train={n_train} val={n_val}")
 
         # tokenizer (train side only)
         tok_path = out / "tokenizer.json"

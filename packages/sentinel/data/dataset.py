@@ -98,7 +98,8 @@ class TokenDataset(Dataset):
         self.n_tokens = int(len(self.data))
         if self.n_tokens < self.seq_len + 1:
             raise ValueError(
-                f"File too short ({self.n_tokens} tokens) for seq_len={self.seq_len}: {path}"
+                f"File too short ({self.n_tokens} tokens) for seq_len={self.seq_len}: {path}. "
+                f"Lower --seq-len (e.g. 64 or 128) or add more tokenized data."
             )
 
     def __len__(self) -> int:
@@ -292,3 +293,13 @@ def build_dataloader(
 
 def estimate_tokens_per_step(batch_size: int, seq_len: int, world_size: int = 1) -> int:
     return int(batch_size) * int(seq_len) * max(1, int(world_size))
+
+
+def count_tokens(path: PathSpec, dtype: str = "uint16") -> int:
+    """Total tokens across one or more token files / a directory."""
+    total = 0
+    for f in _resolve_token_files(path):
+        dt = _infer_dtype(f, dtype) if dtype == "auto" else dtype
+        total += int(len(_open_mmap(f, dt)))
+    return total
+

@@ -57,18 +57,20 @@ class PipelineContext:
             config=self.cfg.model.__dict__.copy(),
             meta={"stage": name, "pipeline": True},
         )
-        # also torch checkpoint for resume
-        ckpt = out / "checkpoint.pt"
-        torch.save(
-            {
-                "model": self.model.state_dict(),
-                "config": self.cfg.to_dict(),
-                "stage": name,
-            },
-            ckpt,
-        )
+        # torch checkpoints for resume (multiple aliases so --resume is forgiving)
+        payload = {
+            "model": self.model.state_dict(),
+            "config": self.cfg.to_dict(),
+            "stage": name,
+        }
+        for alias in ("checkpoint.pt", "checkpoint_final.pt", "checkpoint_latest.pt"):
+            torch.save(payload, out / alias)
         if self.is_main:
-            logger.info("saved stage=%s → %s", name, out)
+            logger.info(
+                "saved stage=%s → %s (model.safetensors + checkpoint.pt|final|latest)",
+                name,
+                out,
+            )
         return out
 
     def freeze_as_ref(self) -> None:

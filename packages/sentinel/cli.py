@@ -92,6 +92,19 @@ def train_main(argv: list[str] | None = None) -> None:
         cfg.training.seed = args.seed
 
     setup_logging(cfg.logging.level)
+    try:
+        import safetensors  # noqa: F401
+    except ImportError:
+        logging.warning(
+            "safetensors not installed — checkpoint export may fall back to model.pt. "
+            "pip install safetensors (required for tied-embedding exports)."
+        )
+    try:
+        import tokenizers  # noqa: F401
+    except ImportError:
+        logging.warning(
+            "tokenizers not installed — prepare_data / production encode need: pip install tokenizers"
+        )
     from sentinel.training.distributed import cleanup, get_world_size, init_distributed_if_needed
     from sentinel.data.dataset import estimate_tokens_per_step
 
@@ -100,7 +113,18 @@ def train_main(argv: list[str] | None = None) -> None:
 
     if cfg.data.train_path is None:
         logging.error(
-            "No training data provided. Set data.train_path in config, --train-data, or --data-dir."
+            "No training data provided. Set data.train_path in config, --train-data, or --data-dir. "
+            "Raw .txt is not accepted here — run scripts/data/prepare_data.py first to create train.bin."
+        )
+        sys.exit(1)
+    # Early, clear error if path points at a folder without token bins
+    from pathlib import Path as _P
+    _tp = _P(cfg.data.train_path)
+    if _tp.is_dir() and not any(_tp.glob("*.bin")) and not any(_tp.glob("*.npy")):
+        logging.error(
+            "No .bin/.npy under %s. Tokenize first: "
+            "python scripts/data/prepare_data.py --input 'your_data/*.txt' --out-dir %s --vocab-size 8000",
+            _tp, _tp,
         )
         sys.exit(1)
 
@@ -127,13 +151,40 @@ def train_main(argv: list[str] | None = None) -> None:
         f"{tok_step:,}",
     )
 
+    # Estimate corpus size; auto-stream on tiny bins (map-style can explode RAM)
+    use_streaming = bool(args.streaming)
+    n_train_tok = 0
+    try:
+        from sentinel.data.dataset import count_tokens
+        n_train_tok = count_tokens(cfg.data.train_path, dtype=args.token_dtype)
+    except Exception as e:
+        logging.debug("token count probe failed: %s", e)
+    if n_train_tok > 0:
+        logging.info("Train corpus: ~%s tokens", f"{n_train_tok:,}")
+        if n_train_tok < 50_000:
+            logging.warning(
+                "Small corpus (~%s tokens). Expect high CE and weak generations until you "
+                "add much more text and train longer. Pipeline success ≠ an intelligent model.",
+                f"{n_train_tok:,}",
+            )
+            if not use_streaming:
+                use_streaming = True
+                logging.info("Auto-enabled --streaming for small corpus (safer on CPU/low RAM).")
+        if n_train_tok < 5_000_000 and cfg.training.max_steps < 2000:
+            logging.warning(
+                "max_steps=%d is low for ~%s tokens if you want usable quality; "
+                "increase steps and data for product models. 1B-class needs multi-GPU + billions of tokens (not Colab free).",
+                cfg.training.max_steps,
+                f"{n_train_tok:,}",
+            )
+
     train_loader = build_dataloader(
         cfg.data.train_path,
         seq_len=cfg.training.seq_len,
         batch_size=cfg.training.batch_size,
         num_workers=args.num_workers,
         dtype=args.token_dtype,
-        streaming=args.streaming,
+        streaming=use_streaming,
         stride=max(1, args.stride),
         shuffle_train=True,
     )

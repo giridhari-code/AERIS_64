@@ -35,6 +35,64 @@ DEFAULT_ORDER = [
 ]
 
 
+
+def _load_weights_into_model(model: torch.nn.Module, path: str | Path) -> None:
+    """Load weights from checkpoint_*.pt, model.pt, model.safetensors, or an export folder."""
+    path = Path(path)
+    if path.is_dir():
+        candidates = [
+            path / "model.safetensors",
+            path / "checkpoint.pt",
+            path / "checkpoint_final.pt",
+            path / "checkpoint_latest.pt",
+            path / "model.pt",
+        ]
+        candidates.extend(sorted(path.glob("checkpoint*.pt")))
+        found = next((c for c in candidates if c.is_file()), None)
+        if found is None:
+            raise FileNotFoundError(
+                f"No model.safetensors or checkpoint*.pt under directory: {path}"
+            )
+        path = found
+
+    if not path.is_file():
+        raise FileNotFoundError(f"resume path not found: {path}")
+
+    if path.suffix == ".safetensors":
+        try:
+            from safetensors.torch import load_file
+        except ImportError as e:
+            raise ImportError("pip install safetensors") from e
+        state = load_file(str(path))
+        model.load_state_dict(state, strict=False)
+        return
+
+    if path.suffix in {".pt", ".pth"}:
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+        if isinstance(ckpt, dict):
+            if any(isinstance(v, torch.Tensor) for v in ckpt.values()):
+                # flat or model-keyed state dict
+                state = ckpt.get("model", ckpt)
+                if isinstance(state, dict) and "state_dict" in state and not any(
+                    isinstance(v, torch.Tensor) for v in state.values()
+                ):
+                    state = state["state_dict"]
+            elif "model" in ckpt:
+                state = ckpt["model"]
+            elif "state_dict" in ckpt:
+                state = ckpt["state_dict"]
+            else:
+                state = ckpt
+        else:
+            raise ValueError(f"Unrecognized checkpoint format: {path}")
+        model.load_state_dict(state, strict=False)
+        return
+
+    raise ValueError(
+        f"Unsupported resume file type: {path} (use .pt, .safetensors, or export dir)"
+    )
+
+
 def run_pipeline(
     stages: Sequence[str] | None = None,
     config_path: str | Path | None = None,
@@ -52,15 +110,22 @@ def run_pipeline(
     """Run selected stages in order. Unknown stage names raise."""
     cfg = load_config(config_path)
     stage_cfg: dict[str, Any] = {}
-    order = list(stages) if stages else list(DEFAULT_ORDER)
+    # CLI --stages wins over pipeline YAML when provided
+    cli_stages = list(stages) if stages else None
+    order = list(cli_stages) if cli_stages else list(DEFAULT_ORDER)
 
     if pipeline_yaml:
         raw = yaml.safe_load(Path(pipeline_yaml).read_text(encoding="utf-8")) or {}
-        if raw.get("stages"):
+        if cli_stages is None and raw.get("stages"):
             order = list(raw["stages"])
+        elif cli_stages is not None and raw.get("stages"):
+            logger.info(
+                "CLI --stages overrides pipeline YAML stages (%s → %s)",
+                raw.get("stages"),
+                cli_stages,
+            )
         stage_cfg = raw.get("stage_cfg") or raw.get("stage") or {}
         if raw.get("model") or raw.get("training"):
-            # merge overlay
             from sentinel.config import SENTINELConfig as SC
 
             overlay = SC.from_dict(raw)
@@ -83,9 +148,7 @@ def run_pipeline(
 
     model = SENTINEL(cfg.model, cfg.safety)
     if resume_checkpoint:
-        ckpt = torch.load(resume_checkpoint, map_location="cpu", weights_only=False)
-        state = ckpt.get("model", ckpt)
-        model.load_state_dict(state, strict=False)
+        _load_weights_into_model(model, resume_checkpoint)
         logger.info("resumed weights from %s", resume_checkpoint)
     model.to(dev)
 
