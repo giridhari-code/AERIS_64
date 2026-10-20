@@ -1,47 +1,48 @@
-# SENTINEL default configuration (production)
-# All values are overridable via CLI or environment.
+# SENTINEL default = AERIS-109M production (~108.15M params)
+# Override paths via CLI: --train-data / --data-dir / --output-dir
 
 model:
-  d_model: 256
-  d_k: 64
-  d_v: 64
-  n_skills: 8
-  top_k: 2
+  d_model: 1024
+  d_k: 256
+  d_v: 256
+  n_skills: 17
+  top_k: 4
   k_max: 5
   dendrite_window: 3
-  vocab_size: 32000          # change to 65 for char-level
-  max_seq_len: 3072
+  vocab_size: 32000
+  max_seq_len: 2048
   tie_embeddings: true
-  dropout: 0.0
+  dropout: 0.05
 
 training:
-  batch_size: 8
-  seq_len: 256
-  lr: 5.0e-4                  # was 1e-3 — safer with memory + error loss
+  batch_size: 4
+  grad_accum_steps: 4
+  seq_len: 512
+  lr: 3.0e-4
   weight_decay: 0.01
-  warmup_steps: 200
-  max_steps: 100000
+  warmup_steps: 1000
+  max_steps: 50000
   grad_clip: 1.0
   lambda_err: 0.1
-  lambda_err_warmup_steps: 2000  # ramp error loss to avoid early embedding collapse
+  lambda_err_warmup_steps: 2000
   lambda_bal: 0.01
   replay_every: 75
   replay_eta: 0.02
-  truncate_write_window: 24   # truncated BPTT for fast write
-  memory_lr_scale: 0.5        # lower LR for fast/slow mem + neuromod
-  ema_decay: 0.999            # EMA weights for eval (0 = off)
-  device: "cuda"
+  truncate_write_window: 32
+  memory_lr_scale: 0.5
+  ema_decay: 0.999
+  device: cuda
   seed: 42
   log_every: 50
   eval_every: 500
   checkpoint_every: 2000
-  output_dir: "runs/sentinel_v2"
-  precision: "bf16"           # bf16 when CUDA available
+  output_dir: runs/aeris_109m
+  precision: bf16
 
 data:
-  train_path: null            # path to tokenized .bin or .npy
+  train_path: null
   val_path: null
-  tokenizer: "byte"           # "byte" | "hf" | "char"
+  tokenizer: hf
   hf_tokenizer_name: null
 
 safety:
@@ -49,16 +50,15 @@ safety:
   max_write_norm: 10.0
   max_memory_norm: 50.0
   gate_cap: 1.0
-  gate_floor: 0.05            # train-time min write gate (anti-collapse)
+  gate_floor: 0.05
   gate_target: 0.35
   lambda_gate: 0.01
   lambda_ent: 0.005
   anomaly_z_threshold: 4.0
   freeze_on_anomaly: false
   per_session_state: true
-  truncate_write_window: 24
+  truncate_write_window: 32
 
 logging:
-  level: "INFO"
+  level: INFO
   wandb: false
-  wandb_project: "neurofield-v2"

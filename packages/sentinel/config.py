@@ -156,8 +156,8 @@ def save_config(cfg: SENTINELConfig, path: str | Path) -> None:
         yaml.safe_dump(cfg.to_dict(), f, default_flow_style=False, sort_keys=False)
 
 
-def model_preset(name: str = "aeris_2m") -> ModelConfig:
-    """Load size preset (product default: aeris_2m)."""
+def model_preset(name: str = "aeris_109m") -> ModelConfig:
+    """Load size preset (product default: aeris_109m)."""
     import yaml
     path = Path(__file__).resolve().parents[2] / "configs" / "presets.yaml"
     if not path.is_file():
@@ -166,7 +166,7 @@ def model_preset(name: str = "aeris_2m") -> ModelConfig:
     raw = {}
     if path.is_file():
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    block = raw.get(name) or raw.get("aeris_2m") or (next(iter(raw.values())) if raw else {}) or {}
+    block = raw.get(name) or raw.get("aeris_109m") or (next(iter(raw.values())) if raw else {}) or {}
     fields = ModelConfig.__dataclass_fields__
     kwargs = {k: block[k] for k in fields if k in block}
     return ModelConfig(**kwargs)

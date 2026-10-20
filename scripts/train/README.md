@@ -1,83 +1,58 @@
 # Training (company standard)
 
-No demo paths. Pass your own data and tokenizer.
+**Product default: AERIS-109M (~108.15M params)** — `configs/aeris_109m.yaml` / `configs/default.yaml`
 
 ## Dependencies
 
 ```bash
-pip install -e .          # includes safetensors + tokenizers
-# or: pip install safetensors tokenizers
+pip install -e .
+# safetensors + tokenizers included
 ```
 
-**Colab:** always do both:
-
-```python
-import sys, os
-PKG = "/content/AERIS_64/packages"
-sys.path.insert(0, PKG)
-os.environ["PYTHONPATH"] = PKG
-```
-
-## 1) Tokenize
+## 1) Tokenize (vocab must match config: 32000)
 
 ```bash
 export PYTHONPATH=packages
 python scripts/data/prepare_data.py \
-  --input "/data/corpus/*.txt" \
+  --input "/data/raw/*.txt" \
   --out-dir /data/tokens \
-  --vocab-size 8000 \
-  --val-frac 0.05
+  --vocab-size 32000 \
+  --val-frac 0.01
 ```
 
-Tiny text: val split is auto-filled if hash split yields zero val chunks.
-
-## 2) Single-stage LM
+## 2) Pretrain 109M
 
 ```bash
 python -m sentinel.cli train \
-  --config configs/aeris_2m.yaml \
+  --config configs/aeris_109m.yaml \
   --train-data /data/tokens/train.bin \
   --val-data /data/tokens/val.bin \
-  --output-dir /runs/pretrain \
-  --precision bf16
+  --output-dir runs/aeris_109m \
+  --precision bf16 --device cuda
 ```
 
-Small bins automatically enable **streaming** (safer on CPU / low RAM).
+Effective batch ≈ `batch_size × grad_accum` (4×4=16). OOM → lower `seq_len` / batch.
 
-## 3) Multi-stage pipeline
+## 3) Pipeline stages
 
 ```bash
-python -m sentinel.cli pipeline --list-stages
-
 python -m sentinel.cli pipeline \
-  --config configs/aeris_2m.yaml \
+  --config configs/aeris_109m.yaml \
   --stages sft,dpo \
   --sft-data /data/sft.jsonl \
   --prefs /data/preferences.jsonl \
   --tokenizer-json /data/tokens/tokenizer.json \
-  --resume /runs/pretrain \
-  --output-dir /runs/align
+  --output-dir runs/align_109m
 ```
 
-`--resume` accepts: `checkpoint_*.pt`, `model.safetensors`, or an export **folder**.
-CLI `--stages` overrides pipeline YAML stages.
+## Optional small smoke only
 
-Stage folders save: `model.safetensors` + `checkpoint.pt` + `checkpoint_final.pt` + `checkpoint_latest.pt`.
+`configs/colab.yaml` — optional small GPU smoke only (not product default).
 
-## Quality expectations (not bugs)
+## Scale notes
 
-| Data / steps | Expected |
-|--------------|----------|
-| ~1k–30k words, few hundred steps | High CE, weak/garbage text |
-| Pipeline stages all green | Means code ran — **not** that the LM is smart |
-| Usable small product | Much more clean text + thousands of steps |
-| 1B-class base | Multi-GPU + **billions** of tokens — not Colab free |
-
-## Configs
-
-| File | Use |
-|------|-----|
-| `configs/colab.yaml` | T4 / ~1–2M |
-| `configs/aeris_2m.yaml` | ~2.25M product preset |
-| `configs/default.yaml` | Larger defaults |
-| `configs/pipeline/default.yaml` | Stage schedule |
+| Config | Params | Use |
+|--------|--------|-----|
+| aeris_109m / default | ~108M | Architecture proof + product path |
+| colab | small | Free Colab smoke only |
+| Future 3.4B | — | Multi-GPU + billions of tokens |

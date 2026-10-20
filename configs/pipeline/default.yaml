@@ -1,3 +1,4 @@
+# Pair with --config configs/aeris_109m.yaml (or configs/default.yaml)
 # Company multi-stage training pipeline
 # All data paths come from CLI flags or your own overlays — none are hardcoded here.
 #

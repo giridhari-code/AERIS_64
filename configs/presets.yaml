@@ -1,13 +1,13 @@
-# Only active product preset for current train path.
-# ~2.25M params @ vocab 8k (measured with tied embeddings).
+# Active product preset only.
 
-aeris_2m:
-  d_model: 160
-  d_k: 80
-  d_v: 80
-  n_skills: 8
-  top_k: 2
-  k_max: 4
+aeris_109m:
+  d_model: 1024
+  d_k: 256
+  d_v: 256
+  n_skills: 17
+  top_k: 4
+  k_max: 5
   dendrite_window: 3
-  max_seq_len: 256
+  vocab_size: 32000
+  max_seq_len: 2048
   dropout: 0.05
