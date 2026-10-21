@@ -53,3 +53,5 @@ data/pretrain_42m/**/*.txt
 data/pretrain_42m/**/*.jsonl
 checkpoints/
 
+bin/
+apps/0zcode/target/

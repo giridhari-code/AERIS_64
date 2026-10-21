@@ -1,0 +1,24 @@
+[package]
+name = "zeroz"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.70"
+description = "0z code — company-standard non-coding agent (terminal)"
+authors = ["Giridhari Karmakar <giriisdev@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ["agent", "cli", "terminal", "0z"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "0zcode"
+path = "src/main.rs"
+
+[lib]
+name = "zeroz"
+path = "src/lib.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -60,11 +60,6 @@ sentinel-train = "sentinel.cli:train_main"
 sentinel-eval  = "sentinel.cli:eval_main"
 sentinel-pipeline = "sentinel.cli:pipeline_main"
 sentinel-voice = "sentinel.voice.cli:main"
-sentinel-zeroz = "sentinel.zeroz.cli:main"
-0zcode = "sentinel.zeroz.cli:main"
-zeroz-serve = "sentinel.zeroz.server:main"
-zeroz = "sentinel.zeroz.cli:main"
-0zcode = "sentinel.zeroz.cli:main"
 
 [tool.setuptools.package-data]
 sentinel = ["serving/static/README.md"]
