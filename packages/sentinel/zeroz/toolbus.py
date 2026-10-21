@@ -107,6 +107,23 @@ def _handlers() -> dict[str, ToolSpec]:
     add("file_search", "Find files by name/query", file_search, {"query": "string"})
     add("rag", "Retrieve from knowledge base", rag, {"query": "string"})
     add("tool_search", "List/search available tools", tool_search, {"query": "string"})
+
+    def list_dir_tool(args: dict[str, Any]) -> str:
+        from sentinel.zeroz.workspace import list_dir, default_root
+        return list_dir(str(args.get("path") or "."), root=default_root())
+
+    def read_file_tool(args: dict[str, Any]) -> str:
+        from sentinel.zeroz.workspace import read_text_file
+        return read_text_file(str(args.get("path") or ""))
+
+    def project_context(args: dict[str, Any]) -> str:
+        from sentinel.zeroz.context import load_project_context
+        return load_project_context()
+
+    add("list_dir", "List directory under workspace", list_dir_tool, {"path": "string"})
+    add("read_file", "Read a text file (read-only)", read_file_tool, {"path": "string"})
+    add("project_context", "Summarize project root + key config files", project_context, {})
+
     return specs
 
 

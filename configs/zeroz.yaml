@@ -22,3 +22,6 @@ allowed_tools:
   - file_search
   - rag
   - tool_search
+  - list_dir
+  - read_file
+  - project_context

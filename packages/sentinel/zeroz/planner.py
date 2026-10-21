@@ -52,6 +52,19 @@ def build_plan(user_message: str) -> Plan:
     steps: list[PlanStep] = []
     n = 1
 
+    if re.search(r"\b(project|repo|codebase|workspace)\b.*(overview|structure|context)|what\s+is\s+this\s+(repo|project)", text, re.I):
+        steps.append(PlanStep(n, "project_context", {}, "project awareness"))
+        n += 1
+
+    if re.search(r"\b(list\s+(dir|directory|files)|ls\b|show\s+files)\b", text, re.I):
+        steps.append(PlanStep(n, "list_dir", {"path": "."}, "list workspace"))
+        n += 1
+
+    mread = re.search(r"\b(read|open|show)\s+(file\s+)?([\w./-]+\.\w+)", text, re.I)
+    if mread:
+        steps.append(PlanStep(n, "read_file", {"path": mread.group(3)}, "read file"))
+        n += 1
+
     if _GIT.search(text):
         cmd = "status"
         if re.search(r"\blog\b", text, re.I):

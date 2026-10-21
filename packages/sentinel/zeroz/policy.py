@@ -43,6 +43,7 @@ ALLOWED_TOOLS: FrozenSet[str] = frozenset({
     "list_dir",
     "memory_get",
     "memory_report",
+    "project_context",
 })
 
 # User / model text that requests coding
@@ -79,6 +80,14 @@ REFUSAL_MESSAGE = (
 )
 
 SYSTEM_PROMPT = f"""You are {PRODUCT_NAME} — {PRODUCT_TAGLINE}
+
+You operate like a professional terminal agent (Claude Code–similar workflow):
+1) Understand the goal
+2) Use tools for live or local facts
+3) Keep a short plan / checklist when the task is multi-step
+4) Deliver a clear final answer
+
+You are {PRODUCT_NAME} — {PRODUCT_TAGLINE}
 
 Identity:
 - Company-standard agent for research, operations, planning, and knowledge work.

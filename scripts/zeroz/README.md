@@ -1,49 +1,52 @@
-# 0z code — full company-standard agent
+# Open with: `0zcode`
 
-**Product:** 0z code  
-**Rule:** No programming source code (write / edit / execute).  
-**Loop:** Policy → Plan → ToolBus → Synthesize (optional LM).
+# 0z code — Claude Code–similar agent (zero coding)
 
-## Package
-
-```text
-packages/sentinel/zeroz/
-  policy.py      product policy + refusals
-  planner.py     multi-step tool plans
-  toolbus.py     allow-listed tool dispatch + schemas
-  workspace.py   safe read-only FS helpers
-  runtime.py     full agent turn
-  session.py     transcript + audit JSONL
-  server.py      FastAPI /v1/chat
-  cli.py         CLI
-configs/zeroz.yaml
-```
-
-## CLI
+Not a clone. **Similar workflow**: project context, plan, tools, todos, slash CLI.
 
 ```bash
 export PYTHONPATH=packages
-python -m sentinel.zeroz.cli --policy
-python -m sentinel.zeroz.cli --no-model "Weather in Mumbai?"
-python -m sentinel.zeroz.cli --no-model "write python code"   # refused
-python -m sentinel.zeroz.cli -i --config configs/zeroz.yaml
+# or: pip install -e .
+
+python -m sentinel.zeroz.cli -i --no-model
 ```
 
-## HTTP API
+## Interactive (similar to Claude Code)
+
+```
+0z> /help
+0z> /context
+0z> /tools
+0z> /plan Weather in Delhi and convert 10 USD to INR
+0z> /todo add Research SME AI pricing
+0z> /todos
+0z> Weather in Mumbai?
+```
+
+## Policy
+
+- **No** source code write / edit / execute
+- **Yes** research, weather, wiki, files read, git status, planning
+
+## HTTP
 
 ```bash
-pip install fastapi uvicorn pydantic
-export PYTHONPATH=packages
 python -m sentinel.zeroz.server
-# GET  /health
-# GET  /v1/policy
-# GET  /v1/tools
-# POST /v1/chat  {"message":"...","use_model":false}
+# POST /v1/chat
 ```
 
-## After 109M train (optional polish)
+
+## Install command name `0zcode`
 
 ```bash
-python -m sentinel.zeroz.cli --checkpoint runs/aeris_109m_pretrain/final \
-  --device cuda "Summarize private AI benefits for Indian SMEs"
+bash scripts/zeroz/install_0zcode.sh
+source ~/.bashrc   # or ~/.zshrc
+0zcode             # opens interactive agent
+0zcode "Weather in Delhi?"
+```
+
+Or from repo without install:
+
+```bash
+./bin/0zcode
 ```

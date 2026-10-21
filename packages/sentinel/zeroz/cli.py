@@ -1,8 +1,8 @@
-"""0z code CLI — company-standard entrypoint.
+"""0z code CLI — Claude Code–similar interactive agent (no coding).
 
 Usage:
-  python -m sentinel.zeroz.cli "What is the weather in Delhi?"
-  python -m sentinel.zeroz.cli --config configs/zeroz.yaml -i
+  python -m sentinel.zeroz.cli -i
+  python -m sentinel.zeroz.cli --no-model "Weather in Delhi?"
   python -m sentinel.zeroz.cli --policy
 """
 
@@ -15,9 +15,12 @@ import sys
 from typing import Optional
 
 from sentinel.zeroz.config import load_zeroz_config
+from sentinel.zeroz.context import load_project_context
 from sentinel.zeroz.policy import PRODUCT_NAME, PRODUCT_TAGLINE, SYSTEM_PROMPT
 from sentinel.zeroz.runtime import build_generate_fn_from_checkpoint, run_zeroz
 from sentinel.zeroz.session import ZeroZSession
+from sentinel.zeroz.todos import TodoList
+from sentinel.zeroz.toolbus import ToolBus
 
 
 def _setup_logging(level: str) -> None:
@@ -27,27 +30,49 @@ def _setup_logging(level: str) -> None:
     )
 
 
+def _print_help_interactive() -> None:
+    print(
+        """
+Slash commands (Claude Code–similar):
+  /help       this help
+  /tools      list allow-listed tools
+  /policy     product policy
+  /context    project root + key files
+  /todos      show session todos
+  /todo add <text>
+  /todo done <id>
+  /plan <goal>   show tool plan only (no execute)
+  /clear      clear session transcript
+  /quit       exit
+""".strip()
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     p = argparse.ArgumentParser(
         prog="0z",
-        description=f"{PRODUCT_NAME} — {PRODUCT_TAGLINE}",
+        description=f"{PRODUCT_NAME} — {PRODUCT_TAGLINE} (Claude Code–similar, zero coding)",
     )
-    p.add_argument("-c", "--config", default=None, help="configs/zeroz.yaml")
-    p.add_argument("--checkpoint", default=None, help="optional SENTINEL export dir")
+    p.add_argument("-c", "--config", default=None)
+    p.add_argument("--checkpoint", default=None)
     p.add_argument("--device", default=None)
     p.add_argument("--audit-dir", default=None)
-    p.add_argument("--no-model", action="store_true", help="tools + templates only")
+    p.add_argument("--no-model", action="store_true")
     p.add_argument("--metrics", action="store_true")
     p.add_argument("-i", "--interactive", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
-    p.add_argument("--policy", action="store_true", help="print system policy and exit")
-    p.add_argument("message", nargs="*", default=None, help="user message words")
+    p.add_argument("--policy", action="store_true")
+    p.add_argument("--context", action="store_true", help="print project context and exit")
+    p.add_argument("message", nargs="*", default=None)
 
     args = p.parse_args(argv)
     _setup_logging("DEBUG" if args.verbose else "WARNING")
 
     if args.policy:
         print(SYSTEM_PROMPT)
+        raise SystemExit(0)
+    if args.context:
+        print(load_project_context())
         raise SystemExit(0)
 
     cfg = load_zeroz_config(args.config)
@@ -65,11 +90,8 @@ def main(argv: Optional[list[str]] = None) -> None:
         gen = build_generate_fn_from_checkpoint(cfg.checkpoint, device=cfg.device)
 
     session = ZeroZSession()
+    todos = TodoList()
     text = " ".join(args.message).strip() if args.message else ""
-
-    if not text and not args.interactive:
-        p.print_help()
-        raise SystemExit(2)
 
     def _one(msg: str) -> None:
         result = run_zeroz(msg, cfg=cfg, session=session, generate_fn=gen)
@@ -78,11 +100,71 @@ def main(argv: Optional[list[str]] = None) -> None:
             print("---", file=sys.stderr)
             print(json.dumps(result.metrics(), indent=2), file=sys.stderr)
 
+    def _handle_slash(line: str) -> bool:
+        """Return True if handled as slash command."""
+        if not line.startswith("/"):
+            return False
+        parts = line.split(maxsplit=2)
+        cmd = parts[0].lower()
+        if cmd in ("/quit", "/exit", "/q"):
+            raise SystemExit(0)
+        if cmd in ("/help", "/?"):
+            _print_help_interactive()
+            return True
+        if cmd == "/tools":
+            bus = ToolBus(allowed=set(cfg.allowed_tools))
+            for s in bus.schemas():
+                print(f"  - {s['name']}: {s['description']}")
+            return True
+        if cmd == "/policy":
+            print(SYSTEM_PROMPT)
+            return True
+        if cmd == "/context":
+            print(load_project_context())
+            return True
+        if cmd == "/todos":
+            print(todos.render())
+            return True
+        if cmd == "/todo":
+            if len(parts) < 2:
+                print("usage: /todo add <text> | /todo done <id>")
+                return True
+            sub = parts[1].lower()
+            rest = parts[2] if len(parts) > 2 else ""
+            if sub == "add" and rest:
+                it = todos.add(rest)
+                print(f"added #{it.id}")
+            elif sub == "done" and rest.isdigit():
+                ok = todos.set_status(int(rest), "done")
+                print("ok" if ok else "not found")
+            else:
+                print("usage: /todo add <text> | /todo done <id>")
+            return True
+        if cmd == "/plan":
+            from sentinel.zeroz.planner import build_plan
+
+            goal = line[len("/plan") :].strip() or text
+            plan = build_plan(goal)
+            print(json.dumps(plan.to_dict(), indent=2, ensure_ascii=False))
+            return True
+        if cmd == "/clear":
+            session.turns.clear()
+            print("session cleared")
+            return True
+        print(f"unknown command {cmd}. /help")
+        return True
+
+    if not text and not args.interactive:
+        p.print_help()
+        raise SystemExit(2)
+
     if args.interactive:
         print(f"{PRODUCT_NAME} — {PRODUCT_TAGLINE}")
-        print("Type quit/exit to leave. Coding requests are refused by policy.\n")
+        print("Claude Code–similar agent · coding disabled by policy")
+        print("Type /help for slash commands. quit/exit to leave.\n")
         if text:
-            _one(text)
+            if not _handle_slash(text):
+                _one(text)
         while True:
             try:
                 line = input("0z> ").strip()
@@ -93,10 +175,15 @@ def main(argv: Optional[list[str]] = None) -> None:
                 continue
             if line.lower() in ("quit", "exit", "q"):
                 break
+            if _handle_slash(line):
+                continue
             _one(line)
         raise SystemExit(0)
 
-    _one(text)
+    if text.startswith("/"):
+        _handle_slash(text)
+    else:
+        _one(text)
     raise SystemExit(0)
 
 
