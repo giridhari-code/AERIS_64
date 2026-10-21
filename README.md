@@ -215,3 +215,6 @@ cd apps/0zcode && cargo build --release && ./target/release/0zcode
 
 See [apps/0zcode/README.md](apps/0zcode/README.md).
 
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 5 deployables, API spine, tool tiers.

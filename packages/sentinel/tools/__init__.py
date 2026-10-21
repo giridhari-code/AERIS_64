@@ -19,10 +19,13 @@ from sentinel.tools.image_generation import image_generation
 from sentinel.tools.computer_use import computer_use
 from sentinel.tools.mcp_support import mcp_list_tools, mcp_call_tool
 from sentinel.tools.config import ToolsConfig, load_tools_config
+from sentinel.tools.dispatch import run_tool, known_tool_names
 from sentinel.tools.limits import ToolLimitError, max_tools_per_request, enforce_tool_limit
 
 
 __all__ = [
+    "run_tool",
+    "known_tool_names",
     "list_mcp_tools",
     "tool_schemas",
     "enrich_prompt_with_tools",

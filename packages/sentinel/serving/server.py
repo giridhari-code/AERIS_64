@@ -84,7 +84,8 @@ from sentinel.serving.chat_history import (
 
 from sentinel.serving.user_memory import UserMemoryStore, cap_slow_norm
 from sentinel.tools.orchestrate import enrich_prompt_with_tools
-from sentinel.tools.catalog import list_mcp_tools
+from sentinel.tools.catalog import list_mcp_tools, tool_schemas
+from sentinel.tools.dispatch import run_tool, known_tool_names
 from sentinel.tools.weather import weather_report
 from sentinel.tools.web_search import web_search_report
 from sentinel.tools.timeutil import now_report
@@ -1891,6 +1892,48 @@ def create_app(
     def tools_mcp_list(api_key: Optional[str] = Depends(require_api_key)):
         """MCP-style tools/list payload for clients and agents."""
         return list_mcp_tools()
+
+    @app.get("/v1/tools")
+    async def tools_catalog(_key: Optional[str] = Depends(require_api_key)):
+        """Full tool catalog (schemas + dispatch names + tiers) for clients and agents."""
+        from sentinel.tools.tiers import is_allowed, max_allowed_tier, tier_of
+
+        schemas = tool_schemas()
+        names = known_tool_names()
+        return {
+            "tools": schemas,
+            "count": len(schemas),
+            "dispatch": names,
+            "max_tier": max_allowed_tier(),
+            "allowed": [n for n in names if is_allowed(n)],
+            "tiers": {n: tier_of(n) for n in names},
+        }
+
+    @app.post("/v1/tools/call")
+    async def tools_call(
+        request: Request,
+        _key: Optional[str] = Depends(require_api_key),
+    ):
+        """Execute any registered tool: {\"name\": \"weather\", \"arguments\": {...}}."""
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body") from None
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail="body must be object")
+        name = body.get("name") or body.get("tool")
+        if not name:
+            raise HTTPException(status_code=422, detail="name required")
+        args = body.get("arguments") if isinstance(body.get("arguments"), dict) else {}
+        # allow flat fields
+        for k, v in body.items():
+            if k in ("name", "tool", "arguments"):
+                continue
+            args.setdefault(k, v)
+        result = run_tool(str(name), args)
+        status = 200 if result.get("ok") else 400
+        from fastapi.responses import JSONResponse
+        return JSONResponse(result, status_code=status)
 
     @app.post("/v1/rag/retrieve")
     def rag_retrieve_api(body: dict, api_key: Optional[str] = Depends(require_api_key)):
