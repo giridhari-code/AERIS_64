@@ -195,3 +195,13 @@ If you use this code or report:
 ## Component reference
 
 Har module ka order + kaam: [docs/COMPONENTS_FULL_GUIDE.md](docs/COMPONENTS_FULL_GUIDE.md).
+
+
+## Voice (Indo-Voice-3.0)
+
+Speech-to-speech on SENTINEL lives in a companion repo (not vendored here):
+
+- **https://github.com/giridhari-code/indo-voice-3.0**
+- Wire a trained checkpoint: `export INDO_CHECKPOINT=runs/.../final`
+- Docs: [docs/guides/VOICE_INDO.md](docs/guides/VOICE_INDO.md)
+

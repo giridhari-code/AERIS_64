@@ -56,3 +56,16 @@ python -m sentinel.cli pipeline \
 | aeris_109m / default | ~108M | Architecture proof + product path |
 | colab | small | Free Colab smoke only |
 | Future 3.4B | — | Multi-GPU + billions of tokens |
+
+
+## Voice (JARVIS-style speech)
+
+After pretrain/SFT checkpoints exist, use companion repo:
+
+- https://github.com/giridhari-code/indo-voice-3.0
+- Guide: [docs/guides/VOICE_INDO.md](../../docs/guides/VOICE_INDO.md)
+
+```bash
+export INDO_CHECKPOINT=$PWD/runs/aeris_109m_pretrain/final
+# then in indo-voice-3.0: python -m sentinel.voice.cli serve
+```

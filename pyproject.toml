@@ -33,6 +33,14 @@ dev = [
 data = [
     "tokenizers>=0.15",
 ]
+voice = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "websockets>=12.0",
+    "python-dotenv>=1.0",
+    "pydantic>=2.5",
+]
+
 serve = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
@@ -51,6 +59,7 @@ all = [
 sentinel-train = "sentinel.cli:train_main"
 sentinel-eval  = "sentinel.cli:eval_main"
 sentinel-pipeline = "sentinel.cli:pipeline_main"
+sentinel-voice = "sentinel.voice.cli:main"
 
 [tool.setuptools.package-data]
 sentinel = ["serving/static/README.md"]
