@@ -205,3 +205,14 @@ Speech-to-speech on SENTINEL lives in a companion repo (not vendored here):
 - Wire a trained checkpoint: `export INDO_CHECKPOINT=runs/.../final`
 - Docs: [docs/guides/VOICE_INDO.md](docs/guides/VOICE_INDO.md)
 
+## 0z code (non-coding agent)
+
+Company-standard agent loop for research / ops / knowledge — **no source code generation**.
+
+```bash
+export PYTHONPATH=packages
+python -m sentinel.zeroz.cli --no-model "Weather in Delhi?"
+python -m sentinel.zeroz.cli -i --config configs/zeroz.yaml
+```
+
+See `scripts/zeroz/README.md` and `packages/sentinel/zeroz/`.

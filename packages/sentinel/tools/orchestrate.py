@@ -134,7 +134,10 @@ def _wiki_topic(prompt: str) -> str:
     return p.strip()[:80] or prompt[:80]
 
 
-def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
+def enrich_prompt_with_tools(
+    prompt: str,
+    allowed_tools: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+) -> tuple[str, Optional[str]]:
     if not tools_enabled() or not (prompt or "").strip():
         return prompt, None
 
@@ -192,8 +195,12 @@ def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
         notes.append(web_search_report(p, max_results=4))
 
 
-    if _CODE_EXEC.search(p):
-        # Extract fenced code if present
+    def _allow(name: str) -> bool:
+        if allowed_tools is None:
+            return True
+        return name in set(allowed_tools)
+
+    if _CODE_EXEC.search(p) and _allow("code_execution"):
         mcode = re.search(r"```(?:python)?\s*([\s\S]+?)```", p)
         code = mcode.group(1).strip() if mcode else ""
         if code:
@@ -201,8 +208,7 @@ def enrich_prompt_with_tools(prompt: str) -> tuple[str, Optional[str]]:
         else:
             notes.append("CodeExecution: provide Python code in a ```python block.")
 
-    if _BASH.search(p) and not _CODE_EXEC.search(p):
-        # Take first backtick command or whole prompt as soft hint
+    if _BASH.search(p) and not _CODE_EXEC.search(p) and _allow("bash"):
         mcmd = re.search(r"`([^`]+)`", p)
         cmd = mcmd.group(1).strip() if mcmd else ""
         if cmd:

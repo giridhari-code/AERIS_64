@@ -125,7 +125,8 @@ def _run_enrichment(user_text: str, cfg: AgentConfig) -> tuple[str, Optional[str
     events: list[ToolEvent] = []
     t0 = time.perf_counter()
     try:
-        enriched, block = enrich_prompt_with_tools(user_text)
+        allowed = set(cfg.allowed_tools) if cfg.allowed_tools else None
+        enriched, block = enrich_prompt_with_tools(user_text, allowed_tools=allowed)
         ms = (time.perf_counter() - t0) * 1000
         if block:
             events.append(ToolEvent("enrich_tools", True, block[:2000], ms))
