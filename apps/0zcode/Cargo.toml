@@ -1,14 +1,12 @@
 [package]
 name = "zeroz"
-version = "1.0.0"
+version = "1.2.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.74"
 description = "0z code — company-standard non-coding agent (terminal)"
 authors = ["Giridhari Karmakar <giriisdev@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-keywords = ["agent", "cli", "terminal", "0z"]
-categories = ["command-line-utilities"]
 
 [[bin]]
 name = "0zcode"
@@ -17,6 +15,11 @@ path = "src/main.rs"
 [lib]
 name = "zeroz"
 path = "src/lib.rs"
+
+[dependencies]
+crossterm = "=0.27.0"
+ratatui = "=0.26.3"
+tokio = { version = "=1.36.0", features = ["rt-multi-thread", "sync", "time", "macros"] }
 
 [profile.release]
 lto = true

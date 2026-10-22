@@ -12,9 +12,17 @@ pub struct ToolOutput {
 }
 
 impl ToolOutput {
+    /// Plain body lines for TUI / one-shot (no box-drawing).
     pub fn render(&self) -> String {
-        let bar = "─".repeat(36);
-        format!("┌ {} {bar}\n{}\n└{bar}", self.name, self.body)
+        self.body
+            .lines()
+            .map(|l| {
+                let s = l.trim().trim_start_matches('│').trim();
+                s.to_string()
+            })
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 

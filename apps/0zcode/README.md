@@ -6,22 +6,26 @@
 |--|--|
 | Binary | `0zcode` |
 | Crate | `zeroz` |
-| Version | 1.0.0 |
-| Dependencies | **Rust std only** (no crates.io deps) |
+| Version | 1.2.0 |
+| UI | ratatui + crossterm + tokio |
 | Policy | No code write / edit / execute |
 
-## Build & test
+## Architecture
 
-```bash
-cd apps/0zcode
-cargo test
-cargo build --release
-./target/release/0zcode --version
+```text
+UI (ratatui)  --UiEvent-->  agent worker (spawn_blocking)
+     ^                         |
+     +-- AgentUpdate (gen id) -+
+
+Tools / policy / http stay separate from UI.
+Cancel bumps request_gen; stale updates are dropped.
 ```
 
 ## Install
 
 ```bash
+cd apps/0zcode
+cargo build --release
 cargo install --path .
 ```
 
@@ -30,80 +34,63 @@ cargo install --path .
 ```text
 0zcode                         # interactive TUI
 0zcode "Weather in Mumbai?"
-0zcode "10 USD to INR"
 0zcode "write python code"     # policy refuse (exit 2)
 0zcode tools
 0zcode --version
 ```
 
-### Interactive
+### Keybindings
 
-```text
- ╭───╮
- │ ◉ ◉ │
- 0zcode  v1.0.0
- …
+| Key | Action |
+|-----|--------|
+| Enter | send line |
+| Esc | deny permission → cancel in-flight → quit |
+| Ctrl+C | quit |
+| Tab | complete `/` command or `@` path |
+| y / a / n | network allow once / always / deny |
 
-❯ weather in Delhi
-┌ weather ──────────────────────────
-│ …
-└──────────────────────────────────
+### Slash commands
+
+`/help` `/clear` `/model` `/tools` `/mcp` `/status` `/compact` `/resume` `/config` `/quit`
+
+### Network permission
+
+Weather, search, wiki, FX, github, crypto prompts: **y** / **a** / **n**.
+
+### Sessions
+
+Saved under `~/.local/share/0zcode/sessions/last.jsonl`  
+`/resume` reloads · `/compact` keeps last 40 messages.
+
+### Theme
+
+`blood and ash` (default).  
+`ZEROZ_THEME=light` · `ZEROZ_COLOR=16` · `NO_COLOR=1`
+
+### Config
+
+`~/.config/0zcode/config.toml` or `ZEROZ_CONFIG`
+
+```toml
+model_label = "local / tools-first"
+offline = false
+color = true
+http_timeout_secs = 12
 ```
 
-Slash: `/help` `/tools` `/status` `/version` `/clear` `/quit`
-
-## Configuration (env)
-
-| Variable | Meaning |
-|----------|---------|
-| `ZEROZ_HTTP_TIMEOUT_SECS` | HTTP timeout 1–60 (default 12) |
-| `ZEROZ_MAX_OUTPUT_CHARS` | Tool output clamp (default 8000) |
-| `ZEROZ_MODEL_LABEL` | TUI display label only |
-| `ZEROZ_USER_AGENT` | HTTP User-Agent override |
-| `ZEROZ_NO_COLOR` / `NO_COLOR` | disable ANSI |
-| `ZEROZ_COLOR=1` | force ANSI on |
-| `ZEROZ_OFFLINE=1` | calc + meta only (no network) |
-| `ZEROZ_HISTORY_SIZE` | REPL history cap |
-| `ZEROZ_CONFIG` | path to config.toml |
-
-## Architecture
-
-```text
-main → agent::handle
-         ├─ policy (code refuse)
-         ├─ slash meta (/help, /tools, …)
-         ├─ route (deterministic keywords)
-         └─ tools (HTTP JSON APIs, std only)
-tui  → ANSI chrome (logo, boxes, status)
-```
-
-## Brand
-
-- `assets/logo.svg` — app icon  
-- `assets/logo-mark.txt` — plain-text mark  
-- TUI robot glyph in `src/tui.rs`
-
-## Exit codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | success |
-| 2 | policy refusal (coding request) |
-
-## License
-
-MIT — see repository root.
-
-
-## Config file
+## Test
 
 ```bash
-mkdir -p ~/.config/0zcode
-cp assets/config.example.toml ~/.config/0zcode/config.toml
+cargo test
+cargo test -- --nocapture   # snapshot buffer dumps
+cargo clippy --all-targets
 ```
 
-## Smoke
+## CI
 
-```bash
-./scripts/zeroz/smoke_0zcode.sh
-```
+`.github/workflows/0zcode.yml` — fmt, clippy, test, release build.
+
+## Non-goals
+
+- Source code generation or shell execution
+- Fake LLM token streaming (tools-first progress only)
