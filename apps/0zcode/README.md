@@ -5,7 +5,7 @@
 | | |
 |--|--|
 | Binary | `0zcode` |
-| Version | 1.0.0 |
+| Version | 1.0.0 (TUI chrome + logo assets) |
 | Dependencies | **none** (Rust std only) |
 | Policy | No code write / execute |
 
@@ -70,3 +70,13 @@ Modules: `policy`, `agent`, `tools`, `http`, `config`, `error`, `tui`.
 ## License
 
 MIT — see repository root.
+
+## Brand / TUI
+
+- Terminal chrome: `src/tui.rs` (robot mark, header, prompts, tool boxes)
+- Logo SVG: `assets/logo.svg`
+- Text mark: `assets/logo-mark.txt`
+
+```bash
+ZEROZ_MODEL_LABEL="Claude 3.5 Sonnet" 0zcode   # optional display label
+```

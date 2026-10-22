@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 use zeroz::agent::handle;
 use zeroz::config::Config;
-use zeroz::policy::{banner_line, refusal_message};
+use zeroz::policy::refusal_message;
 use zeroz::tools;
 use zeroz::tui::Theme;
 use zeroz::VERSION;
@@ -50,9 +50,9 @@ fn main() -> ExitCode {
 }
 
 fn print_help() {
-    println!("{}", banner_line());
+    println!("0zcode {VERSION} — Agentic work. Zero code.");
     println!(
-        "\nUsage:\n  0zcode                 interactive terminal\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv:\n  ZEROZ_HTTP_TIMEOUT_SECS   default 12\n  ZEROZ_NO_COLOR            disable ANSI\n  NO_COLOR                  disable ANSI\n"
+        "\nUsage:\n  0zcode                 interactive TUI\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv:\n  ZEROZ_HTTP_TIMEOUT_SECS   default 12\n  ZEROZ_MODEL_LABEL         header model name\n  ZEROZ_NO_COLOR / NO_COLOR disable ANSI\n"
     );
 }
 
@@ -60,6 +60,9 @@ fn run_repl(cfg: &Config) -> ExitCode {
     let theme = Theme::from_config(cfg);
     theme.clear_screen();
     theme.print_header();
+
+    let model_label =
+        env::var("ZEROZ_MODEL_LABEL").unwrap_or_else(|_| "local / tools-first".into());
 
     let stdin = io::stdin();
     loop {
@@ -73,6 +76,28 @@ fn run_repl(cfg: &Config) -> ExitCode {
         if line.is_empty() {
             continue;
         }
+
+        let lower = line.to_lowercase();
+        match lower.as_str() {
+            "/help" | "?" | "help" => {
+                theme.print_help_panel();
+                continue;
+            }
+            "/status" | "status" => {
+                theme.print_status(&model_label, 0, "agent (no code)");
+                continue;
+            }
+            "/model" | "model" => {
+                theme.print_assistant(&format!(
+                    "Active label: {model_label}\nSet ZEROZ_MODEL_LABEL to change the display name."
+                ));
+                println!();
+                continue;
+            }
+            _ => {}
+        }
+
+        theme.print_user(line);
         let r = handle(line, cfg);
         if r.text == "__QUIT__" {
             println!("bye.");
@@ -83,7 +108,15 @@ fn run_repl(cfg: &Config) -> ExitCode {
             theme.print_header();
             continue;
         }
-        println!("\n{}\n", r.text);
+        if r.refused {
+            theme.print_err(&r.text);
+        } else if !r.tool_names.is_empty() {
+            let name = r.tool_names.join("+");
+            theme.print_tool_box(&name, &r.text);
+        } else {
+            theme.print_assistant(&r.text);
+        }
+        println!();
     }
     ExitCode::SUCCESS
 }

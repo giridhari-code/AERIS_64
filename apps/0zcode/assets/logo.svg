@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="0zcode">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="#0b0f19"/>
+  <!-- robot head -->
+  <rect x="128" y="120" width="256" height="200" rx="40" fill="url(#g)"/>
+  <circle cx="200" cy="200" r="28" fill="#0b0f19"/>
+  <circle cx="312" cy="200" r="28" fill="#0b0f19"/>
+  <circle cx="200" cy="200" r="12" fill="#67e8f9"/>
+  <circle cx="312" cy="200" r="12" fill="#67e8f9"/>
+  <path d="M220 260 Q256 290 292 260" stroke="#0b0f19" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <!-- body stem -->
+  <rect x="236" y="320" width="40" height="48" rx="8" fill="url(#g)"/>
+  <!-- wordmark -->
+  <text x="256" y="430" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="56" font-weight="700" fill="#e2e8f0">0z</text>
+</svg>
