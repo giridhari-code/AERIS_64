@@ -1,4 +1,5 @@
 //! 0zcode TUI — Claude Code–style terminal chrome (ANSI only, no extra crates).
+use std::io::{self, Write};
 
 use crate::config::Config;
 use crate::policy::{PRODUCT_NAME, PRODUCT_TAGLINE, PRODUCT_VERSION};
@@ -125,6 +126,55 @@ impl Theme {
         println!("{} {}", self.paint("31;1", "✖"), self.paint("31", msg));
     }
 
+    pub fn print_progress(&self, label: &str) {
+        // Same-line progress; caller should print newline after work finishes.
+        print!("{} {}", self.paint("90", "…"), self.paint("90", label));
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+    }
+
+    pub fn clear_progress_line(&self) {
+        print!("\r\x1b[2K");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+    }
+
+    pub fn print_status_rich(
+        &self,
+        model: &str,
+        mode: &str,
+        offline: bool,
+        color: bool,
+        turns: usize,
+        last_tool: &str,
+        uptime_secs: u64,
+        config_path: &str,
+    ) {
+        println!();
+        println!("{}", self.paint("90", "─".repeat(48).as_str()));
+        println!("{}", self.paint("37;1", " status"));
+        println!("  {} {}", self.paint("90", "model"), self.paint("37", model));
+        println!("  {} {}", self.paint("90", "workspace"), self.paint("36", &self.cwd));
+        println!("  {} {}", self.paint("90", "mode"), self.paint("37", mode));
+        println!(
+            "  {} {}",
+            self.paint("90", "offline"),
+            self.paint(if offline { "33" } else { "32" }, if offline { "yes" } else { "no" })
+        );
+        println!(
+            "  {} {}",
+            self.paint("90", "color"),
+            self.paint("37", if color { "on" } else { "off" })
+        );
+        println!("  {} {}", self.paint("90", "history turns"), self.paint("37", &turns.to_string()));
+        println!(
+            "  {} {}",
+            self.paint("90", "last tool"),
+            self.paint("37", if last_tool.is_empty() { "—" } else { last_tool })
+        );
+        println!("  {} {}s", self.paint("90", "uptime"), self.paint("37", &uptime_secs.to_string()));
+        println!("  {} {}", self.paint("90", "config"), self.paint("90", config_path));
+        println!("{}", self.paint("90", "─".repeat(48).as_str()));
+    }
+
     pub fn print_status(&self, model: &str, files: u32, mode: &str) {
         println!();
         println!(
@@ -143,22 +193,32 @@ impl Theme {
     }
 
     pub fn print_help_panel(&self) {
-        let h = self.paint("37;1", "0zcode — commands");
+        let h = self.paint("37;1", "0zcode — shortcuts");
         println!("\n{h}\n");
         let rows = [
-            ("/help", "Show this help"),
-            ("/tools", "List research tools"),
-            ("/history", "This session Q&A"),
-            ("/status", "Session / workspace status"),
-            ("/model", "Show active model label"),
-            ("/version", "Version string"),
-            ("/clear", "Clear screen"),
-            ("/quit", "Exit"),
-            ("?", "Shortcuts (same as /help)"),
+            ("?", "/help", "This panel"),
+            ("", "/tools", "List tools"),
+            ("", "/history", "Session Q&A"),
+            ("", "/status", "Rich session status"),
+            ("", "/copy", "Save last reply to file"),
+            ("", "/model", "Display model label"),
+            ("", "/version", "Version banner"),
+            ("", "/clear", "Clear screen + history mark"),
+            ("q", "/quit", "Exit"),
         ];
-        for (cmd, desc) in rows {
-            println!("  {}  {}", self.paint("36;1", cmd), self.paint("90", desc));
+        for (key, cmd, desc) in rows {
+            let left = if key.is_empty() {
+                format!("    {}", self.paint("36;1", cmd))
+            } else {
+                format!("  {}  {}", self.paint("33;1", key), self.paint("36;1", cmd))
+            };
+            println!("{}  {}", left, self.paint("90", desc));
         }
+        println!();
+        println!(
+            "{}",
+            self.paint("90", "Examples: weather in Mumbai · time · 10 USD to INR · 2+2")
+        );
         println!();
     }
 }

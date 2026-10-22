@@ -1,11 +1,14 @@
 //! 0zcode — company-standard terminal agent binary.
 
 use std::env;
+use std::fs;
 use std::io::{self, Write};
 use std::process::ExitCode;
+use std::time::Instant;
 use zeroz::agent::handle;
 use zeroz::config::Config;
 use zeroz::history::History;
+use zeroz::locale;
 use zeroz::policy::refusal_message;
 use zeroz::tools;
 use zeroz::tui::Theme;
@@ -57,6 +60,25 @@ fn print_help() {
     );
 }
 
+fn tool_hint(msg: &str) -> &'static str {
+    let l = msg.to_lowercase();
+    if l.contains("weather") || l.contains("mausam") {
+        "weather"
+    } else if l.contains("time") || l.contains("tarikh") {
+        "time"
+    } else if l.contains("wiki") || l.starts_with("who ") {
+        "wikipedia"
+    } else if l.contains("search") || l.contains("news") {
+        "search"
+    } else if l.contains("usd") || l.contains("inr") {
+        "currency"
+    } else if l.chars().any(|c| "+-*/".contains(c)) {
+        "calculator"
+    } else {
+        "tools"
+    }
+}
+
 fn run_repl(cfg: &Config) -> ExitCode {
     let theme = Theme::from_config(cfg);
     theme.clear_screen();
@@ -68,6 +90,9 @@ fn run_repl(cfg: &Config) -> ExitCode {
 
     let model_label = cfg.model_label.clone();
     let mut history = History::new(cfg.history_size);
+    let mut last_reply = String::new();
+    let mut last_tool = String::new();
+    let started = Instant::now();
 
     let stdin = io::stdin();
     loop {
@@ -93,9 +118,34 @@ fn run_repl(cfg: &Config) -> ExitCode {
                 println!();
                 continue;
             }
+            "/copy" | "copy" => {
+                if last_reply.is_empty() {
+                    theme.print_err("Nothing to copy yet.");
+                } else {
+                    let path = env::temp_dir().join("0zcode_last.txt");
+                    match fs::write(&path, &last_reply) {
+                        Ok(()) => theme.print_ok(&format!("Saved last reply → {}", path.display())),
+                        Err(e) => theme.print_err(&format!("Could not write: {e}")),
+                    }
+                }
+                println!();
+                continue;
+            }
             "/status" | "status" => {
-                theme.print_status(&model_label, history.len() as u32, if cfg.offline { "offline" } else { "agent (no code)" });
-                theme.print_assistant(&format!("config: {}", Config::config_path_display()));
+                theme.print_status_rich(
+                    &model_label,
+                    if cfg.offline {
+                        "offline"
+                    } else {
+                        "agent (no code)"
+                    },
+                    cfg.offline,
+                    cfg.color,
+                    history.len(),
+                    &last_tool,
+                    started.elapsed().as_secs(),
+                    &Config::config_path_display(),
+                );
                 println!();
                 continue;
             }
@@ -111,18 +161,37 @@ fn run_repl(cfg: &Config) -> ExitCode {
 
         theme.print_user(line);
         history.push("user", line);
+
+        let lang = locale::detect(line);
+        let hint = tool_hint(line);
+        // progress only when not pure meta/calc offline-safe one-shot still show for network-ish
+        let show_progress = !cfg.offline || hint == "calculator";
+        if show_progress && !lower.starts_with('/') {
+            theme.print_progress(&locale::progress_label(lang, hint));
+        }
+
         let r = handle(line, cfg);
+        if show_progress && !lower.starts_with('/') {
+            theme.clear_progress_line();
+        }
+
         if r.text == "__QUIT__" {
             println!("bye.");
             break;
         }
         if r.text == "__CLEAR__" {
             history.clear();
+            last_reply.clear();
+            last_tool.clear();
             theme.clear_screen();
             theme.print_header();
             continue;
         }
+
+        last_reply = r.text.clone();
+        last_tool = r.tool_names.join("+");
         history.push("assistant", &r.text);
+
         if r.refused {
             theme.print_err(&r.text);
         } else if !r.tool_names.is_empty() {

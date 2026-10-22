@@ -3,6 +3,7 @@
 
 use crate::config::Config;
 use crate::policy::{self, PRODUCT_NAME, PRODUCT_TAGLINE};
+use crate::locale;
 use crate::tools::{self, ToolOutput};
 
 #[derive(Debug)]
