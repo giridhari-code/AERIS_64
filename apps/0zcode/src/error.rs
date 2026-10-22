@@ -1,4 +1,4 @@
-//! Typed errors for 0z runtime.
+//! Typed errors for 0z runtime — clear, user-facing messages.
 
 use std::fmt;
 
@@ -11,16 +11,21 @@ pub enum Error {
     Tool(String),
     Policy(String),
     Io(String),
+    Offline(String),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Http(m) => write!(f, "http: {m}"),
-            Error::Parse(m) => write!(f, "parse: {m}"),
-            Error::Tool(m) => write!(f, "tool: {m}"),
-            Error::Policy(m) => write!(f, "policy: {m}"),
-            Error::Io(m) => write!(f, "io: {m}"),
+            Error::Http(m) => write!(
+                f,
+                "network error — {m} (check internet or set ZEROZ_OFFLINE=1 for calc-only)"
+            ),
+            Error::Parse(m) => write!(f, "could not parse response — {m}"),
+            Error::Tool(m) => write!(f, "tool error — {m}"),
+            Error::Policy(m) => write!(f, "policy — {m}"),
+            Error::Io(m) => write!(f, "io — {m}"),
+            Error::Offline(m) => write!(f, "offline mode — {m}"),
         }
     }
 }

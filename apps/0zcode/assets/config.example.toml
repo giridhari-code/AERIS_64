@@ -1,0 +1,10 @@
+# Copy to ~/.config/0zcode/config.toml
+# Env vars override these values.
+
+http_timeout_secs = 12
+max_output_chars = 8000
+color = true
+offline = false
+history_size = 40
+model_label = "local / tools-first"
+# user_agent = "0zcode/1.0"

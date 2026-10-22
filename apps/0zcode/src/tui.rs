@@ -73,7 +73,7 @@ impl Theme {
             "{}",
             self.paint(
                 "90",
-                "/help  /tools  /status  /model  /clear  /quit   ·  ? shortcuts"
+                "/help  /tools  /history  /status  /clear  /quit   ·  ? shortcuts"
             )
         );
         println!(
@@ -148,6 +148,7 @@ impl Theme {
         let rows = [
             ("/help", "Show this help"),
             ("/tools", "List research tools"),
+            ("/history", "This session Q&A"),
             ("/status", "Session / workspace status"),
             ("/model", "Show active model label"),
             ("/version", "Version string"),

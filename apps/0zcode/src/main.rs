@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 use zeroz::agent::handle;
 use zeroz::config::Config;
+use zeroz::history::History;
 use zeroz::policy::refusal_message;
 use zeroz::tools;
 use zeroz::tui::Theme;
@@ -52,7 +53,7 @@ fn main() -> ExitCode {
 fn print_help() {
     println!("0zcode {VERSION} — Agentic work. Zero code.");
     println!(
-        "\nUsage:\n  0zcode                 interactive TUI\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv:\n  ZEROZ_HTTP_TIMEOUT_SECS   default 12\n  ZEROZ_MODEL_LABEL         header model name\n  ZEROZ_NO_COLOR / NO_COLOR disable ANSI\n"
+        "\nUsage:\n  0zcode                 interactive TUI\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv / config:\n  ~/.config/0zcode/config.toml  (or ZEROZ_CONFIG)\n  ZEROZ_OFFLINE=1               calc-only\n  ZEROZ_HTTP_TIMEOUT_SECS\n  ZEROZ_MODEL_LABEL\n  ZEROZ_NO_COLOR / NO_COLOR\n"
     );
 }
 
@@ -60,8 +61,13 @@ fn run_repl(cfg: &Config) -> ExitCode {
     let theme = Theme::from_config(cfg);
     theme.clear_screen();
     theme.print_header();
+    if cfg.offline {
+        theme.print_assistant("Offline mode: calculator + commands only.");
+        println!();
+    }
 
     let model_label = cfg.model_label.clone();
+    let mut history = History::new(cfg.history_size);
 
     let stdin = io::stdin();
     loop {
@@ -82,13 +88,20 @@ fn run_repl(cfg: &Config) -> ExitCode {
                 theme.print_help_panel();
                 continue;
             }
+            "/history" | "history" => {
+                theme.print_assistant(&history.render());
+                println!();
+                continue;
+            }
             "/status" | "status" => {
-                theme.print_status(&model_label, 0, "agent (no code)");
+                theme.print_status(&model_label, history.len() as u32, if cfg.offline { "offline" } else { "agent (no code)" });
+                theme.print_assistant(&format!("config: {}", Config::config_path_display()));
+                println!();
                 continue;
             }
             "/model" | "model" => {
                 theme.print_assistant(&format!(
-                    "Active label: {model_label}\nSet ZEROZ_MODEL_LABEL to change the display name."
+                    "Active label: {model_label}\nSet ZEROZ_MODEL_LABEL or model_label in config.toml."
                 ));
                 println!();
                 continue;
@@ -97,16 +110,19 @@ fn run_repl(cfg: &Config) -> ExitCode {
         }
 
         theme.print_user(line);
+        history.push("user", line);
         let r = handle(line, cfg);
         if r.text == "__QUIT__" {
             println!("bye.");
             break;
         }
         if r.text == "__CLEAR__" {
+            history.clear();
             theme.clear_screen();
             theme.print_header();
             continue;
         }
+        history.push("assistant", &r.text);
         if r.refused {
             theme.print_err(&r.text);
         } else if !r.tool_names.is_empty() {

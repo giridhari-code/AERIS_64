@@ -67,9 +67,11 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     if lower.starts_with("/status") {
         return AgentResponse {
             text: format!(
-                "{PRODUCT_NAME} v{}\n{PRODUCT_TAGLINE}\nmode: research tools only — no code gen\nmodel label: {}",
+                "{PRODUCT_NAME} v{}\n{PRODUCT_TAGLINE}\nmode: research tools only — no code gen\noffline: {}\nmodel label: {}\nconfig: {}",
                 env!("CARGO_PKG_VERSION"),
-                cfg.model_label
+                cfg.offline,
+                cfg.model_label,
+                Config::config_path_display()
             ),
             refused: false,
             tool_names: vec![],
@@ -135,27 +137,49 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     if wants_calc {
         push_tool(&mut outputs, &mut names, tools::calculator(msg));
     }
+
+    let net = |outputs: &mut Vec<ToolOutput>, names: &mut Vec<&'static str>, r: crate::error::Result<ToolOutput>| {
+        if cfg.offline {
+            push_tool(
+                outputs,
+                names,
+                Err(crate::error::Error::Offline(
+                    "network tools disabled (ZEROZ_OFFLINE or config offline=true); calc still works".into(),
+                )),
+            );
+        } else {
+            push_tool(outputs, names, r);
+        }
+    };
+
     if wants_fx {
-        push_tool(&mut outputs, &mut names, tools::currency(msg, cfg));
+        net(&mut outputs, &mut names, tools::currency(msg, cfg));
     }
     if wants_time {
-        push_tool(&mut outputs, &mut names, tools::time_now(cfg));
+        net(&mut outputs, &mut names, tools::time_now(cfg));
     }
     if wants_weather {
         let place = extract_place(msg).unwrap_or_else(|| "Delhi".into());
-        push_tool(&mut outputs, &mut names, tools::weather(&place, cfg));
+        net(&mut outputs, &mut names, tools::weather(&place, cfg));
     }
     if wants_wiki && !wants_search {
         let topic = strip_wiki_topic(msg);
-        push_tool(&mut outputs, &mut names, tools::wikipedia(&topic, cfg));
+        net(&mut outputs, &mut names, tools::wikipedia(&topic, cfg));
     }
     if wants_search {
-        push_tool(&mut outputs, &mut names, tools::web_search(msg, cfg));
+        net(&mut outputs, &mut names, tools::web_search(msg, cfg));
     }
 
     // Fallback: question mark → search once (don't invent answers)
     if outputs.is_empty() && msg.contains('?') {
-        push_tool(&mut outputs, &mut names, tools::web_search(msg, cfg));
+        if cfg.offline {
+            return AgentResponse {
+                text: "Offline mode: only calculator and /commands work. Turn off ZEROZ_OFFLINE for search/weather.".into(),
+                refused: false,
+                tool_names: vec![],
+            };
+        }
+        net(&mut outputs, &mut names, tools::web_search(msg, cfg));
     }
 
     if outputs.is_empty() {
@@ -216,7 +240,7 @@ fn help_text() -> String {
     format!(
         "{PRODUCT_NAME} — direct answers from tools, not guesses.\n\n\
 Commands\n\
-  /help /tools /status /model /version /clear /quit\n\n\
+  /help /tools /status /model /version /history /clear /quit\n\n\
 Examples\n\
   weather in Mumbai\n\
   time\n\
@@ -306,5 +330,14 @@ mod tests {
     fn refuses_code() {
         let r = handle("write a python function", &Config::default());
         assert!(r.refused);
+    }
+
+    #[test]
+    fn offline_calc_works() {
+        let mut c = Config::default();
+        c.offline = true;
+        let r = handle("2+2", &c);
+        assert!(!r.refused);
+        assert!(r.text.contains('4') || r.tool_names.contains(&"calculator"));
     }
 }

@@ -62,6 +62,9 @@ Slash: `/help` `/tools` `/status` `/version` `/clear` `/quit`
 | `ZEROZ_USER_AGENT` | HTTP User-Agent override |
 | `ZEROZ_NO_COLOR` / `NO_COLOR` | disable ANSI |
 | `ZEROZ_COLOR=1` | force ANSI on |
+| `ZEROZ_OFFLINE=1` | calc + meta only (no network) |
+| `ZEROZ_HISTORY_SIZE` | REPL history cap |
+| `ZEROZ_CONFIG` | path to config.toml |
 
 ## Architecture
 
@@ -90,3 +93,17 @@ tui  → ANSI chrome (logo, boxes, status)
 ## License
 
 MIT — see repository root.
+
+
+## Config file
+
+```bash
+mkdir -p ~/.config/0zcode
+cp assets/config.example.toml ~/.config/0zcode/config.toml
+```
+
+## Smoke
+
+```bash
+./scripts/zeroz/smoke_0zcode.sh
+```
