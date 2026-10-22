@@ -1,10 +1,11 @@
-//! 0zcode TUI — Claude Code–style terminal chrome (ANSI only, no extra crates).
-use std::io::{self, Write};
+//! 0zcode TUI — lively terminal chrome (ANSI only, no extra crates).
 
 use crate::config::Config;
-use crate::policy::{PRODUCT_NAME, PRODUCT_TAGLINE, PRODUCT_VERSION};
+use crate::policy::{PRODUCT_TAGLINE, PRODUCT_VERSION};
 use std::env;
+use std::io::{self, Write};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Theme {
     pub color: bool,
@@ -15,7 +16,7 @@ impl Theme {
     pub fn from_config(cfg: &Config) -> Self {
         let cwd = env::current_dir()
             .ok()
-            .and_then(|p| shorten_path(p))
+            .and_then(shorten_path)
             .unwrap_or_else(|| "~".into());
         Self {
             color: cfg.color,
@@ -33,108 +34,154 @@ impl Theme {
 
     pub fn clear_screen(&self) {
         print!("\x1b[2J\x1b[H");
-    }
-
-    /// Robot mark used in header and docs (text logo).
-    pub fn logo_mark(&self) -> String {
-        // Compact robot glyph block
-        let robot = r#" ╭───╮
- │ ◉ ◉ │
- │  ▽  │
- ╰─┬─╯
-   │"#;
-        self.paint("36;1", robot)
-    }
-
-    pub fn print_logo_inline(&self) -> String {
-        // Single-line brand for narrow terminals
-        self.paint("36;1", "⬡ 0z")
+        let _ = io::stdout().flush();
     }
 
     pub fn print_header(&self) {
-        println!("{}", self.logo_mark());
+        // Brand row
+        let bot = self.paint("36;1", "◉");
         let brand = self.paint("37;1", "0zcode");
-        let ver = self.paint("90", &format!("v{PRODUCT_VERSION}"));
-        println!("{brand}  {ver}");
-        let sub = self.paint(
-            "90",
-            &format!("AI terminal agent · {PRODUCT_TAGLINE}"),
+        let ver = self.paint("36", &format!("v{PRODUCT_VERSION}"));
+        println!();
+        println!("  {bot}  {brand}  {ver}");
+        println!(
+            "     {}",
+            self.paint("90", &format!("AI agent · {PRODUCT_TAGLINE}"))
         );
-        println!("{sub}");
-        println!("{}", self.paint("36", &self.cwd));
+        println!("     {}", self.paint("36", &self.cwd));
+        println!();
+
+        // Accent bar
+        println!(
+            "  {}",
+            self.paint("36", &"━".repeat(44))
+        );
+        println!(
+            "  {}",
+            self.paint(
+                "90",
+                "/help  /tools  /mcp  /status  /history  /copy  /quit"
+            )
+        );
+        println!(
+            "  {}",
+            self.paint("36", &"━".repeat(44))
+        );
+        println!();
+
+        // Rotating tip — makes the shell feel alive
+        let tip = tip_of_session();
+        println!(
+            "  {} {}",
+            self.paint("33;1", "✦"),
+            self.paint("33", tip)
+        );
         println!();
         println!(
-            "{}",
-            self.paint(
-                "90",
-                "────────────────────────────────────────────────"
-            )
-        );
-        println!(
-            "{}",
-            self.paint(
-                "90",
-                "/help /tools /mcp /status /history /copy /quit  ·  ? shortcuts"
-            )
-        );
-        println!(
-            "{}",
-            self.paint(
-                "90",
-                "────────────────────────────────────────────────"
-            )
+            "  {}",
+            self.paint("90", "Type anything · tools answer · no code gen")
         );
         println!();
     }
 
     pub fn prompt(&self) -> String {
-        format!("{} ", self.paint("37;1", "❯"))
-    }
-
-    pub fn print_user(&self, line: &str) {
-        let chev = self.paint("90", "❯");
-        let msg = self.paint("37", line);
-        println!("\n{chev} {msg}");
+        format!(
+            "{}{}{} ",
+            self.paint("36;1", "❯"),
+            self.paint("90", ""),
+            ""
+        )
     }
 
     pub fn print_assistant(&self, text: &str) {
-        let dot = self.paint("32;1", "●");
-        for (i, line) in text.lines().enumerate() {
+        let lines: Vec<&str> = text.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
             if i == 0 {
-                println!("{dot} {}", self.paint("37", line));
+                println!(
+                    "  {} {}",
+                    self.paint("32;1", "●"),
+                    self.paint("37", line)
+                );
             } else {
-                println!("  {}", self.paint("37", line));
+                println!("    {}", self.paint("37", line));
             }
         }
     }
 
     pub fn print_tool_box(&self, tool: &str, body: &str) {
-        let title = self.paint("33;1", &format!("┌ {tool} "));
-        let pad = self.paint("33", &"─".repeat(40usize.saturating_sub(tool.len())));
-        println!("{title}{pad}");
+        // Color by tool family
+        let accent = match tool {
+            t if t.contains("calc") || t.contains("units") => "33", // amber
+            t if t.contains("weather") || t.contains("time") => "36", // cyan
+            t if t.contains("error") || t.contains("mcp") => "35", // magenta
+            t if t.contains("wiki") || t.contains("search") => "34", // blue
+            _ => "33",
+        };
+        let title = format!(" {tool} ");
+        let bar_len = 40usize.saturating_sub(title.len());
+        let top = format!("┌{title}{}", "─".repeat(bar_len));
+        println!();
+        println!("  {}", self.paint(&format!("{accent};1"), &top));
+
+        // Prefer plain content lines; strip old box artifacts if present
         for line in body.lines() {
-            println!("{} {}", self.paint("33", "│"), line);
+            let mut l = line.trim_start();
+            if let Some(s) = l.strip_prefix('│') {
+                l = s.trim_start();
+            }
+            if l.starts_with('┌') || l.starts_with('└') || l.starts_with('─') {
+                continue;
+            }
+            if l.is_empty() {
+                continue;
+            }
+            println!(
+                "  {} {}",
+                self.paint(accent, "│"),
+                self.paint("37", l)
+            );
         }
-        println!("{}", self.paint("33", &format!("└{}", "─".repeat(44))));
+        println!(
+            "  {}",
+            self.paint(accent, &format!("└{}", "─".repeat(40)))
+        );
     }
 
     pub fn print_ok(&self, msg: &str) {
-        println!("{} {}", self.paint("32;1", "✔"), self.paint("32", msg));
+        println!(
+            "  {} {}",
+            self.paint("32;1", "✔"),
+            self.paint("32", msg)
+        );
     }
 
     pub fn print_err(&self, msg: &str) {
-        println!("{} {}", self.paint("31;1", "✖"), self.paint("31", msg));
+        // Soften long policy walls — first line bold
+        let mut lines = msg.lines();
+        if let Some(first) = lines.next() {
+            println!(
+                "  {} {}",
+                self.paint("31;1", "✖"),
+                self.paint("31;1", first)
+            );
+        }
+        for line in lines {
+            println!("    {}", self.paint("31", line));
+        }
     }
 
     pub fn print_progress(&self, label: &str) {
-        // Same-line progress; caller should print newline after work finishes.
-        print!("{} {}", self.paint("90", "…"), self.paint("90", label));
-        let _ = std::io::Write::flush(&mut std::io::stdout());
+        print!(
+            "  {} {}",
+            self.paint("36", "⋯"),
+            self.paint("90", label)
+        );
+        let _ = io::stdout().flush();
     }
 
     pub fn clear_progress_line(&self) {
         print!("\r\x1b[2K");
-        let _ = std::io::Write::flush(&mut std::io::stdout());
+        let _ = io::stdout().flush();
     }
 
     pub fn print_status_rich(
@@ -149,78 +196,103 @@ impl Theme {
         config_path: &str,
     ) {
         println!();
-        println!("{}", self.paint("90", "─".repeat(48).as_str()));
-        println!("{}", self.paint("37;1", " status"));
-        println!("  {} {}", self.paint("90", "model"), self.paint("37", model));
-        println!("  {} {}", self.paint("90", "workspace"), self.paint("36", &self.cwd));
-        println!("  {} {}", self.paint("90", "mode"), self.paint("37", mode));
-        println!(
-            "  {} {}",
-            self.paint("90", "offline"),
-            self.paint(if offline { "33" } else { "32" }, if offline { "yes" } else { "no" })
+        println!("  {}", self.paint("36;1", "status"));
+        println!("  {}", self.paint("90", &"─".repeat(40)));
+        row(self, "model", model);
+        row(self, "workspace", &self.cwd);
+        row(self, "mode", mode);
+        row(
+            self,
+            "offline",
+            if offline { "yes" } else { "no" },
         );
-        println!(
-            "  {} {}",
-            self.paint("90", "color"),
-            self.paint("37", if color { "on" } else { "off" })
+        row(self, "color", if color { "on" } else { "off" });
+        row(self, "turns", &turns.to_string());
+        row(
+            self,
+            "last tool",
+            if last_tool.is_empty() { "—" } else { last_tool },
         );
-        println!("  {} {}", self.paint("90", "history turns"), self.paint("37", &turns.to_string()));
-        println!(
-            "  {} {}",
-            self.paint("90", "last tool"),
-            self.paint("37", if last_tool.is_empty() { "—" } else { last_tool })
-        );
-        println!("  {} {}s", self.paint("90", "uptime"), self.paint("37", &uptime_secs.to_string()));
-        println!("  {} {}", self.paint("90", "config"), self.paint("90", config_path));
-        println!("{}", self.paint("90", "─".repeat(48).as_str()));
+        row(self, "uptime", &format!("{uptime_secs}s"));
+        row(self, "config", config_path);
+        println!("  {}", self.paint("90", &"─".repeat(40)));
     }
 
     pub fn print_status(&self, model: &str, files: u32, mode: &str) {
-        println!();
-        println!(
-            "{}",
-            self.paint(
-                "90",
-                "────────────────────────────────────────────────"
-            )
+        self.print_status_rich(
+            model,
+            mode,
+            false,
+            self.color,
+            files as usize,
+            "",
+            0,
+            "",
         );
-        let line = format!(
-            " model: {model}  ·  workspace: {}  ·  mode: {mode}  ·  {PRODUCT_NAME}",
-            self.cwd
-        );
-        println!("{}", self.paint("90", &line));
-        let _ = files;
     }
 
     pub fn print_help_panel(&self) {
-        let h = self.paint("37;1", "0zcode — shortcuts");
-        println!("\n{h}\n");
+        println!();
+        println!("  {}", self.paint("37;1", "shortcuts"));
+        println!("  {}", self.paint("90", &"─".repeat(40)));
         let rows = [
-            ("?", "/help", "This panel"),
-            ("", "/tools", "List tools"),
-            ("", "/history", "Session Q&A"),
-            ("", "/status", "Rich session status"),
-            ("", "/copy", "Save last reply to file"),
-            ("", "/model", "Display model label"),
-            ("", "/version", "Version banner"),
-            ("", "/clear", "Clear screen + history mark"),
-            ("q", "/quit", "Exit"),
+            ("?", "/help", "this panel"),
+            ("", "/tools", "built-in tools"),
+            ("", "/mcp", "your MCP tools"),
+            ("", "/history", "this session"),
+            ("", "/status", "session stats"),
+            ("", "/copy", "save last reply"),
+            ("", "/clear", "fresh screen"),
+            ("q", "/quit", "exit"),
         ];
         for (key, cmd, desc) in rows {
-            let left = if key.is_empty() {
-                format!("    {}", self.paint("36;1", cmd))
+            if key.is_empty() {
+                println!(
+                    "      {}  {}",
+                    self.paint("36;1", cmd),
+                    self.paint("90", desc)
+                );
             } else {
-                format!("  {}  {}", self.paint("33;1", key), self.paint("36;1", cmd))
-            };
-            println!("{}  {}", left, self.paint("90", desc));
+                println!(
+                    "  {}   {}  {}",
+                    self.paint("33;1", key),
+                    self.paint("36;1", cmd),
+                    self.paint("90", desc)
+                );
+            }
         }
         println!();
         println!(
-            "{}",
-            self.paint("90", "Examples: weather in Mumbai · time · 10 USD to INR · 2+2")
+            "  {}",
+            self.paint("33", "try:  hi  ·  time  ·  938+29  ·  weather in Mumbai")
         );
         println!();
     }
+}
+
+fn row(theme: &Theme, k: &str, v: &str) {
+    println!(
+        "  {}  {}",
+        theme.paint("90", &format!("{k:<10}")),
+        theme.paint("37", v)
+    );
+}
+
+fn tip_of_session() -> &'static str {
+    const TIPS: &[&str] = &[
+        "tip: 938+29 works inside a sentence",
+        "tip: /mcp add email inbox,mail https://…",
+        "tip: note save ideas ship faster",
+        "tip: time works offline if the net drops",
+        "tip: /copy saves the last answer",
+        "tip: weather in Delhi · btc price · headlines",
+        "tip: say hi — I won't lecture you",
+    ];
+    let n = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as usize)
+        .unwrap_or(0);
+    TIPS[n % TIPS.len()]
 }
 
 fn shorten_path(p: PathBuf) -> Option<String> {
