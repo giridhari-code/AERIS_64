@@ -33,6 +33,14 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
 
     let lower = msg.to_lowercase();
 
+    if let Some(mcp_msg) = crate::mcp_store::handle_command(msg) {
+        return AgentResponse {
+            text: mcp_msg,
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+
     // —— meta / slash (deterministic) ————————————————————————————————
     if matches!(
         lower.as_str(),
@@ -233,6 +241,18 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     }
     if wants_search {
         net(&mut outputs, &mut names, tools::web_search(msg, cfg));
+    }
+
+    // User-configured MCP tools (trigger match)
+    if !cfg.offline {
+        for ttool in crate::mcp_store::match_tools(msg) {
+            // skip if same name already ran as builtin path
+            push_tool(
+                &mut outputs,
+                &mut names,
+                crate::mcp_store::invoke(&ttool, msg, cfg),
+            );
+        }
     }
 
     // Fallback: question mark → search once (don't invent answers)

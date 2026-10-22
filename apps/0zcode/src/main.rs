@@ -39,7 +39,16 @@ fn main() -> ExitCode {
     if args.first().map(String::as_str) == Some("mcp")
         || args.iter().any(|a| a == "--mcp")
     {
-        println!("{}", zeroz::registry::tools_json(&cfg));
+        let rest = args.iter().skip(1).filter(|a| *a != "--mcp").cloned().collect::<Vec<_>>();
+        if rest.is_empty() || rest.iter().any(|a| a == "schema" || a == "--json") {
+            println!("{}", zeroz::registry::tools_json(&cfg));
+        } else {
+            let line = format!("/mcp {}", rest.join(" "));
+            println!(
+                "{}",
+                zeroz::mcp_store::handle_command(&line).unwrap_or_else(|| zeroz::mcp_store::list_text())
+            );
+        }
         return ExitCode::SUCCESS;
     }
     if args.first().map(String::as_str) == Some("policy")
@@ -131,8 +140,19 @@ fn run_repl(cfg: &Config) -> ExitCode {
                 theme.print_help_panel();
                 continue;
             }
-            "/mcp" | "mcp" => {
-                theme.print_assistant(&zeroz::registry::tools_markdown());
+            m if m == "/mcp" || m == "mcp" || m.starts_with("/mcp ") => {
+                let text = zeroz::mcp_store::handle_command(line)
+                    .unwrap_or_else(|| {
+                        format!(
+                            "{}
+
+Built-in schema:
+{}",
+                            zeroz::mcp_store::list_text(),
+                            zeroz::registry::tools_markdown()
+                        )
+                    });
+                theme.print_assistant(&text);
                 println!();
                 continue;
             }
