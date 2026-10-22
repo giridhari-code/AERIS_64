@@ -58,6 +58,13 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
             tool_names: vec![],
         };
     }
+    if lower.starts_with("/mcp") || lower == "mcp" {
+        return AgentResponse {
+            text: crate::registry::tools_json(cfg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
     if lower.starts_with("/tools") {
         return AgentResponse {
             text: tools::catalog().into(),
@@ -157,6 +164,17 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         || lower == "news"
         || lower.starts_with("top news")
         || lower.contains("bbc news");
+    let wants_email = lower.contains("email")
+        || lower.contains("e-mail")
+        || lower.contains("inbox")
+        || lower.contains("aaj ke mail")
+        || lower.contains("aaj ka email")
+        || lower.contains("my mail");
+    let wants_notes = lower.starts_with("note ")
+        || lower.starts_with("notes ")
+        || lower.starts_with("note:")
+        || lower == "notes"
+        || lower == "note list";
 
     if wants_calc {
         push_tool(&mut outputs, &mut names, tools::calculator(msg));
@@ -198,6 +216,12 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     }
     if wants_headlines {
         net(&mut outputs, &mut names, tools::headlines(cfg));
+    }
+    if wants_email {
+        net(&mut outputs, &mut names, tools::email_status(cfg));
+    }
+    if wants_notes {
+        push_tool(&mut outputs, &mut names, crate::notes::handle_notes(msg));
     }
     if wants_weather {
         let place = extract_place(msg).unwrap_or_else(|| "Delhi".into());

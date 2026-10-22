@@ -16,6 +16,8 @@ pub mod config;
 pub mod error;
 pub mod history;
 pub mod locale;
+pub mod registry;
+pub mod notes;
 pub mod http;
 pub mod json_util;
 pub mod policy;

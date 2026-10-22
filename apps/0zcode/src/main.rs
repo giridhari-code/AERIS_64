@@ -29,7 +29,17 @@ fn main() -> ExitCode {
     if args.first().map(String::as_str) == Some("tools")
         || args.iter().any(|a| a == "--tools")
     {
-        println!("{}", tools::catalog());
+        if args.iter().any(|a| a == "--json" || a == "json") {
+            println!("{}", zeroz::registry::tools_json(&cfg));
+        } else {
+            println!("{}", tools::catalog());
+        }
+        return ExitCode::SUCCESS;
+    }
+    if args.first().map(String::as_str) == Some("mcp")
+        || args.iter().any(|a| a == "--mcp")
+    {
+        println!("{}", zeroz::registry::tools_json(&cfg));
         return ExitCode::SUCCESS;
     }
     if args.first().map(String::as_str) == Some("policy")
@@ -119,6 +129,11 @@ fn run_repl(cfg: &Config) -> ExitCode {
         match lower.as_str() {
             "/help" | "?" | "help" => {
                 theme.print_help_panel();
+                continue;
+            }
+            "/mcp" | "mcp" => {
+                theme.print_assistant(&zeroz::registry::tools_markdown());
+                println!();
                 continue;
             }
             "/history" | "history" => {

@@ -31,6 +31,12 @@ const CODE_MARKERS: &[&str] = &[
     "function likho",
     "create a react",
     "build me an app",
+    "run shell",
+    "bash -c",
+    "execute command",
+    "run this command",
+    "rm -rf",
+    "sudo ",
 ];
 
 pub fn is_code_request(text: &str) -> bool {
@@ -43,7 +49,7 @@ pub fn refusal_message() -> String {
         "{PRODUCT_NAME} — straight answer: no.\n\
 This agent does not write, edit, or run programming source code.\n\n\
 Use it for: weather, time, calc, wikipedia, FX, web search.\n\
-Need code? Use a dedicated coding assistant — not this binary."
+Need code or shell? Use a dedicated coding agent — not 0zcode.\n\nEmail: set ZEROZ_EMAIL_STATUS_URL (private summary API).\nNotes: note save/list/read (sandbox only).\nTool schema: /mcp or `0zcode tools --json`"
     )
 }
 

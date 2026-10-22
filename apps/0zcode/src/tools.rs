@@ -30,9 +30,11 @@ pub fn catalog() -> &'static str {
 │ btc price           crypto (CoinGecko)
 │ github owner/repo   public repo info
 │ headlines           BBC RSS top stories
+│ today email         via ZEROZ_EMAIL_STATUS_URL
+│ note save/list/read sandbox notes only
 └────────────────────────────────────────
-slash: /help /tools /status /history /copy /quit
-policy: coding disabled — research tools only"
+slash: /help /tools /mcp /status /history /copy /quit
+policy: no shell · no code gen · notes sandbox only"
 }
 
 pub fn weather(place: &str, cfg: &Config) -> Result<ToolOutput> {
@@ -372,6 +374,38 @@ fn guess_timezone(place: &str) -> String {
         }
     }
     "Etc/UTC".into()
+}
+
+
+pub fn email_status(cfg: &Config) -> Result<ToolOutput> {
+    // User must set ZEROZ_EMAIL_STATUS_URL to an HTTPS endpoint that returns plain text
+    // or JSON with a "summary" field — e.g. a small private worker that reads their mailbox.
+    // 0zcode never asks for mailbox passwords and never runs shell.
+    let url = std::env::var("ZEROZ_EMAIL_STATUS_URL").unwrap_or_default();
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Ok(ToolOutput {
+            name: "email",
+            body: "│ Email not configured.\n│ Set ZEROZ_EMAIL_STATUS_URL to your private summary endpoint\n│ (HTTPS text or JSON {\"summary\": \"...\"}).\n│ 0zcode will not take your Gmail password or run shell for mail.".into(),
+        });
+    }
+    // Parse https://host/path
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .ok_or_else(|| Error::Tool("ZEROZ_EMAIL_STATUS_URL must be http(s)://...".into()))?;
+    let (host, path) = match rest.split_once('/') {
+        Some((h, p)) => (h.to_string(), format!("/{p}")),
+        None => (rest.to_string(), "/".into()),
+    };
+    let body = get_text(&host, &path, cfg)?;
+    let summary = string_field(&body, "summary").unwrap_or_else(|| {
+        body.chars().take(cfg.max_output_chars.min(1500)).collect()
+    });
+    Ok(ToolOutput {
+        name: "email",
+        body: format!("│ Today\'s mail summary\n│ {summary}\n│ source: ZEROZ_EMAIL_STATUS_URL"),
+    })
 }
 
 fn eval_expr(s: &str) -> std::result::Result<f64, String> {
