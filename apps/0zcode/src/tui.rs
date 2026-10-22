@@ -1,7 +1,13 @@
-//! 0zcode TUI — lively terminal chrome (ANSI only, no extra crates).
+//! 0zcode TUI — original “signal / zero” identity (ANSI only).
+//!
+//! Visual language:
+//!   · Signal mark  ⌁  (not a generic robot clone)
+//!   · Vertical rail instead of heavy boxes
+//!   · Dim gutter + bright payload
+//!   · No Claude-style chrome bars
 
 use crate::config::Config;
-use crate::policy::{PRODUCT_TAGLINE, PRODUCT_VERSION};
+use crate::policy::PRODUCT_VERSION;
 use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -38,52 +44,49 @@ impl Theme {
     }
 
     pub fn print_header(&self) {
-        // Brand row
-        let bot = self.paint("36;1", "◉");
-        let brand = self.paint("37;1", "0zcode");
-        let ver = self.paint("36", &format!("v{PRODUCT_VERSION}"));
+        // Unique mark: zero + signal wave (not robot head)
         println!();
-        println!("  {bot}  {brand}  {ver}");
         println!(
-            "     {}",
-            self.paint("90", &format!("AI agent · {PRODUCT_TAGLINE}"))
+            "  {}{}{}",
+            self.paint("36;1", "0"),
+            self.paint("37;1", "z"),
+            self.paint("36", "⌁")
         );
-        println!("     {}", self.paint("36", &self.cwd));
+        println!(
+            "  {}  {}",
+            self.paint("37;1", "code"),
+            self.paint("90", &format!("v{PRODUCT_VERSION}"))
+        );
+        println!(
+            "  {}",
+            self.paint("90", "tools · zero source · signal clean")
+        );
+        println!("  {}", self.paint("36", &self.cwd));
         println!();
-
-        // Rotating tip — makes the shell feel alive
         let tip = tip_of_session();
         println!(
             "  {} {}",
-            self.paint("33;1", "✦"),
-            self.paint("33", tip)
-        );
-        println!();
-        println!(
-            "  {}",
-            self.paint("90", "Type anything · tools answer · no code gen")
+            self.paint("35;1", "·"),
+            self.paint("35", tip)
         );
         println!();
     }
 
     pub fn prompt(&self) -> String {
-        format!(
-            "{}{}{} ",
-            self.paint("36;1", "❯"),
-            self.paint("90", ""),
-            ""
-        )
+        // Unique prompt: signal caret, not ❯ clone
+        format!("{} ", self.paint("36;1", "⌁"))
     }
 
     pub fn print_assistant(&self, text: &str) {
-        let lines: Vec<&str> = text.lines().collect();
-        for (i, line) in lines.iter().enumerate() {
-            if i == 0 {
+        let mut first = true;
+        for line in text.lines() {
+            if first {
                 println!(
                     "  {} {}",
-                    self.paint("32;1", "●"),
+                    self.paint("32;1", "▸"),
                     self.paint("37", line)
                 );
+                first = false;
             } else {
                 println!("    {}", self.paint("37", line));
             }
@@ -91,59 +94,49 @@ impl Theme {
     }
 
     pub fn print_tool_box(&self, tool: &str, body: &str) {
-        // Color by tool family
-        let accent = match tool {
-            t if t.contains("calc") || t.contains("units") => "33", // amber
-            t if t.contains("weather") || t.contains("time") => "36", // cyan
-            t if t.contains("error") || t.contains("mcp") => "35", // magenta
-            t if t.contains("wiki") || t.contains("search") => "34", // blue
-            _ => "33",
-        };
-        let title = format!(" {tool} ");
-        let bar_len = 40usize.saturating_sub(title.len());
-        let top = format!("┌{title}{}", "─".repeat(bar_len));
+        // Vertical rail card — distinctive vs rounded Claude boxes
+        let accent = tool_accent(tool);
         println!();
-        println!("  {}", self.paint(&format!("{accent};1"), &top));
-
-        // Prefer plain content lines; strip old box artifacts if present
+        println!(
+            "  {}{}{}",
+            self.paint(&format!("{accent};1"), "┃ "),
+            self.paint(&format!("{accent};1"), tool),
+            self.paint("90", " · live")
+        );
         for line in body.lines() {
             let mut l = line.trim_start();
             if let Some(s) = l.strip_prefix('│') {
                 l = s.trim_start();
             }
-            if l.starts_with('┌') || l.starts_with('└') || l.starts_with('─') {
+            if l.starts_with('┌') || l.starts_with('└') || l.starts_with('─') || l.starts_with('┃') {
                 continue;
             }
             if l.is_empty() {
                 continue;
             }
             println!(
-                "  {} {}",
-                self.paint(accent, "│"),
+                "  {}{}",
+                self.paint(accent, "┃ "),
                 self.paint("37", l)
             );
         }
-        println!(
-            "  {}",
-            self.paint(accent, &format!("└{}", "─".repeat(40)))
-        );
+        println!("  {}", self.paint(accent, "┖─"));
     }
 
     pub fn print_ok(&self, msg: &str) {
         println!(
             "  {} {}",
-            self.paint("32;1", "✔"),
+            self.paint("32;1", "▸"),
             self.paint("32", msg)
         );
     }
 
     pub fn print_err(&self, msg: &str) {
-        // Soften long policy walls — first line bold
         let mut lines = msg.lines();
         if let Some(first) = lines.next() {
             println!(
                 "  {} {}",
-                self.paint("31;1", "✖"),
+                self.paint("31;1", "▸"),
                 self.paint("31;1", first)
             );
         }
@@ -155,7 +148,7 @@ impl Theme {
     pub fn print_progress(&self, label: &str) {
         print!(
             "  {} {}",
-            self.paint("36", "⋯"),
+            self.paint("36", "⌁"),
             self.paint("90", label)
         );
         let _ = io::stdout().flush();
@@ -178,26 +171,21 @@ impl Theme {
         config_path: &str,
     ) {
         println!();
-        println!("  {}", self.paint("36;1", "status"));
-        println!("  {}", self.paint("90", &"─".repeat(40)));
-        row(self, "model", model);
-        row(self, "workspace", &self.cwd);
-        row(self, "mode", mode);
-        row(
+        println!("  {}", self.paint("36;1", "⌁ status"));
+        kv(self, "model", model);
+        kv(self, "path", &self.cwd);
+        kv(self, "mode", mode);
+        kv(self, "offline", if offline { "yes" } else { "no" });
+        kv(self, "color", if color { "on" } else { "off" });
+        kv(self, "turns", &turns.to_string());
+        kv(
             self,
-            "offline",
-            if offline { "yes" } else { "no" },
-        );
-        row(self, "color", if color { "on" } else { "off" });
-        row(self, "turns", &turns.to_string());
-        row(
-            self,
-            "last tool",
+            "last",
             if last_tool.is_empty() { "—" } else { last_tool },
         );
-        row(self, "uptime", &format!("{uptime_secs}s"));
-        row(self, "config", config_path);
-        println!("  {}", self.paint("90", &"─".repeat(40)));
+        kv(self, "up", &format!("{uptime_secs}s"));
+        kv(self, "cfg", config_path);
+        println!();
     }
 
     pub fn print_status(&self, model: &str, files: u32, mode: &str) {
@@ -215,60 +203,64 @@ impl Theme {
 
     pub fn print_help_panel(&self) {
         println!();
-        println!("  {}", self.paint("37;1", "shortcuts"));
-        println!("  {}", self.paint("90", &"─".repeat(40)));
+        println!("  {}", self.paint("36;1", "⌁ commands"));
         let rows = [
-            ("?", "/help", "this panel"),
-            ("", "/tools", "built-in tools"),
-            ("", "/mcp", "your MCP tools"),
-            ("", "/history", "this session"),
-            ("", "/status", "session stats"),
-            ("", "/copy", "save last reply"),
-            ("", "/clear", "fresh screen"),
-            ("q", "/quit", "exit"),
+            ("?", "help"),
+            ("/tools", "built-ins"),
+            ("/mcp", "your tools"),
+            ("/history", "session"),
+            ("/status", "stats"),
+            ("/copy", "save last"),
+            ("/clear", "reset"),
+            ("/quit", "exit"),
         ];
-        for (key, cmd, desc) in rows {
-            if key.is_empty() {
-                println!(
-                    "      {}  {}",
-                    self.paint("36;1", cmd),
-                    self.paint("90", desc)
-                );
-            } else {
-                println!(
-                    "  {}   {}  {}",
-                    self.paint("33;1", key),
-                    self.paint("36;1", cmd),
-                    self.paint("90", desc)
-                );
-            }
+        for (c, d) in rows {
+            println!(
+                "  {}  {}",
+                self.paint("36", &format!("{c:<10}")),
+                self.paint("90", d)
+            );
         }
         println!();
         println!(
             "  {}",
-            self.paint("33", "try:  hi  ·  time  ·  938+29  ·  weather in Mumbai")
+            self.paint("35", "signal:  time  ·  938+29  ·  weather in Mumbai")
         );
         println!();
     }
 }
 
-fn row(theme: &Theme, k: &str, v: &str) {
+fn tool_accent(tool: &str) -> &'static str {
+    if tool.contains("calc") || tool.contains("units") {
+        "33" // amber
+    } else if tool.contains("weather") || tool.contains("time") {
+        "36" // cyan
+    } else if tool.contains("error") {
+        "31"
+    } else if tool.contains("mcp") || tool.contains("email") || tool.contains("notes") {
+        "35" // magenta
+    } else if tool.contains("wiki") || tool.contains("search") || tool.contains("github") {
+        "34"
+    } else {
+        "36"
+    }
+}
+
+fn kv(theme: &Theme, k: &str, v: &str) {
     println!(
         "  {}  {}",
-        theme.paint("90", &format!("{k:<10}")),
+        theme.paint("90", &format!("{k:<8}")),
         theme.paint("37", v)
     );
 }
 
 fn tip_of_session() -> &'static str {
     const TIPS: &[&str] = &[
-        "tip: 938+29 works inside a sentence",
-        "tip: /mcp add email inbox,mail https://…",
-        "tip: note save ideas ship faster",
-        "tip: time works offline if the net drops",
-        "tip: /copy saves the last answer",
-        "tip: weather in Delhi · btc price · headlines",
-        "tip: say hi — I won't lecture you",
+        "938+29 inside a sentence still works",
+        "/mcp add  →  wire your own endpoints",
+        "time falls back to device clock",
+        "note save  →  local sandbox only",
+        "zero code is the product, not a bug",
     ];
     let n = SystemTime::now()
         .duration_since(UNIX_EPOCH)
