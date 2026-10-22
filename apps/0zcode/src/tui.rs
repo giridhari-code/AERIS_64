@@ -4,8 +4,9 @@
 //! piece that touches the terminal, redrawing the prompt frame in place.
 //!
 //! Layout language:
-//!   welcome card · `●` assistant blocks · `● tool(arg)` + `⎿` result trees ·
-//!   rounded input box · slash menu · dim status footer · braille spinner.
+//!   mascot header · grey-band echo of the user's line · `●` assistant blocks ·
+//!   `● tool(arg)` + `⎿` result trees · prompt between two full-width rules ·
+//!   slash menu · dim `? for shortcuts` footer · `✻` spinner.
 
 use crate::config::Config;
 use crate::editor::COMMANDS;
@@ -16,13 +17,24 @@ use std::path::PathBuf;
 
 const DIM: &str = "38;5;245";
 const BORDER: &str = "38;5;240";
+/// Full-width rules around the prompt.
+const RULE: &str = "38;5;244";
+/// Background of the echoed user line.
+const BAND_BG: &str = "48;5;237";
+/// Mascot colour (salmon).
+const MASCOT: &str = "38;5;173";
 const ACCENT: &str = "38;5;215";
 const OK: &str = "38;5;78";
 const ERR: &str = "38;5;203";
 const WARN: &str = "38;5;221";
 const INFO: &str = "38;5;110";
 
-pub const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+pub const SPINNER: [&str; 10] = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
+
+/// Terminal robot: 3 rows × 9 cols. Eyes are gaps, so it needs no background
+/// colour and looks the same with colour off.
+const MASCOT_ART: [&str; 3] = [" ███████ ", "██ ███ ██", "  ▀▀ ▀▀  "];
+const MASCOT_W: usize = 9;
 
 /// Collapse tool output beyond this many lines (`ctrl+o` / `/expand` shows all).
 pub const COLLAPSE_AFTER: usize = 14;
@@ -125,24 +137,29 @@ impl Theme {
 
     // ───────────── static panels ─────────────
 
-    /// Claude Code–style empty header: mark · name · version / model / path.
-    /// Not a heavy card — compact chrome so the prompt sits near the top.
+    /// Claude Code–style header: robot on the left, name · version / model /
+    /// cwd on the right. No border, so the prompt sits right under it.
     pub fn render_welcome(&self, width: usize, model: &str, offline: bool) -> String {
-        let _ = width;
+        let w = width.clamp(MIN_W, 100);
+        let room = w.saturating_sub(MASCOT_W + 4);
         let model_line = if offline {
-            format!("{} · offline", fit(model, 40))
+            format!("{model} · offline")
         } else {
-            fit(model, 48)
+            model.to_string()
         };
-        // 0z company mark (amber) — Claude robot parity, distinct identity
-        let mark = self.paint(&format!("{ACCENT};1"), "⬡z");
-        let name = self.paint("1", "0zcode");
-        let ver = self.dim(&format!("v{PRODUCT_VERSION}"));
+        let texts = [
+            format!(
+                "{} {}",
+                self.paint("1", "0zcode"),
+                self.dim(&format!("v{PRODUCT_VERSION}"))
+            ),
+            self.dim(&fit(&model_line, room)),
+            self.dim(&fit(&self.cwd, room)),
+        ];
         let mut out = String::from("\n");
-        out.push_str(&format!("  {mark}  {name}  {ver}\n"));
-        out.push_str(&format!("      {}\n", self.dim(&model_line)));
-        out.push_str(&format!("      {}\n", self.paint(OK, &fit(&self.cwd, 56))));
-        out.push_str(&format!("  {}\n", self.border(&"─".repeat(40))));
+        for (art, text) in MASCOT_ART.iter().zip(texts.iter()) {
+            out.push_str(&format!(" {}  {}\n", self.paint(MASCOT, art), text));
+        }
         out
     }
 
@@ -237,14 +254,18 @@ impl Theme {
         collapse: bool,
     ) -> String {
         let w = width.clamp(MIN_W, 110);
+        let secs_txt = secs.map(|s| format!("{s:.1}s"));
+        // "● name(" + query + ")" + "  1.2s" must fit the line
+        let used = 2 + str_width(name) + 2 + secs_txt.as_ref().map_or(0, |t| 2 + str_width(t));
+        let q_room = w.saturating_sub(used).clamp(4, 48);
         let mut out = format!(
             "{} {}{}",
             self.paint(OK, "●"),
             self.paint("1", name),
-            self.dim(&format!("({})", fit(query.trim(), 48))),
+            self.dim(&format!("({})", fit(query.trim(), q_room))),
         );
-        if let Some(s) = secs {
-            out.push_str(&format!("  {}", self.dim(&format!("{s:.1}s"))));
+        if let Some(t) = secs_txt {
+            out.push_str(&format!("  {}", self.dim(&t)));
         }
         out.push('\n');
         let mut wrapped: Vec<String> = Vec::new();
@@ -324,6 +345,35 @@ impl Theme {
 
     // ───────────── prompt frame ─────────────
 
+    /// One row of the echoed user line: dim `❯`, text, grey band to the edge.
+    fn echo_row(&self, first: bool, text: &str, w: usize) -> String {
+        let lead = if first { "❯" } else { " " };
+        if !self.color {
+            return format!("{lead} {text}");
+        }
+        let pad = w.saturating_sub(2 + str_width(text));
+        let lead = if first {
+            format!("\x1b[38;5;245m{lead}\x1b[39m")
+        } else {
+            lead.to_string()
+        };
+        format!(
+            "\x1b[{BAND_BG}m{lead} {text}{}\x1b[0m",
+            " ".repeat(pad)
+        )
+    }
+
+    /// The prompt, Claude Code style:
+    ///
+    /// ```text
+    /// ────────────────────────────
+    /// ❯ input▮
+    /// ────────────────────────────
+    ///   ? for shortcuts      model
+    /// ```
+    ///
+    /// With `submitted` it collapses to the grey echo band that stays in the
+    /// scrollback (no rules, menu or footer).
     #[allow(clippy::too_many_arguments)]
     pub fn prompt_frame(
         &self,
@@ -335,101 +385,108 @@ impl Theme {
         footer: &Footer,
         submitted: bool,
     ) -> Frame {
-        let bw = width.clamp(MIN_W, 100);
-        let inner = bw - 4;
-        let cap = inner - 2; // "❯ " prefix
+        let w = width.max(MIN_W);
+        let (rows, cur_pos) = layout_input(buf, cur, w - 2);
 
-        // wrap the buffer into rows by display width, tracking the cursor
-        let mut rows: Vec<String> = vec![String::new()];
-        let mut col = 0usize;
-        let mut cur_pos = (0usize, 0usize);
-        for (i, &c) in buf.iter().enumerate() {
-            let w = char_width(c);
-            if col + w > cap {
-                rows.push(String::new());
-                col = 0;
-            }
-            if i == cur {
-                cur_pos = (rows.len() - 1, col);
-            }
-            if let Some(r) = rows.last_mut() {
-                r.push(c);
-            }
-            col += w;
-        }
-        if cur >= buf.len() {
-            if col + 1 > cap {
-                rows.push(String::new());
-                col = 0;
-            }
-            cur_pos = (rows.len() - 1, col);
+        if submitted {
+            let lines: Vec<String> = rows
+                .iter()
+                .enumerate()
+                .map(|(i, r)| self.echo_row(i == 0, r, w))
+                .collect();
+            let last = lines.len().saturating_sub(1);
+            return Frame {
+                lines,
+                cursor_row: last,
+                cursor_col: 0,
+            };
         }
 
-        let mut lines = vec![self.border(&format!("╭{}╮", "─".repeat(bw - 2)))];
+        let rule = self.paint(RULE, &"─".repeat(w));
+        let mut lines = vec![rule.clone()];
         for (ri, r) in rows.iter().enumerate() {
             let prefix = if ri == 0 {
-                self.paint(&format!("{ACCENT};1"), "❯")
+                self.paint("1", "❯")
             } else {
                 " ".to_string()
             };
-            let (text, tw) = if buf.is_empty() && ri == 0 {
-                let ph = r#"try "weather in Mumbai""#;
-                (self.dim(ph), str_width(ph))
+            let text = if buf.is_empty() && ri == 0 {
+                self.dim(r#"try "weather in Mumbai""#)
             } else {
-                (r.clone(), str_width(r))
+                r.clone()
             };
-            let pad = cap.saturating_sub(tw);
-            lines.push(format!(
-                "{} {} {}{} {}",
-                self.border("│"),
-                prefix,
-                text,
-                " ".repeat(pad),
-                self.border("│")
-            ));
+            lines.push(format!("{prefix} {text}"));
         }
-        lines.push(self.border(&format!("╰{}╯", "─".repeat(bw - 2))));
+        lines.push(rule);
 
-        if !submitted {
-            if !menu.is_empty() {
-                for (i, (cmd, desc)) in menu.iter().take(8).enumerate() {
-                    let line = if i == sel {
-                        format!(
-                            "  {} {}  {}",
-                            self.paint(ACCENT, "▸"),
-                            self.paint(&format!("{ACCENT};1"), &format!("{cmd:<9}")),
-                            self.paint("37", desc)
-                        )
-                    } else {
-                        format!(
-                            "    {}  {}",
-                            self.dim(&format!("{cmd:<9}")),
-                            self.dim(desc)
-                        )
-                    };
-                    lines.push(line);
-                }
-            } else {
-                let room = bw.saturating_sub(2);
-                let (left, right) = fit_footer(&footer.left, &footer.right, room);
-                let gap = room
-                    .saturating_sub(str_width(&left) + str_width(&right))
-                    .max(1);
-                let l = if footer.warn {
-                    self.paint(WARN, &left)
+        if !menu.is_empty() {
+            for (i, (cmd, desc)) in menu.iter().take(8).enumerate() {
+                let line = if i == sel {
+                    format!(
+                        "  {} {}  {}",
+                        self.paint(ACCENT, "▸"),
+                        self.paint(&format!("{ACCENT};1"), &format!("{cmd:<9}")),
+                        self.paint("37", desc)
+                    )
                 } else {
-                    self.dim(&left)
+                    format!(
+                        "    {}  {}",
+                        self.dim(&format!("{cmd:<9}")),
+                        self.dim(desc)
+                    )
                 };
-                lines.push(format!("  {}{}{}", l, " ".repeat(gap), self.dim(&right)));
+                lines.push(line);
             }
+        } else {
+            let room = w.saturating_sub(3);
+            let (left, right) = fit_footer(&footer.left, &footer.right, room);
+            let gap = room
+                .saturating_sub(str_width(&left) + str_width(&right))
+                .max(1);
+            let l = if footer.warn {
+                self.paint(WARN, &left)
+            } else {
+                self.dim(&left)
+            };
+            lines.push(format!("  {}{}{}", l, " ".repeat(gap), self.dim(&right)));
         }
 
         Frame {
             lines,
             cursor_row: 1 + cur_pos.0,
-            cursor_col: 4 + cur_pos.1,
+            cursor_col: 2 + cur_pos.1,
         }
     }
+}
+
+/// Wrap the edit buffer into rows of at most `cap` display columns and report
+/// where the cursor sits as `(row, col)` inside them.
+fn layout_input(buf: &[char], cur: usize, cap: usize) -> (Vec<String>, (usize, usize)) {
+    let mut rows: Vec<String> = vec![String::new()];
+    let mut col = 0usize;
+    let mut cur_pos = (0usize, 0usize);
+    for (i, &c) in buf.iter().enumerate() {
+        let cw = char_width(c);
+        if col + cw > cap {
+            rows.push(String::new());
+            col = 0;
+        }
+        if i == cur {
+            cur_pos = (rows.len() - 1, col);
+        }
+        if let Some(r) = rows.last_mut() {
+            r.push(c);
+        }
+        col += cw;
+    }
+    if cur >= buf.len() {
+        if col + 1 > cap {
+            rows.push(String::new());
+            col = 0;
+        }
+        cur_pos = (rows.len() - 1, col);
+    }
+    (rows, cur_pos)
 }
 
 // ───────────── in-place redraw ─────────────
@@ -840,17 +897,19 @@ mod tests {
     }
 
     #[test]
-    fn prompt_frame_places_cursor() {
+    fn prompt_frame_is_two_full_width_rules_around_input() {
         let t = plain();
         let buf: Vec<char> = "hello".chars().collect();
         let f = t.prompt_frame(60, &buf, 5, &[], 0, &footer(), false);
-        assert_eq!(f.cursor_row, 1);
-        assert_eq!(f.cursor_col, 4 + 5);
-        assert_eq!(f.lines.len(), 4); // top, input, bottom, footer
-        assert!(f.lines[1].contains("❯ hello"));
-        // every box line is exactly the box width
-        for l in &f.lines[..3] {
-            assert_eq!(visible_width(l), 60, "{l}");
+        assert_eq!(f.lines.len(), 4); // rule, input, rule, footer
+        assert_eq!((f.cursor_row, f.cursor_col), (1, 2 + 5));
+        assert_eq!(f.lines[0], "─".repeat(60));
+        assert_eq!(f.lines[2], "─".repeat(60));
+        assert_eq!(f.lines[1], "❯ hello");
+        assert!(f.lines[3].starts_with("  / commands"), "{:?}", f.lines[3]);
+        assert!(f.lines[3].ends_with("model"));
+        for l in &f.lines {
+            assert!(visible_width(l) <= 60, "{l}");
         }
     }
 
@@ -860,9 +919,11 @@ mod tests {
         let buf: Vec<char> = "a".repeat(100).chars().collect();
         let f = t.prompt_frame(40, &buf, 100, &[], 0, &footer(), false);
         assert!(f.cursor_row >= 3, "row {}", f.cursor_row);
-        for l in &f.lines[..f.lines.len() - 1] {
-            assert!(visible_width(l) <= 40);
+        for l in &f.lines {
+            assert!(visible_width(l) <= 40, "{l}");
         }
+        // continuation rows are indented under the text, not re-prefixed
+        assert!(f.lines[2].starts_with("  a"), "{:?}", f.lines[2]);
     }
 
     #[test]
@@ -870,7 +931,7 @@ mod tests {
         let t = plain();
         let f = t.prompt_frame(60, &[], 0, &[], 0, &footer(), false);
         assert!(f.lines[1].contains("weather in Mumbai"));
-        assert_eq!((f.cursor_row, f.cursor_col), (1, 4));
+        assert_eq!((f.cursor_row, f.cursor_col), (1, 2));
         let menu = [("/help", "commands"), ("/history", "turns")];
         let f = t.prompt_frame(60, &['/', 'h'], 2, &menu, 1, &footer(), false);
         assert_eq!(f.lines.len(), 5);
@@ -879,10 +940,20 @@ mod tests {
     }
 
     #[test]
-    fn submitted_frame_has_no_footer() {
+    fn submitted_frame_is_just_the_echo_band() {
         let t = plain();
-        let f = t.prompt_frame(60, &['x'], 1, &[], 0, &footer(), true);
-        assert_eq!(f.lines.len(), 3);
+        let f = t.prompt_frame(60, &['h', 'i'], 2, &[], 0, &footer(), true);
+        assert_eq!(f.lines, vec!["❯ hi".to_string()]);
+        assert_eq!((f.cursor_row, f.cursor_col), (0, 0));
+
+        let c = Theme {
+            color: true,
+            cwd: String::new(),
+        };
+        let f = c.prompt_frame(40, &['h', 'i'], 2, &[], 0, &footer(), true);
+        assert_eq!(f.lines.len(), 1);
+        assert!(f.lines[0].contains("48;5;237"), "grey band");
+        assert_eq!(visible_width(&f.lines[0]), 40, "band spans the terminal");
     }
 
     #[test]
@@ -890,16 +961,27 @@ mod tests {
         let t = plain();
         let buf: Vec<char> = "नमस्ते".chars().collect();
         let f = t.prompt_frame(60, &buf, buf.len(), &[], 0, &footer(), false);
-        assert_eq!(f.cursor_col, 4 + 4);
+        assert_eq!(f.cursor_col, 2 + 4);
     }
 
     #[test]
-    fn welcome_and_help_render() {
+    fn welcome_has_mascot_and_three_info_lines() {
         let t = plain();
         let w = t.render_welcome(80, "AERIS-64 · tools-first", false);
-        assert!(w.contains("0zcode"));
-        assert!(w.contains("⬡z") || w.contains("0z"));
-        assert!(w.contains("AERIS-64 · tools-first"));
+        let rows: Vec<&str> = w.lines().filter(|l| !l.is_empty()).collect();
+        assert_eq!(rows.len(), 3, "{w}");
+        assert!(rows[0].contains("███████") && rows[0].contains("0zcode"));
+        assert!(rows[0].contains(&format!("v{PRODUCT_VERSION}")));
+        assert!(rows[1].contains("AERIS-64 · tools-first"));
+        assert!(rows[2].contains("~/proj"));
+        assert!(rows[2].contains("▀▀ ▀▀"), "feet");
+        let off = t.render_welcome(80, "m", true);
+        assert!(off.contains("m · offline"));
+    }
+
+    #[test]
+    fn help_renders() {
+        let t = plain();
         let h = t.render_help(80);
         assert!(h.contains("/expand") && h.contains("ctrl+o"));
         for l in h.lines() {

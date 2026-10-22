@@ -518,6 +518,7 @@ impl<'a> Tui<'a> {
                         true,
                     );
                     self.screen.finish(&f, w);
+                    emit("\n"); // blank row between the echo band and the reply
                     return Some(line.trim().to_string());
                 }
                 Key::Ctrl('c') => {
@@ -645,15 +646,27 @@ mod tests {
     }
 
     #[test]
-    fn finish_renders_tool_and_remembers_for_expand() {
+    fn finish_renders_plain_answer_and_framed_tool_for_expand() {
         let cfg = cfg_offline();
         let mut s = Session::new(&cfg, false);
+        // plain answers (calc) render as a `●` block
         let r = handle("938+29", &cfg);
         let Finish::Text(out) = s.finish("938+29", r, 0.01, 80) else {
             panic!("expected text");
         };
-        assert!(out.contains("● calc(938+29)"), "{out}");
+        assert!(out.starts_with("● "), "{out}");
         assert!(out.contains("938+29 = 967"), "{out}");
+        // framed tool output becomes `● tool(arg)` + `⎿` and is expandable
+        let r = AgentResponse {
+            text: "┌ calc ──\n│ 938+29 = 967\n└──".into(),
+            refused: false,
+            tool_names: vec!["calculator"],
+        };
+        let Finish::Text(out) = s.finish("938+29", r, 0.01, 80) else {
+            panic!("expected text");
+        };
+        assert!(out.contains("● calc(938+29)"), "{out}");
+        assert!(out.contains("⎿  938+29 = 967"), "{out}");
         assert!(s.expand(80).contains("967"));
     }
 

@@ -45,19 +45,22 @@ cargo install --path .
 A real terminal UI, still **Rust std only** (raw mode via `stty`, no crates):
 
 ```text
-╭──────────────────────────────────────────────╮
-│ ▣  Welcome to 0zcode  v1.3.0                 │
-│    tools-first research agent · zero source  │
-│ cwd    ~/work   model  AERIS-64 · tools-first│
-╰──────────────────────────────────────────────╯
-╭──────────────────────────────────────────────╮
-│ ❯ 938+29                                     │
-╰──────────────────────────────────────────────╯
-● calc(938+29)  0.0s
-  ⎿  938+29 = 967
+ ███████   0zcode v1.3.0
+██ ███ ██  AERIS-64 · tools-first
+  ▀▀ ▀▀    ~/work
+
+❯ 938+29                                     ← grey band (echo)
+
+● 938+29 = 967
+
+────────────────────────────────────────────
+❯ █
+────────────────────────────────────────────
+  ? for shortcuts            AERIS-64 · tools-first
 ```
 
-* Rounded input box with line editing, wrapping and Devanagari-aware cursor
+* Claude Code–style prompt between two full-width rules, with line editing, wrapping and Devanagari-aware cursor
+* Submitted line stays in the scrollback as a grey band; replies start with `●`
 * `/` opens a command menu (↑ ↓ to pick, Tab to complete)
 * Input history, saved across sessions in `~/.local/state/0zcode/history`
   (`ZEROZ_HISTORY_FILE` to override)
