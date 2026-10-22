@@ -380,8 +380,11 @@ impl<'a> Tui<'a> {
 
     fn footer(&self) -> Footer {
         let cfg = self.session.cfg;
+        // Claude Code parity: left shortcuts hint · right model / status
         let right = if cfg.offline {
             format!("{} · offline", cfg.model_label)
+        } else if cfg.aeris_url.is_some() {
+            format!("{} · linked", cfg.model_label)
         } else {
             cfg.model_label.clone()
         };
@@ -393,7 +396,7 @@ impl<'a> Tui<'a> {
             }
         } else {
             Footer {
-                left: "/ commands · ctrl+d exit · ctrl+o expand · ctrl+c clear".into(),
+                left: "? for shortcuts".into(),
                 right,
                 warn: false,
             }

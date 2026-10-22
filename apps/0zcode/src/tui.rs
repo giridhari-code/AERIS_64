@@ -125,42 +125,24 @@ impl Theme {
 
     // ───────────── static panels ─────────────
 
+    /// Claude Code–style empty header: mark · name · version / model / path.
+    /// Not a heavy card — compact chrome so the prompt sits near the top.
     pub fn render_welcome(&self, width: usize, model: &str, offline: bool) -> String {
-        let bw = width.clamp(MIN_W, 100);
-        let inner = bw - 4;
-        let mode = if offline {
-            self.paint(WARN, "offline · calculator + commands only")
+        let _ = width;
+        let model_line = if offline {
+            format!("{} · offline", fit(model, 40))
         } else {
-            "agent · no code generation".to_string()
+            fit(model, 48)
         };
-        let rows = vec![
-            String::new(),
-            format!(
-                "{}  {}  {}",
-                self.paint(&format!("{ACCENT};1"), "▣"),
-                self.paint("1", "Welcome to 0zcode"),
-                self.dim(&format!("v{PRODUCT_VERSION}"))
-            ),
-            format!(
-                "   {}",
-                self.dim(&fit(
-                    "tools-first research agent · zero source code",
-                    inner.saturating_sub(3)
-                ))
-            ),
-            String::new(),
-            self.kv("cwd", &fit(&self.cwd, inner.saturating_sub(10))),
-            self.kv("model", &fit(model, inner.saturating_sub(10))),
-            self.kv("mode", &mode),
-            String::new(),
-        ];
+        // 0z company mark (amber) — Claude robot parity, distinct identity
+        let mark = self.paint(&format!("{ACCENT};1"), "⬡z");
+        let name = self.paint("1", "0zcode");
+        let ver = self.dim(&format!("v{PRODUCT_VERSION}"));
         let mut out = String::from("\n");
-        out.push_str(&self.boxed(None, &rows, bw));
-        out.push('\n');
-        let tips = "Ask in English, Hindi or Hinglish · / for commands · /help for shortcuts";
-        for l in wrap(tips, bw.saturating_sub(2)) {
-            out.push_str(&format!("  {}\n", self.dim(&l)));
-        }
+        out.push_str(&format!("  {mark}  {name}  {ver}\n"));
+        out.push_str(&format!("      {}\n", self.dim(&model_line)));
+        out.push_str(&format!("      {}\n", self.paint(OK, &fit(&self.cwd, 56))));
+        out.push_str(&format!("  {}\n", self.border(&"─".repeat(40))));
         out
     }
 
@@ -391,7 +373,7 @@ impl Theme {
                 " ".to_string()
             };
             let (text, tw) = if buf.is_empty() && ri == 0 {
-                let ph = "Ask anything — or type / for commands";
+                let ph = r#"try "weather in Mumbai""#;
                 (self.dim(ph), str_width(ph))
             } else {
                 (r.clone(), str_width(r))
@@ -887,7 +869,7 @@ mod tests {
     fn prompt_frame_empty_shows_placeholder_and_menu_replaces_footer() {
         let t = plain();
         let f = t.prompt_frame(60, &[], 0, &[], 0, &footer(), false);
-        assert!(f.lines[1].contains("Ask anything"));
+        assert!(f.lines[1].contains("weather in Mumbai"));
         assert_eq!((f.cursor_row, f.cursor_col), (1, 4));
         let menu = [("/help", "commands"), ("/history", "turns")];
         let f = t.prompt_frame(60, &['/', 'h'], 2, &menu, 1, &footer(), false);
@@ -914,9 +896,10 @@ mod tests {
     #[test]
     fn welcome_and_help_render() {
         let t = plain();
-        let w = t.render_welcome(80, "local / tools-first", false);
-        assert!(w.contains("Welcome to 0zcode"));
-        assert!(w.contains("local / tools-first"));
+        let w = t.render_welcome(80, "AERIS-64 · tools-first", false);
+        assert!(w.contains("0zcode"));
+        assert!(w.contains("⬡z") || w.contains("0z"));
+        assert!(w.contains("AERIS-64 · tools-first"));
         let h = t.render_help(80);
         assert!(h.contains("/expand") && h.contains("ctrl+o"));
         for l in h.lines() {
