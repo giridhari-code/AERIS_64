@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod config;
+pub mod editor;
 pub mod error;
 pub mod history;
 pub mod http;
@@ -14,10 +15,10 @@ pub mod mcp_store;
 pub mod notes;
 pub mod policy;
 pub mod registry;
-pub mod theme;
+pub mod repl;
+pub mod term;
 pub mod tools;
-pub mod session;
-pub mod ui;
+pub mod tui;
 
 pub use agent::{handle, AgentResponse};
 pub use config::Config;

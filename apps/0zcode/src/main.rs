@@ -1,10 +1,10 @@
-//! 0zcode binary.
+//! 0zcode — company-standard terminal agent binary.
 
 use std::env;
 use std::process::ExitCode;
 use zeroz::agent::handle;
 use zeroz::config::Config;
-use zeroz::policy::{banner_line, refusal_message};
+use zeroz::policy::refusal_message;
 use zeroz::tools;
 use zeroz::VERSION;
 
@@ -17,10 +17,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("{}", banner_line());
-        println!(
-            "\nUsage:\n  0zcode                 interactive TUI\n  0zcode <message>       one-shot\n  0zcode tools|policy\n"
-        );
+        print_help();
         return ExitCode::SUCCESS;
     }
     if args.first().map(String::as_str) == Some("tools") {
@@ -42,11 +39,12 @@ fn main() -> ExitCode {
         };
     }
 
-    match zeroz::ui::run_app(&cfg) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("0zcode TUI error: {e}");
-            ExitCode::FAILURE
-        }
-    }
+    zeroz::repl::run(&cfg)
+}
+
+fn print_help() {
+    println!("0zcode {VERSION} — Agentic work. Zero code.");
+    println!(
+        "\nUsage:\n  0zcode                 interactive TUI\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv / config:\n  ~/.config/0zcode/config.toml  (or ZEROZ_CONFIG)\n  ZEROZ_OFFLINE=1               calc-only\n  ZEROZ_HTTP_TIMEOUT_SECS\n  ZEROZ_MODEL_LABEL\n  ZEROZ_NO_COLOR / NO_COLOR\n  ZEROZ_PLAIN=1                 force plain line mode\n  ZEROZ_HISTORY_FILE\n  ZEROZ_AERIS_URL               AERIS-64 LLM fallback\n"
+    );
 }

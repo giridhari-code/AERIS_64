@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — 0zcode: real interactive TUI
+
+- **0zcode now runs a real terminal UI** (std only, no external crates):
+  raw-mode prompt in a rounded input box, readline-style editing
+  (`ctrl+a/e/w/u/k`, `alt+b/f`), persistent input history, `/` command menu
+  with Tab completion, bracketed paste, resize-aware in-place redraw,
+  Devanagari/CJK-aware cursor, and terminal state restored on exit/panic.
+- **Tool output as blocks**: one `● tool(query)` block per tool with a `⎿`
+  result tree, long output collapsed (`ctrl+o` / `/expand`), tool failures
+  shown as error blocks instead of raw frames.
+- **Live spinner** while network tools run; `esc` / `ctrl+c` interrupts and
+  type-ahead is preserved.
+- **Plain mode** for pipes / `TERM=dumb` / `ZEROZ_PLAIN=1`. Fixes the old REPL
+  never exiting at EOF when stdin was piped.
+- **Company hardening**: AERIS-64 model label default, expanded code-policy
+  markers, clearer refusals, optional `ZEROZ_AERIS_URL` LLM fallback.
+- Module split: `term` (raw mode, key decoder, widths), `editor`, `tui`
+  (pure renderers), `repl` (session loop). Tests 25 → 66. Removed legacy
+  ratatui/crossterm `ui/` stack.
+
 ## Unreleased — buddy v2: account link, hatch celebration, new commands
 
 - **Buddies ride the user account.** First login adopts the guest (device)

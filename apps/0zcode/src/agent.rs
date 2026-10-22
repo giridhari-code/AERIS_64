@@ -281,7 +281,29 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         net(&mut outputs, &mut names, tools::web_search(msg, cfg));
     }
 
+    // Optional AERIS / SENTINEL LLM fallback (company link)
     if outputs.is_empty() {
+        if let Some(url) = cfg.aeris_url.as_deref() {
+            if !cfg.offline {
+                match crate::http::aeris_chat(url, msg, cfg) {
+                    Ok(reply) if !reply.trim().is_empty() => {
+                        return AgentResponse {
+                            text: reply,
+                            refused: false,
+                            tool_names: vec!["aeris"],
+                        };
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        return AgentResponse {
+                            text: format!("AERIS link error: {e}\n(tools still available — set ZEROZ_AERIS_URL)"),
+                            refused: false,
+                            tool_names: vec![],
+                        };
+                    }
+                }
+            }
+        }
         let lang = locale::detect(msg);
         return AgentResponse {
             text: locale::empty_match_hint(lang).to_string(),

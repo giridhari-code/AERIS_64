@@ -1,10 +1,19 @@
 # Copy to ~/.config/0zcode/config.toml
-# Env vars override these values.
+# Env vars override these values (ZEROZ_*).
 
 http_timeout_secs = 12
 max_output_chars = 8000
 color = true
 offline = false
 history_size = 40
-model_label = "local / tools-first"
-# user_agent = "0zcode/1.0"
+
+# Shown in the Claude Code-style header (model line)
+model_label = "AERIS-64 · tools-first"
+
+# Link to local AERIS-64 / SENTINEL LLM (optional, recommended)
+# When set, free-form questions that tools cannot answer are forwarded here.
+# Start the Python server first:
+#   uvicorn "sentinel.api.app:create_app" --factory --port 8000
+aeris_url = "http://127.0.0.1:8000/chat"
+
+# user_agent = "0zcode/1.3"

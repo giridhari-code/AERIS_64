@@ -13,6 +13,9 @@ pub struct Config {
     pub max_output_chars: usize,
     pub color: bool,
     pub model_label: String,
+    /// Optional AERIS / SENTINEL chat endpoint (e.g. http://127.0.0.1:8000).
+    /// When set and offline=false, free-form questions can be routed to the LLM.
+    pub aeris_url: Option<String>,
     /// Skip network tools; calculator + meta still work.
     pub offline: bool,
     pub history_size: usize,
@@ -26,7 +29,8 @@ impl Default for Config {
             user_agent: format!("0zcode/{}", env!("CARGO_PKG_VERSION")),
             max_output_chars: 8_000,
             color: true,
-            model_label: "local / tools-first".into(),
+            model_label: "AERIS-64 · tools-first".into(),
+            aeris_url: None,
             offline: false,
             history_size: 40,
         }
@@ -93,6 +97,10 @@ fn apply_toml_lite(c: &mut Config, text: &str) {
                     c.model_label = v.to_string();
                 }
             }
+            "aeris_url" => {
+                let t = v.trim();
+                c.aeris_url = if t.is_empty() { None } else { Some(t.to_string()) };
+            }
             "user_agent" => {
                 if !v.is_empty() {
                     c.user_agent = v.to_string();
@@ -133,6 +141,10 @@ fn apply_env(c: &mut Config) {
         if !t.is_empty() {
             c.model_label = t.to_string();
         }
+    }
+    if let Ok(s) = env::var("ZEROZ_AERIS_URL") {
+        let t = s.trim();
+        c.aeris_url = if t.is_empty() { None } else { Some(t.to_string()) };
     }
     if let Ok(s) = env::var("ZEROZ_USER_AGENT") {
         let t = s.trim();

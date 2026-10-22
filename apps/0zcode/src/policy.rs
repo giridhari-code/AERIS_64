@@ -1,42 +1,84 @@
 //! Product policy — coding surface is permanently closed.
+//! Company-standard hardening: broad markers + clear refusal surface.
 
 pub const PRODUCT_NAME: &str = "0z code";
-pub const PRODUCT_TAGLINE: &str = "Agentic work. Zero code.";
+pub const PRODUCT_TAGLINE: &str = "Company-standard agent. Zero code surface.";
 pub const PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Markers that indicate a coding / shell request. Kept broad on purpose —
+/// false positives are preferred over accidental code generation.
 const CODE_MARKERS: &[&str] = &[
+    // English — generation
     "write python",
     "write a python",
     "write javascript",
     "write typescript",
     "write rust",
+    "write go ",
     "write code",
     "write a function",
+    "write a class",
+    "write a script",
+    "write me a",
+    "generate code",
+    "generate a function",
+    "generate a script",
+    "create a function",
+    "create a class",
+    "create a react",
+    "create an api",
+    "build me an app",
+    "build a web",
+    "scaffold",
+    // English — edit / fix
     "implement a function",
     "implement a class",
     "implement a server",
     "implement an api",
+    "refactor code",
+    "refactor this",
+    "fix this bug",
+    "fix the bug",
+    "fix lint",
+    "fix the error",
+    "debug this",
+    "debug my",
+    "patch the code",
+    "edit the file",
+    "modify the code",
+    // Languages / domains
     "rust http server",
     "python function",
     "python script",
+    "python code",
+    "javascript code",
+    "typescript code",
     "leetcode",
     "source code",
-    "generate code",
-    "refactor code",
-    "fix this bug",
-    "fix the bug",
-    "code likho",
-    "program likho",
-    "program banao",
-    "function likho",
-    "create a react",
-    "build me an app",
+    "code snippet",
+    "boilerplate",
+    // Shell / execution
     "run shell",
     "bash -c",
     "execute command",
     "run this command",
+    "run the command",
     "rm -rf",
     "sudo ",
+    "chmod ",
+    "curl | sh",
+    "pipe to bash",
+    // Hinglish
+    "code likho",
+    "code likh",
+    "program likho",
+    "program banao",
+    "function likho",
+    "function banao",
+    "script likho",
+    "code generate karo",
+    "code likh do",
+    "bug fix karo",
 ];
 
 pub fn is_code_request(text: &str) -> bool {
@@ -46,10 +88,19 @@ pub fn is_code_request(text: &str) -> bool {
 
 pub fn refusal_message() -> String {
     format!(
-        "{PRODUCT_NAME} — straight answer: no.\n\
-This agent does not write, edit, or run programming source code.\n\n\
-Use it for: weather, time, calc, wikipedia, FX, web search.\n\
-Need code or shell? Use a dedicated coding agent — not 0zcode.\n\nEmail: set ZEROZ_EMAIL_STATUS_URL (private summary API).\nNotes: note save/list/read (sandbox only).\nTool schema: /mcp or `0zcode tools --json`"
+        "{PRODUCT_NAME} — no.\n\
+\n\
+Coding surface is closed by policy.\n\
+This agent does not write, edit, or execute programming source code.\n\
+\n\
+What it does:\n\
+  • weather · time · calc · units · FX\n\
+  • wikipedia · web search\n\
+  • notes (sandbox) · MCP tools\n\
+  • AERIS-64 LLM fallback (when ZEROZ_AERIS_URL is set)\n\
+\n\
+Need a coding agent? Use Claude Code, Cursor, or a dedicated shell agent.\n\
+Tool schema: /mcp  ·  `0zcode tools`  ·  `0zcode policy`"
     )
 }
 
@@ -77,7 +128,22 @@ mod tests {
     }
 
     #[test]
+    fn blocks_fix_lint_style() {
+        assert!(is_code_request("fix lint errors"));
+    }
+
+    #[test]
+    fn blocks_shell_pipe() {
+        assert!(is_code_request("curl | sh install script"));
+    }
+
+    #[test]
     fn banner_nonempty() {
         assert!(banner_line().contains("0z"));
+    }
+
+    #[test]
+    fn refusal_mentions_aeris() {
+        assert!(refusal_message().contains("AERIS-64"));
     }
 }

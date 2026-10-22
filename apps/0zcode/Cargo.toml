@@ -1,6 +1,6 @@
 [package]
 name = "zeroz"
-version = "1.2.0"
+version = "1.3.0"
 edition = "2021"
 rust-version = "1.74"
 description = "0z code — company-standard non-coding agent (terminal)"
@@ -17,9 +17,7 @@ name = "zeroz"
 path = "src/lib.rs"
 
 [dependencies]
-crossterm = "=0.27.0"
-ratatui = "=0.26.3"
-tokio = { version = "=1.36.0", features = ["rt-multi-thread", "sync", "time", "macros"] }
+# std-only TUI (term / editor / repl / tui) — no external crates required
 
 [profile.release]
 lto = true
