@@ -104,14 +104,10 @@ impl Theme {
     /// Shell/code panel like OpenCode `$ ls` blocks
     pub fn print_tool_box(&self, tool: &str, body: &str) {
         println!();
-        // Meta line (Claude: "Read 2 files, ran 1 shell command")
         println!(
             "  {}",
-            self.paint("90", &format!("Ran tool · {tool}"))
+            self.paint("90", &format!("→ Explored · {tool}"))
         );
-        // Panel
-        let border = self.paint("90", "────────────────────────────────────────");
-        println!("  {border}");
         println!(
             "  {} {}",
             self.paint("32;1", "$"),
@@ -136,7 +132,7 @@ impl Theme {
             // Tree-style continuation like Claude └
             println!("  {}", self.paint("37", l));
         }
-        println!("  {border}");
+        println!();
     }
 
     pub fn print_ok(&self, msg: &str) {

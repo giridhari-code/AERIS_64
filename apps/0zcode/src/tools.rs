@@ -74,25 +74,21 @@ pub fn weather(place: &str, cfg: &Config) -> Result<ToolOutput> {
 }
 
 pub fn time_now(cfg: &Config) -> Result<ToolOutput> {
-    match get_text("worldtimeapi.org", "/api/timezone/Etc/UTC", cfg) {
-        Ok(body) => {
-            let dt = string_field(&body, "datetime").unwrap_or_else(|| body.clone());
-            Ok(ToolOutput {
+    // Local-first: always succeed (mobile networks reset worldtimeapi often).
+    let local = local_clock_string();
+    if std::env::var("ZEROZ_TIME_NETWORK").ok().as_deref() == Some("1") {
+        if let Ok(body) = get_text("worldtimeapi.org", "/api/timezone/Etc/UTC", cfg) {
+            let dt = string_field(&body, "datetime").unwrap_or(local.clone());
+            return Ok(ToolOutput {
                 name: "time",
-                body: format!("│ UTC {dt}\n│ source: worldtimeapi"),
-            })
-        }
-        Err(_e) => {
-            // Network flaky on mobile — always ship a local clock fallback.
-            Ok(ToolOutput {
-                name: "time",
-                body: format!(
-                    "│ local (device) {}\n│ UTC network unavailable — using system clock\n│ source: local",
-                    local_clock_string()
-                ),
-            })
+                body: format!("│ network UTC {dt}\n│ device {local}\n│ source: worldtimeapi + local"),
+            });
         }
     }
+    Ok(ToolOutput {
+        name: "time",
+        body: format!("│ {local}\n│ source: device clock"),
+    })
 }
 
 fn local_clock_string() -> String {

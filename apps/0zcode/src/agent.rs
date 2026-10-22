@@ -127,14 +127,14 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         || lower.contains("mausam")
         || lower.contains("temperature")
         || lower.contains("forecast");
-    let wants_time = lower.contains("what time")
+    let wants_time = has_word(&lower, "time")
+        || has_word(&lower, "tarikh")
+        || lower.contains("what time")
         || lower.contains("time now")
         || lower.contains("current time")
         || lower.contains("date today")
-        || lower.contains("tarikh")
-        || lower == "time"
-        || lower.starts_with("time ")
-        || lower.ends_with(" time?");
+        || lower.contains("kitna baja")
+        || lower.contains("kya time");
     let wants_fx = (lower.contains("usd")
         || lower.contains("eur")
         || lower.contains("inr")
@@ -160,15 +160,18 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         || looks_like_math(msg)
         || math_expr.is_some();
 
-    let wants_units = lower.contains(" km ")
+    // Strict units — avoid matching "to finds" / random English
+    let wants_units = (lower.contains(" km ") || lower.contains(" km to") || lower.starts_with("km "))
         || lower.contains(" to mi")
         || lower.contains(" to km")
-        || lower.contains(" to f")
-        || lower.contains(" to c")
+        || lower.contains("c to f")
+        || lower.contains("f to c")
+        || lower.contains("°c")
+        || lower.contains("°f")
         || lower.contains("celsius")
         || lower.contains("fahrenheit")
         || lower.starts_with("convert ")
-        || lower.contains("units ");
+        || lower.starts_with("units ");
     let wants_crypto = lower.contains("btc")
         || lower.contains("bitcoin")
         || lower.contains("eth price")
@@ -315,6 +318,11 @@ fn push_tool(
             body: format!("│ {e}\n│ (honest miss — try another phrasing or check network)"),
         }),
     }
+}
+
+fn has_word(hay: &str, word: &str) -> bool {
+    hay.split(|c: char| !c.is_alphanumeric())
+        .any(|w| w == word)
 }
 
 fn is_greeting(lower: &str) -> bool {
@@ -480,6 +488,18 @@ mod tests {
         let r = handle("hi sir", &Config::default());
         assert!(r.text.to_lowercase().contains("hi") || r.text.contains("0zcode"));
         assert!(!r.refused);
+    }
+
+    #[test]
+    fn how_time_matches() {
+        let r = handle("how time", &Config::default());
+        assert!(r.tool_names.iter().any(|n| *n == "time") || r.text.contains("UTC") || r.text.contains("device"));
+    }
+
+    #[test]
+    fn google_sentence_not_units() {
+        let r = handle("go google to finds code to hello worlds", &Config::default());
+        assert!(!r.tool_names.iter().any(|n| *n == "units"));
     }
 
     #[test]
