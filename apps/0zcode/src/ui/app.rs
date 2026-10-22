@@ -4,7 +4,7 @@ use crate::agent::handle;
 use crate::config::Config;
 use crate::policy::PRODUCT_VERSION;
 use crate::theme::Theme;
-use crate::ui::render::{self, draw};
+use crate::ui::render::draw;
 use crate::session;
 use crate::ui::net_gate;
 use crate::ui::paths;
@@ -98,7 +98,7 @@ async fn run_async(cfg: &Config) -> io::Result<()> {
         }
     });
 
-    let mut result = Ok(());
+    let result = Ok(());
     loop {
         terminal.draw(|f| draw(f, &theme, &state))?;
 

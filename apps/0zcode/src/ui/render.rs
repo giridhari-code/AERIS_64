@@ -12,7 +12,7 @@ use ratatui::Frame;
 use std::path::Path;
 
 pub fn draw(frame: &mut Frame, theme: &Theme, state: &AppState) {
-    let area = frame.area();
+    let area = frame.size(); // ratatui 0.26; 0.28+ uses area()
     frame.render_widget(
         Block::default().style(ratatui::style::Style::default().bg(theme.bg)),
         area,
@@ -241,7 +241,7 @@ pub fn buffer_text(width: u16, height: u16, theme: &Theme, state: &AppState) -> 
     let mut out = String::new();
     for y in 0..height {
         for x in 0..width {
-            let cell = buf.get(x, y).expect("cell");
+            let cell = buf.get(x, y);
             out.push_str(cell.symbol());
         }
         out.push('\n');
