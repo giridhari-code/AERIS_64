@@ -135,8 +135,34 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         || lower.starts_with("kitna")
         || looks_like_math(msg);
 
+    let wants_units = lower.contains(" km ")
+        || lower.contains(" to mi")
+        || lower.contains(" to km")
+        || lower.contains(" to f")
+        || lower.contains(" to c")
+        || lower.contains("celsius")
+        || lower.contains("fahrenheit")
+        || lower.starts_with("convert ")
+        || lower.contains("units ");
+    let wants_crypto = lower.contains("btc")
+        || lower.contains("bitcoin")
+        || lower.contains("eth price")
+        || lower.contains("ethereum")
+        || lower.contains("crypto")
+        || (lower.contains("price") && (lower.contains("btc") || lower.contains("eth") || lower.contains("sol")));
+    let wants_github = lower.contains("github.com/")
+        || lower.starts_with("github ")
+        || (lower.contains("github") && lower.contains('/'));
+    let wants_headlines = lower.contains("headlines")
+        || lower == "news"
+        || lower.starts_with("top news")
+        || lower.contains("bbc news");
+
     if wants_calc {
         push_tool(&mut outputs, &mut names, tools::calculator(msg));
+    }
+    if wants_units {
+        push_tool(&mut outputs, &mut names, tools::units(msg));
     }
 
     let net = |outputs: &mut Vec<ToolOutput>, names: &mut Vec<&'static str>, r: crate::error::Result<ToolOutput>| {
@@ -157,7 +183,21 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         net(&mut outputs, &mut names, tools::currency(msg, cfg));
     }
     if wants_time {
-        net(&mut outputs, &mut names, tools::time_now(cfg));
+        if let Some(place) = extract_place(msg) {
+            net(&mut outputs, &mut names, tools::time_in_place(&place, cfg));
+        } else {
+            net(&mut outputs, &mut names, tools::time_now(cfg));
+        }
+    }
+    if wants_crypto {
+        let sym = extract_crypto_sym(msg);
+        net(&mut outputs, &mut names, tools::crypto_price(&sym, cfg));
+    }
+    if wants_github {
+        net(&mut outputs, &mut names, tools::github_repo(msg, cfg));
+    }
+    if wants_headlines {
+        net(&mut outputs, &mut names, tools::headlines(cfg));
     }
     if wants_weather {
         let place = extract_place(msg).unwrap_or_else(|| "Delhi".into());
@@ -175,7 +215,7 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     if outputs.is_empty() && msg.contains('?') {
         if cfg.offline {
             return AgentResponse {
-                text: "Offline mode: only calculator and /commands work. Turn off ZEROZ_OFFLINE for search/weather.".into(),
+                text: "Offline mode: calculator + units + /commands only. Turn off ZEROZ_OFFLINE for search/weather.".into(),
                 refused: false,
                 tool_names: vec![],
             };
@@ -184,12 +224,9 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     }
 
     if outputs.is_empty() {
+        let lang = locale::detect(msg);
         return AgentResponse {
-            text: format!(
-                "I don't invent answers without a tool match.\n\
-Try: weather in Mumbai · time · 10 USD to INR · calculate 25*4 · who is Ada Lovelace\n\
-/help lists commands. Coding requests are refused by policy."
-            ),
+            text: locale::empty_match_hint(lang).to_string(),
             refused: false,
             tool_names: vec![],
         };
@@ -223,6 +260,16 @@ fn push_tool(
             body: format!("│ {e}\n│ (honest miss — try another phrasing or check network)"),
         }),
     }
+}
+
+fn extract_crypto_sym(msg: &str) -> String {
+    let l = msg.to_lowercase();
+    for s in ["bitcoin", "btc", "ethereum", "eth", "solana", "sol", "dogecoin", "doge"] {
+        if l.contains(s) {
+            return s.to_string();
+        }
+    }
+    "bitcoin".into()
 }
 
 fn looks_like_math(msg: &str) -> bool {

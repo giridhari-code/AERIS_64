@@ -72,6 +72,14 @@ fn tool_hint(msg: &str) -> &'static str {
         "search"
     } else if l.contains("usd") || l.contains("inr") {
         "currency"
+    } else if l.contains("github") {
+        "github"
+    } else if l.contains("btc") || l.contains("crypto") {
+        "crypto"
+    } else if l.contains("headline") || l == "news" {
+        "headlines"
+    } else if l.contains(" km") || l.contains(" to mi") || l.contains(" to f") {
+        "units"
     } else if l.chars().any(|c| "+-*/".contains(c)) {
         "calculator"
     } else {
