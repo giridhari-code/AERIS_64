@@ -130,9 +130,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(model: String, cwd: String, version: String) -> Self {
         Self {
-            messages: vec![Message::system(
-                "Session ready. Type a message or /help · Esc quit.",
-            )],
+            messages: Vec::new(),
             input: String::new(),
             cursor: 0,
             scroll: 0,

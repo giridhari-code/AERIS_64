@@ -1,4 +1,4 @@
-//! Ratatui widgets — colors only from Theme.
+//! Minimal Claude Code–style layout. Full width. No sidebar.
 
 use crate::theme::Theme;
 use crate::ui::commands;
@@ -12,49 +12,51 @@ use ratatui::Frame;
 use std::path::Path;
 
 pub fn draw(frame: &mut Frame, theme: &Theme, state: &AppState) {
-    let area = frame.size(); // ratatui 0.26; 0.28+ uses area()
+    let area = frame.size();
     frame.render_widget(
         Block::default().style(ratatui::style::Style::default().bg(theme.bg)),
         area,
     );
 
+    // header | body | status  — input sits in body bottom like Claude
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(4),
-            Constraint::Min(5),
-            Constraint::Length(if state.pending_permission.is_some() {
-                5
-            } else {
-                3
-            }),
+            Constraint::Min(3),
             Constraint::Length(1),
         ])
         .split(area);
 
     draw_header(frame, theme, state, chunks[0]);
-    draw_transcript(frame, theme, state, chunks[1]);
-    draw_input(frame, theme, state, chunks[2]);
-    draw_footer(frame, theme, state, chunks[3]);
+    draw_body(frame, theme, state, chunks[1]);
+    draw_status(frame, theme, state, chunks[2]);
 }
 
+fn short_cwd(cwd: &str) -> String {
+    if let Ok(home) = std::env::var("HOME") {
+        if let Some(rest) = cwd.strip_prefix(&home) {
+            return format!("~{rest}");
+        }
+    }
+    cwd.to_string()
+}
 
 fn draw_header(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
+    // Claude-like: mark · name version · model · path
     let lines = vec![
         Line::from(vec![
-            Span::styled(" ▣ ", theme.style_accent()),
-            Span::styled(
-                format!("0zcode  v{} ", state.version),
-                theme.style_text(),
-            ),
+            Span::styled("  ▣  ", theme.style_accent()),
+            Span::styled("0zcode ", theme.style_text()),
+            Span::styled(format!("v{}", state.version), theme.style_muted()),
         ]),
         Line::from(Span::styled(
-            format!("  {} ", state.cwd),
-            theme.style_success(),
+            format!("     {}", state.model_label),
+            theme.style_dim(),
         )),
         Line::from(Span::styled(
-            format!("  {} · {} ", state.model_label, state.mode_hint),
-            theme.style_muted(),
+            format!("     {}", short_cwd(&state.cwd)),
+            theme.style_success(),
         )),
     ];
     frame.render_widget(
@@ -67,13 +69,50 @@ fn draw_header(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
     );
 }
 
+fn draw_body(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
+    let has_chat = state.messages.iter().any(|m| {
+        matches!(
+            m.kind,
+            MessageKind::User | MessageKind::Assistant | MessageKind::Tool { .. }
+        )
+    });
+
+    let body = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(2), Constraint::Length(3)])
+        .split(area);
+
+    if !has_chat {
+        // Empty state — Claude style: quiet center + prompt
+        let empty = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  tools-first · zero source",
+                theme.style_muted(),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  Try  weather in Mumbai   ·   time   ·   10 USD to INR   ·   /help",
+                theme.style_dim(),
+            )),
+        ];
+        frame.render_widget(Paragraph::new(empty), body[0]);
+    } else {
+        draw_transcript(frame, theme, state, body[0]);
+    }
+
+    draw_prompt(frame, theme, state, body[1]);
+}
+
 fn draw_transcript(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
     for m in &state.messages {
         match &m.kind {
+            MessageKind::System => continue,
             MessageKind::User => {
+                lines.push(Line::from(""));
                 lines.push(Line::from(vec![
-                    Span::styled(" ❯ ", theme.style_accent()),
+                    Span::styled("❯ ", theme.style_accent()),
                     Span::styled(m.text.clone(), theme.style_text()),
                 ]));
             }
@@ -82,19 +121,20 @@ fn draw_transcript(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rec
                 let mut first = true;
                 for line in md {
                     if first {
-                        let mut spans = vec![Span::styled(" ● ", theme.style_text())];
+                        let mut spans = vec![Span::styled("● ", theme.style_text())];
                         spans.extend(line.spans.iter().cloned());
                         lines.push(Line::from(spans));
                         first = false;
                     } else {
-                        lines.push(line);
+                        let mut spans = vec![Span::raw("  ")];
+                        spans.extend(line.spans.iter().cloned());
+                        lines.push(Line::from(spans));
                     }
                 }
-                lines.push(Line::from(""));
             }
             MessageKind::Activity { summary } => {
                 lines.push(Line::from(vec![
-                    Span::styled(" → ", theme.style_muted()),
+                    Span::styled("  → ", theme.style_muted()),
                     Span::styled(summary.clone(), theme.style_dim()),
                 ]));
             }
@@ -105,101 +145,97 @@ fn draw_transcript(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rec
                     format!("{}ms", duration.as_millis())
                 };
                 lines.push(Line::from(vec![
-                    Span::styled(" + ", theme.style_warning()),
+                    Span::styled("  + ", theme.style_warning()),
                     Span::styled(format!("Thought · {label}"), theme.style_warning()),
                 ]));
             }
             MessageKind::Tool { name, status } => {
                 let st = match status {
-                    ToolStatus::Running => Span::styled("running", theme.style_warning()),
-                    ToolStatus::Done => Span::styled("done", theme.style_success()),
-                    ToolStatus::Failed => Span::styled("failed", theme.style_danger()),
+                    ToolStatus::Running => ("running", theme.style_warning()),
+                    ToolStatus::Done => ("done", theme.style_success()),
+                    ToolStatus::Failed => ("failed", theme.style_danger()),
                 };
                 lines.push(Line::from(vec![
-                    Span::styled(" $ ", theme.style_success()),
+                    Span::styled("  $ ", theme.style_success()),
                     Span::styled(name.clone(), theme.style_success()),
                     Span::raw("  "),
-                    st,
+                    Span::styled(st.0, st.1),
                 ]));
                 for part in m.text.lines() {
                     let p = part.trim().trim_start_matches('│').trim();
-                    if p.is_empty() {
-                        continue;
+                    if !p.is_empty() {
+                        lines.push(Line::from(Span::styled(
+                            format!("    {p}"),
+                            theme.style_dim(),
+                        )));
                     }
-                    lines.push(Line::from(Span::styled(
-                        format!("   {p}"),
-                        theme.style_dim(),
-                    )));
                 }
-                lines.push(Line::from(""));
-            }
-            MessageKind::System => {
-                lines.push(Line::from(Span::styled(
-                    format!("  {} ", m.text),
-                    theme.style_muted(),
-                )));
             }
             MessageKind::Error => {
                 for part in m.text.lines() {
                     lines.push(Line::from(vec![
-                        Span::styled(" ● ", theme.style_danger()),
+                        Span::styled("● ", theme.style_danger()),
                         Span::styled(part.to_string(), theme.style_danger()),
                     ]));
                 }
-                lines.push(Line::from(""));
             }
         }
     }
 
-    let para = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .scroll((state.scroll, 0));
-    frame.render_widget(para, area);
+    let visible = area.height as usize;
+    let max_off = lines.len().saturating_sub(visible);
+    let y = max_off.saturating_sub(state.scroll as usize) as u16;
+    frame.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((y, 0)),
+        area,
+    );
 }
 
-fn draw_input(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
-    let mut lines: Vec<Line> = Vec::new();
+fn draw_prompt(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
+    let mut lines = Vec::new();
 
     if let Some((tool, _)) = &state.pending_permission {
         lines.push(Line::from(Span::styled(
-            format!(" Network tool `{tool}` — allow once [y] / always [a] / deny [n] "),
+            format!("  Allow network `{tool}`?  y once · a always · n deny"),
             theme.style_warning(),
         )));
     }
 
-    lines.push(Line::from(vec![
-        Span::styled(" ❯ ", theme.style_accent()),
-        Span::styled(state.input.clone(), theme.style_text()),
-        Span::styled("█", theme.style_accent()),
-    ]));
+    // Prompt line — Claude style
+    if state.input.is_empty() && state.pending_permission.is_none() {
+        lines.push(Line::from(vec![
+            Span::styled("❯ ", theme.style_accent()),
+            Span::styled(
+                "Try \"weather in Mumbai\"",
+                theme.style_muted(),
+            ),
+        ]));
+    } else {
+        lines.push(Line::from(vec![
+            Span::styled("❯ ", theme.style_accent()),
+            Span::styled(state.input.clone(), theme.style_text()),
+            Span::styled("█", theme.style_accent()),
+        ]));
+    }
 
+    // Completions only when typing / or @
     if state.input.starts_with('/') {
-        let matches = commands::filter_commands(&state.input);
-        let hint = matches
-            .iter()
-            .take(4)
-            .map(|c| format!("{} — {}", c.name, c.description))
-            .collect::<Vec<_>>()
-            .join("  ·  ");
-        lines.push(Line::from(Span::styled(
-            format!("  {hint} "),
-            theme.style_muted(),
-        )));
+        let m = commands::filter_commands(&state.input);
+        let h = m.iter().take(6).map(|c| c.name).collect::<Vec<_>>().join("  ");
+        lines.push(Line::from(Span::styled(format!("  {h}"), theme.style_muted())));
     } else if let Some(tok) = paths::at_token(&state.input) {
-        let cwd = Path::new(&state.cwd);
-        let matches = paths::fuzzy_paths(cwd, tok);
-        let hint = if matches.is_empty() {
-            "no path matches".into()
+        let m = paths::fuzzy_paths(Path::new(&state.cwd), tok);
+        let h = if m.is_empty() {
+            "no matches".into()
         } else {
-            matches.join("  ·  ")
+            m.join("  ")
         };
-        lines.push(Line::from(Span::styled(
-            format!("  @{hint} "),
-            theme.style_success(),
-        )));
+        lines.push(Line::from(Span::styled(format!("  {h}"), theme.style_success())));
     } else {
         lines.push(Line::from(Span::styled(
-            format!("  {} ", state.model_label),
+            "  ? /help",
             theme.style_muted(),
         )));
     }
@@ -208,25 +244,29 @@ fn draw_input(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
         Paragraph::new(lines).block(
             Block::default()
                 .borders(Borders::TOP)
-                .border_style(theme.style_border())
-                .style(theme.style_panel()),
+                .border_style(theme.style_border()),
         ),
         area,
     );
 }
 
-fn draw_footer(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
-    let spin = if state.working { "●" } else { "·" };
+fn draw_status(frame: &mut Frame, theme: &Theme, state: &AppState, area: Rect) {
+    let left = if state.working {
+        format!(" ● {}", state.status_line)
+    } else {
+        " · ready".into()
+    };
     let style = if state.working {
         theme.style_warning()
     } else {
         theme.style_muted()
     };
-    let text = format!(
-        " {spin} {}  ·  esc quit  ·  tools-first  ·  coding disabled ",
-        state.status_line
+    // Claude puts hints on the right conceptually — we keep one quiet line
+    let text = format!("{left}                              esc quit");
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(text, style))),
+        area,
     );
-    frame.render_widget(Paragraph::new(Line::from(Span::styled(text, style))), area);
 }
 
 pub fn buffer_text(width: u16, height: u16, theme: &Theme, state: &AppState) -> String {
@@ -234,15 +274,12 @@ pub fn buffer_text(width: u16, height: u16, theme: &Theme, state: &AppState) -> 
     use ratatui::Terminal;
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).expect("test terminal");
-    terminal
-        .draw(|f| draw(f, theme, state))
-        .expect("draw");
+    terminal.draw(|f| draw(f, theme, state)).expect("draw");
     let buf = terminal.backend().buffer().clone();
     let mut out = String::new();
     for y in 0..height {
         for x in 0..width {
-            let cell = buf.get(x, y);
-            out.push_str(cell.symbol());
+            out.push_str(buf.get(x, y).symbol());
         }
         out.push('\n');
     }
