@@ -1,17 +1,11 @@
-//! 0zcode TUI — original “signal / zero” identity (ANSI only).
-//!
-//! Visual language:
-//!   · Signal mark  ⌁  (not a generic robot clone)
-//!   · Vertical rail instead of heavy boxes
-//!   · Dim gutter + bright payload
-//!   · No Claude-style chrome bars
+//! 0zcode TUI — Claude Code / OpenCode–grade chrome (ANSI, std only).
+//! Layout language: header · activity · code panels · status footer.
 
 use crate::config::Config;
 use crate::policy::PRODUCT_VERSION;
 use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Theme {
     pub color: bool,
@@ -43,38 +37,50 @@ impl Theme {
         let _ = io::stdout().flush();
     }
 
+    /// Claude-style header: mark · model line · path
     pub fn print_header(&self) {
-        // Unique mark: zero + signal wave (not robot head)
+        // Nested-square mark (product glyph) + name
+        let mark = self.paint("33;1", "▣");
+        let name = self.paint("37;1", "0zcode");
+        let ver = self.paint("90", &format!("v{PRODUCT_VERSION}"));
         println!();
-        println!(
-            "  {}{}{}",
-            self.paint("36;1", "0"),
-            self.paint("37;1", "z"),
-            self.paint("36", "⌁")
-        );
-        println!(
-            "  {}  {}",
-            self.paint("37;1", "code"),
-            self.paint("90", &format!("v{PRODUCT_VERSION}"))
-        );
+        println!("  {mark}  {name}  {ver}");
         println!(
             "  {}",
-            self.paint("90", "tools · zero source · signal clean")
+            self.paint("90", "tools-first · zero source · research agent")
         );
         println!("  {}", self.paint("36", &self.cwd));
         println!();
-        let tip = tip_of_session();
         println!(
-            "  {} {}",
-            self.paint("35;1", "·"),
-            self.paint("35", tip)
+            "  {}",
+            self.paint(
+                "90",
+                "Session ready.  /help  /tools  /mcp  /status  /model"
+            )
         );
         println!();
     }
 
+    /// OpenCode/Claude prompt: ❯
     pub fn prompt(&self) -> String {
-        // Unique prompt: signal caret, not ❯ clone
-        format!("{} ", self.paint("36;1", "⌁"))
+        format!("{} ", self.paint("37;1", "❯"))
+    }
+
+    /// Dim activity line: → Explored / Ran tool
+    pub fn print_activity(&self, kind: &str, detail: &str) {
+        println!(
+            "  {} {}",
+            self.paint("90", "→"),
+            self.paint("90", &format!("{kind}: {detail}"))
+        );
+    }
+
+    pub fn print_thought(&self, ms_label: &str) {
+        println!(
+            "  {} {}",
+            self.paint("33", "+"),
+            self.paint("33", &format!("Thought · {ms_label}"))
+        );
     }
 
     pub fn print_assistant(&self, text: &str) {
@@ -83,50 +89,60 @@ impl Theme {
             if first {
                 println!(
                     "  {} {}",
-                    self.paint("32;1", "▸"),
+                    self.paint("37;1", "●"),
                     self.paint("37", line)
                 );
                 first = false;
-            } else {
+            } else if line.starts_with("- ") || line.starts_with("· ") {
                 println!("    {}", self.paint("37", line));
+            } else {
+                println!("  {}", self.paint("37", line));
             }
         }
     }
 
+    /// Shell/code panel like OpenCode `$ ls` blocks
     pub fn print_tool_box(&self, tool: &str, body: &str) {
-        // Vertical rail card — distinctive vs rounded Claude boxes
-        let accent = tool_accent(tool);
         println!();
+        // Meta line (Claude: "Read 2 files, ran 1 shell command")
         println!(
-            "  {}{}{}",
-            self.paint(&format!("{accent};1"), "┃ "),
-            self.paint(&format!("{accent};1"), tool),
-            self.paint("90", " · live")
+            "  {}",
+            self.paint("90", &format!("Ran tool · {tool}"))
+        );
+        // Panel
+        let border = self.paint("90", "────────────────────────────────────────");
+        println!("  {border}");
+        println!(
+            "  {} {}",
+            self.paint("32;1", "$"),
+            self.paint("32;1", tool)
         );
         for line in body.lines() {
             let mut l = line.trim_start();
             if let Some(s) = l.strip_prefix('│') {
                 l = s.trim_start();
             }
-            if l.starts_with('┌') || l.starts_with('└') || l.starts_with('─') || l.starts_with('┃') {
+            if l.starts_with('┌')
+                || l.starts_with('└')
+                || l.starts_with('─')
+                || l.starts_with('┃')
+                || l.starts_with('┖')
+            {
                 continue;
             }
             if l.is_empty() {
                 continue;
             }
-            println!(
-                "  {}{}",
-                self.paint(accent, "┃ "),
-                self.paint("37", l)
-            );
+            // Tree-style continuation like Claude └
+            println!("  {}", self.paint("37", l));
         }
-        println!("  {}", self.paint(accent, "┖─"));
+        println!("  {border}");
     }
 
     pub fn print_ok(&self, msg: &str) {
         println!(
             "  {} {}",
-            self.paint("32;1", "▸"),
+            self.paint("32", "✔"),
             self.paint("32", msg)
         );
     }
@@ -136,20 +152,20 @@ impl Theme {
         if let Some(first) = lines.next() {
             println!(
                 "  {} {}",
-                self.paint("31;1", "▸"),
+                self.paint("31;1", "●"),
                 self.paint("31;1", first)
             );
         }
         for line in lines {
-            println!("    {}", self.paint("31", line));
+            println!("  {}", self.paint("31", line));
         }
     }
 
     pub fn print_progress(&self, label: &str) {
         print!(
             "  {} {}",
-            self.paint("36", "⌁"),
-            self.paint("90", label)
+            self.paint("33", "+"),
+            self.paint("33", &format!("Thought · {label}"))
         );
         let _ = io::stdout().flush();
     }
@@ -171,50 +187,51 @@ impl Theme {
         config_path: &str,
     ) {
         println!();
-        println!("  {}", self.paint("36;1", "⌁ status"));
-        kv(self, "model", model);
-        kv(self, "path", &self.cwd);
-        kv(self, "mode", mode);
-        kv(self, "offline", if offline { "yes" } else { "no" });
-        kv(self, "color", if color { "on" } else { "off" });
-        kv(self, "turns", &turns.to_string());
-        kv(
-            self,
-            "last",
-            if last_tool.is_empty() { "—" } else { last_tool },
+        println!("  {}", self.paint("37;1", "Status"));
+        println!(
+            "  {}",
+            self.paint(
+                "90",
+                &format!(
+                    "model {model} · mode {mode} · offline {} · color {}",
+                    if offline { "yes" } else { "no" },
+                    if color { "on" } else { "off" }
+                )
+            )
         );
-        kv(self, "up", &format!("{uptime_secs}s"));
-        kv(self, "cfg", config_path);
+        println!(
+            "  {}",
+            self.paint(
+                "90",
+                &format!(
+                    "turns {turns} · last {} · up {uptime_secs}s",
+                    if last_tool.is_empty() { "—" } else { last_tool }
+                )
+            )
+        );
+        println!("  {}", self.paint("90", &format!("cwd  {}", self.cwd)));
+        println!("  {}", self.paint("90", &format!("cfg  {config_path}")));
         println!();
     }
 
     pub fn print_status(&self, model: &str, files: u32, mode: &str) {
-        self.print_status_rich(
-            model,
-            mode,
-            false,
-            self.color,
-            files as usize,
-            "",
-            0,
-            "",
-        );
+        self.print_status_rich(model, mode, false, self.color, files as usize, "", 0, "");
     }
 
     pub fn print_help_panel(&self) {
         println!();
-        println!("  {}", self.paint("36;1", "⌁ commands"));
-        let rows = [
-            ("?", "help"),
-            ("/tools", "built-ins"),
-            ("/mcp", "your tools"),
-            ("/history", "session"),
-            ("/status", "stats"),
-            ("/copy", "save last"),
-            ("/clear", "reset"),
+        println!("  {}", self.paint("37;1", "Commands"));
+        for (c, d) in [
+            ("/help", "this panel"),
+            ("/tools", "built-in tools"),
+            ("/mcp", "configure user tools"),
+            ("/history", "session turns"),
+            ("/status", "session status"),
+            ("/model", "display label"),
+            ("/copy", "save last reply"),
+            ("/clear", "clear screen"),
             ("/quit", "exit"),
-        ];
-        for (c, d) in rows {
+        ] {
             println!(
                 "  {}  {}",
                 self.paint("36", &format!("{c:<10}")),
@@ -224,49 +241,21 @@ impl Theme {
         println!();
         println!(
             "  {}",
-            self.paint("35", "signal:  time  ·  938+29  ·  weather in Mumbai")
+            self.paint("90", "Examples: time · weather in Mumbai · 938+29 · headlines")
         );
         println!();
     }
-}
 
-fn tool_accent(tool: &str) -> &'static str {
-    if tool.contains("calc") || tool.contains("units") {
-        "33" // amber
-    } else if tool.contains("weather") || tool.contains("time") {
-        "36" // cyan
-    } else if tool.contains("error") {
-        "31"
-    } else if tool.contains("mcp") || tool.contains("email") || tool.contains("notes") {
-        "35" // magenta
-    } else if tool.contains("wiki") || tool.contains("search") || tool.contains("github") {
-        "34"
-    } else {
-        "36"
+    /// Footer strip (OpenCode-style session line)
+    pub fn print_footer_hint(&self, model: &str) {
+        println!(
+            "  {}",
+            self.paint(
+                "90",
+                &format!("──  {model}  ·  ? help  ·  esc not required  ·  0zcode  ──")
+            )
+        );
     }
-}
-
-fn kv(theme: &Theme, k: &str, v: &str) {
-    println!(
-        "  {}  {}",
-        theme.paint("90", &format!("{k:<8}")),
-        theme.paint("37", v)
-    );
-}
-
-fn tip_of_session() -> &'static str {
-    const TIPS: &[&str] = &[
-        "938+29 inside a sentence still works",
-        "/mcp add  →  wire your own endpoints",
-        "time falls back to device clock",
-        "note save  →  local sandbox only",
-        "zero code is the product, not a bug",
-    ];
-    let n = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as usize)
-        .unwrap_or(0);
-    TIPS[n % TIPS.len()]
 }
 
 fn shorten_path(p: PathBuf) -> Option<String> {

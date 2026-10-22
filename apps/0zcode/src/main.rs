@@ -241,6 +241,7 @@ Built-in schema:
             theme.print_err(&r.text);
         } else if !r.tool_names.is_empty() {
             let name = r.tool_names.join("+");
+            theme.print_activity("Explored", &format!("{} tool(s)", r.tool_names.len()));
             theme.print_tool_box(&name, &r.text);
         } else {
             theme.print_assistant(&r.text);
