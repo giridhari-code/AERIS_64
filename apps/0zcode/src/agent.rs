@@ -1,4 +1,5 @@
-//! Request orchestration: policy → route → tools → response.
+//! Request orchestration: policy → route → tools → direct answer.
+//! Voice: honest, short, no corporate filler (Grok-style product behavior).
 
 use crate::config::Config;
 use crate::policy::{self, PRODUCT_NAME, PRODUCT_TAGLINE};
@@ -15,7 +16,7 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     let msg = user.trim();
     if msg.is_empty() {
         return AgentResponse {
-            text: "Empty input.".into(),
+            text: "Empty input — type a question or /help.".into(),
             refused: false,
             tool_names: vec![],
         };
@@ -30,6 +31,8 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     }
 
     let lower = msg.to_lowercase();
+
+    // —— meta / slash (deterministic) ————————————————————————————————
     if matches!(
         lower.as_str(),
         "/quit" | "/exit" | "quit" | "exit" | "q" | "/q"
@@ -47,7 +50,7 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
             tool_names: vec![],
         };
     }
-    if lower == "/help" || lower == "help" || lower == "?" {
+    if matches!(lower.as_str(), "/help" | "help" | "?") {
         return AgentResponse {
             text: help_text(),
             refused: false,
@@ -64,88 +67,107 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
     if lower.starts_with("/status") {
         return AgentResponse {
             text: format!(
-                "product: {PRODUCT_NAME}\nversion: {}\ntagline: {PRODUCT_TAGLINE}\nmode: research tools only (no code)",
-                env!("CARGO_PKG_VERSION")
+                "{PRODUCT_NAME} v{}\n{PRODUCT_TAGLINE}\nmode: research tools only — no code gen\nmodel label: {}",
+                env!("CARGO_PKG_VERSION"),
+                cfg.model_label
             ),
             refused: false,
             tool_names: vec![],
         };
     }
-    if lower.starts_with("/version") {
+    if lower.starts_with("/version") || lower == "version" {
         return AgentResponse {
             text: policy::banner_line(),
             refused: false,
             tool_names: vec![],
         };
     }
+    if lower.starts_with("/model") {
+        return AgentResponse {
+            text: format!(
+                "Display label: {}\n(This is cosmetic. Tools run locally via HTTP APIs; set ZEROZ_MODEL_LABEL to rename.)",
+                cfg.model_label
+            ),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
 
+    // —— tool plan (multi-intent OK) ————————————————————————————————
     let mut outputs: Vec<ToolOutput> = Vec::new();
     let mut names: Vec<&'static str> = Vec::new();
 
-    let push = |outputs: &mut Vec<ToolOutput>, names: &mut Vec<&'static str>, r: crate::error::Result<ToolOutput>| {
-        match r {
-            Ok(o) => {
-                names.push(o.name);
-                outputs.push(o);
-            }
-            Err(e) => outputs.push(ToolOutput {
-                name: "error",
-                body: format!("│ {e}"),
-            }),
-        }
-    };
-
-    if lower.contains("weather") || lower.contains("mausam") {
-        let place = extract_place(msg).unwrap_or_else(|| "Delhi".into());
-        push(&mut outputs, &mut names, tools::weather(&place, cfg));
-    }
-    if lower.contains("time") || lower.contains("date") || lower.contains("tarikh") {
-        push(&mut outputs, &mut names, tools::time_now(cfg));
-    }
-    if (lower.contains("usd") || lower.contains("eur") || lower.contains("inr") || lower.contains("gbp"))
-        && (lower.contains("to") || lower.contains(" in "))
-    {
-        push(&mut outputs, &mut names, tools::currency(msg, cfg));
-    }
-    if lower.contains("wikipedia")
-        || lower.starts_with("who is")
-        || lower.starts_with("what is")
-        || lower.contains("tell me about")
-    {
-        let topic = strip_prefixes(
-            &lower,
-            &["wikipedia", "who is", "what is", "tell me about"],
-        );
-        push(&mut outputs, &mut names, tools::wikipedia(&topic, cfg));
-    }
-    if (lower.contains("search") || lower.contains("news") || lower.contains("look up"))
-        && outputs.is_empty()
-    {
-        push(&mut outputs, &mut names, tools::web_search(msg, cfg));
-    }
-    if lower.starts_with("calculate")
+    let wants_weather = lower.contains("weather")
+        || lower.contains("mausam")
+        || lower.contains("temperature")
+        || lower.contains("forecast");
+    let wants_time = lower.contains("what time")
+        || lower.contains("time now")
+        || lower.contains("current time")
+        || lower.contains("date today")
+        || lower.contains("tarikh")
+        || lower == "time"
+        || lower.starts_with("time ")
+        || lower.ends_with(" time?");
+    let wants_fx = (lower.contains("usd")
+        || lower.contains("eur")
+        || lower.contains("inr")
+        || lower.contains("gbp")
+        || lower.contains("jpy"))
+        && (lower.contains("to") || lower.contains(" in ") || lower.contains("convert"));
+    let wants_wiki = lower.contains("wikipedia")
+        || lower.starts_with("who is ")
+        || lower.starts_with("who was ")
+        || lower.starts_with("what is ")
+        || lower.contains("tell me about ")
+        || lower.contains("ke bare mein")
+        || lower.contains("kaun hai");
+    let wants_search = lower.contains("search")
+        || lower.contains("look up")
+        || lower.contains("latest news")
+        || lower.contains("headline")
+        || lower.contains("khabar");
+    let wants_calc = lower.starts_with("calculate")
         || lower.starts_with("compute")
-        || msg
-            .chars()
-            .all(|c| c.is_ascii_digit() || " +-*/.()".contains(c))
-    {
-        push(&mut outputs, &mut names, tools::calculator(msg));
+        || lower.starts_with("kitna")
+        || looks_like_math(msg);
+
+    if wants_calc {
+        push_tool(&mut outputs, &mut names, tools::calculator(msg));
+    }
+    if wants_fx {
+        push_tool(&mut outputs, &mut names, tools::currency(msg, cfg));
+    }
+    if wants_time {
+        push_tool(&mut outputs, &mut names, tools::time_now(cfg));
+    }
+    if wants_weather {
+        let place = extract_place(msg).unwrap_or_else(|| "Delhi".into());
+        push_tool(&mut outputs, &mut names, tools::weather(&place, cfg));
+    }
+    if wants_wiki && !wants_search {
+        let topic = strip_wiki_topic(msg);
+        push_tool(&mut outputs, &mut names, tools::wikipedia(&topic, cfg));
+    }
+    if wants_search {
+        push_tool(&mut outputs, &mut names, tools::web_search(msg, cfg));
+    }
+
+    // Fallback: question mark → search once (don't invent answers)
+    if outputs.is_empty() && msg.contains('?') {
+        push_tool(&mut outputs, &mut names, tools::web_search(msg, cfg));
     }
 
     if outputs.is_empty() {
-        if msg.contains('?') {
-            push(&mut outputs, &mut names, tools::web_search(msg, cfg));
-        } else {
-            return AgentResponse {
-                text: format!(
-                    "{PRODUCT_NAME} — {PRODUCT_TAGLINE}\n\
-Try: weather in Mumbai · time · 10 USD to INR · calculate 25*4\n\
-/tools  /version  /quit"
-                ),
-                refused: false,
-                tool_names: vec![],
-            };
-        }
+        return AgentResponse {
+            text: format!(
+                "I don't invent answers without a tool match.\n\
+Try: weather in Mumbai · time · 10 USD to INR · calculate 25*4 · who is Ada Lovelace\n\
+/help lists commands. Coding requests are refused by policy."
+            ),
+            refused: false,
+            tool_names: vec![],
+        };
     }
 
     let text = outputs
@@ -161,9 +183,48 @@ Try: weather in Mumbai · time · 10 USD to INR · calculate 25*4\n\
     }
 }
 
+fn push_tool(
+    outputs: &mut Vec<ToolOutput>,
+    names: &mut Vec<&'static str>,
+    r: crate::error::Result<ToolOutput>,
+) {
+    match r {
+        Ok(o) => {
+            names.push(o.name);
+            outputs.push(o);
+        }
+        Err(e) => outputs.push(ToolOutput {
+            name: "error",
+            body: format!("│ {e}\n│ (honest miss — try another phrasing or check network)"),
+        }),
+    }
+}
+
+fn looks_like_math(msg: &str) -> bool {
+    let t = msg.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let has_op = t.chars().any(|c| "+-*/".contains(c));
+    let mostly_math = t
+        .chars()
+        .all(|c| c.is_ascii_digit() || "+-*/().% ".contains(c));
+    has_op && mostly_math
+}
+
 fn help_text() -> String {
     format!(
-        "{PRODUCT_NAME} — commands\n\n  /help      this message\n  /tools     list tools\n  /status    product status\n  /version   version banner\n  /clear     clear screen (REPL)\n  /quit      exit REPL\n\nExamples:\n  weather in Mumbai\n  time\n  10 USD to INR\n  calculate 25*4\n  who is Ada Lovelace"
+        "{PRODUCT_NAME} — direct answers from tools, not guesses.\n\n\
+Commands\n\
+  /help /tools /status /model /version /clear /quit\n\n\
+Examples\n\
+  weather in Mumbai\n\
+  time\n\
+  10 USD to INR\n\
+  calculate 25*4\n\
+  who is Ada Lovelace\n\
+  search latest AI news\n\n\
+Policy: no source-code write/edit/execute."
     )
 }
 
@@ -172,26 +233,78 @@ fn extract_place(msg: &str) -> Option<String> {
     for key in [" in ", " at ", " for "] {
         if let Some(i) = lower.find(key) {
             let rest = msg[i + key.len()..].trim().trim_matches('?');
-            if !rest.is_empty() {
-                return Some(
-                    rest.split_whitespace()
-                        .take(3)
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                );
+            if rest.is_empty() {
+                continue;
+            }
+            // stop at "and" / comma for multi-intent
+            let cut = rest
+                .split(|c| c == ',' || c == '?')
+                .next()
+                .unwrap_or(rest);
+            let cut = cut
+                .split_whitespace()
+                .take_while(|w| {
+                    let l = w.to_lowercase();
+                    l != "and" && l != "aur" && l != "time" && l != "date"
+                })
+                .take(3)
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !cut.is_empty() {
+                return Some(cut);
             }
         }
     }
     None
 }
 
-fn strip_prefixes(s: &str, prefixes: &[&str]) -> String {
-    let mut t = s.to_string();
-    for p in prefixes {
-        if let Some(stripped) = t.strip_prefix(p) {
-            t = stripped.to_string();
+fn strip_wiki_topic(msg: &str) -> String {
+    let mut t = msg.to_lowercase();
+    for p in [
+        "wikipedia",
+        "who is ",
+        "who was ",
+        "what is ",
+        "tell me about ",
+        "ke bare mein ",
+        "kaun hai ",
+    ] {
+        if let Some(s) = t.strip_prefix(p) {
+            t = s.to_string();
         }
         t = t.replace(p, "");
     }
     t.trim().trim_matches('?').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    #[test]
+    fn math_detect() {
+        assert!(looks_like_math("2+2"));
+        assert!(looks_like_math("15 * 3"));
+        assert!(!looks_like_math("weather in Delhi"));
+    }
+
+    #[test]
+    fn place_stops_at_and() {
+        let p = extract_place("weather in Delhi and what time");
+        assert_eq!(p.as_deref(), Some("Delhi"));
+    }
+
+    #[test]
+    fn help_slash() {
+        let r = handle("/help", &Config::default());
+        assert!(r.text.contains("Commands"));
+        assert!(!r.refused);
+    }
+
+    #[test]
+    fn refuses_code() {
+        let r = handle("write a python function", &Config::default());
+        assert!(r.refused);
+    }
 }

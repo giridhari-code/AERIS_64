@@ -13,22 +13,22 @@ pub struct ToolOutput {
 
 impl ToolOutput {
     pub fn render(&self) -> String {
-        let bar = "─".repeat(30);
+        let bar = "─".repeat(36);
         format!("┌ {} {bar}\n{}\n└{bar}", self.name, self.body)
     }
 }
 
 pub fn catalog() -> &'static str {
-    "┌ tools ───────────────────────────\n\
-│ weather <place>     live weather\n\
-│ time                UTC time\n\
-│ calc <expr>         + - * / only\n\
-│ wiki <topic>        encyclopedia\n\
-│ search <query>      web instant answers\n\
-│ 10 USD to INR       FX convert\n\
-└──────────────────────────────────\n\
-slash: /tools /help /version /clear /quit\n\
-policy: coding disabled"
+    "┌ tools ────────────────────────────────
+│ weather <place>     live conditions (Open-Meteo)
+│ time                UTC clock
+│ calc <expr>         + - * / only
+│ wiki <topic>        short encyclopedia
+│ search <query>      web instant answers
+│ 10 USD to INR       FX convert
+└────────────────────────────────────────
+slash: /help /tools /status /model /version /clear /quit
+policy: coding disabled — research tools only"
 }
 
 pub fn weather(place: &str, cfg: &Config) -> Result<ToolOutput> {

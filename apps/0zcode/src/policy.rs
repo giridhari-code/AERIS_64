@@ -29,6 +29,8 @@ const CODE_MARKERS: &[&str] = &[
     "program likho",
     "program banao",
     "function likho",
+    "create a react",
+    "build me an app",
 ];
 
 pub fn is_code_request(text: &str) -> bool {
@@ -38,11 +40,10 @@ pub fn is_code_request(text: &str) -> bool {
 
 pub fn refusal_message() -> String {
     format!(
-        "{PRODUCT_NAME} policy\n\
-────────────────────────\n\
-This agent does not write, edit, or execute programming source code.\n\n\
-Allowed: research, weather, time, calculator, wikipedia, currency, planning.\n\
-For software implementation, use a dedicated coding assistant."
+        "{PRODUCT_NAME} — straight answer: no.\n\
+This agent does not write, edit, or run programming source code.\n\n\
+Use it for: weather, time, calc, wikipedia, FX, web search.\n\
+Need code? Use a dedicated coding assistant — not this binary."
     )
 }
 
