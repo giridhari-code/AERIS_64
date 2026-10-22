@@ -61,8 +61,7 @@ fn run_repl(cfg: &Config) -> ExitCode {
     theme.clear_screen();
     theme.print_header();
 
-    let model_label =
-        env::var("ZEROZ_MODEL_LABEL").unwrap_or_else(|_| "local / tools-first".into());
+    let model_label = cfg.model_label.clone();
 
     let stdin = io::stdin();
     loop {

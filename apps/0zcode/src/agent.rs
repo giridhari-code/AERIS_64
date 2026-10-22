@@ -47,9 +47,26 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
             tool_names: vec![],
         };
     }
-    if lower.starts_with("/help") || lower.starts_with("/tools") {
+    if lower == "/help" || lower == "help" || lower == "?" {
+        return AgentResponse {
+            text: help_text(),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/tools") {
         return AgentResponse {
             text: tools::catalog().into(),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/status") {
+        return AgentResponse {
+            text: format!(
+                "product: {PRODUCT_NAME}\nversion: {}\ntagline: {PRODUCT_TAGLINE}\nmode: research tools only (no code)",
+                env!("CARGO_PKG_VERSION")
+            ),
             refused: false,
             tool_names: vec![],
         };
@@ -142,6 +159,12 @@ Try: weather in Mumbai · time · 10 USD to INR · calculate 25*4\n\
         refused: false,
         tool_names: names,
     }
+}
+
+fn help_text() -> String {
+    format!(
+        "{PRODUCT_NAME} — commands\n\n  /help      this message\n  /tools     list tools\n  /status    product status\n  /version   version banner\n  /clear     clear screen (REPL)\n  /quit      exit REPL\n\nExamples:\n  weather in Mumbai\n  time\n  10 USD to INR\n  calculate 25*4\n  who is Ada Lovelace"
+    )
 }
 
 fn extract_place(msg: &str) -> Option<String> {

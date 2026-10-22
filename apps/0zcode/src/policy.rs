@@ -63,4 +63,14 @@ mod tests {
     fn allows_weather() {
         assert!(!is_code_request("Weather in Mumbai?"));
     }
+
+    #[test]
+    fn blocks_hinglish_code() {
+        assert!(is_code_request("python function likho"));
+    }
+
+    #[test]
+    fn banner_nonempty() {
+        assert!(banner_line().contains("0z"));
+    }
 }
