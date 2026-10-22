@@ -36,10 +36,10 @@ pub fn progress_label(lang: Lang, tool_hint: &str) -> String {
 pub fn empty_match_hint(lang: Lang) -> &'static str {
     match lang {
         Lang::Hi | Lang::Hinglish => {
-            "Tool match nahi mila — invent nahi karunga. Try: weather in Mumbai · time · calculate 2+2 · /help"
+            "Samajh nahi aaya — tool match nahi. Examples: time · weather Mumbai · 2+2 · /help"
         }
         Lang::En => {
-            "I don't invent answers without a tool match. Try: weather in Mumbai · time · calculate 2+2 · /help"
+            "No tool matched. Examples: time · weather in Mumbai · 938+29 · /help"
         }
     }
 }

@@ -74,7 +74,7 @@ impl Theme {
             "{}",
             self.paint(
                 "90",
-                "/help  /tools  /history  /status  /clear  /quit   ·  ? shortcuts"
+                "/help /tools /mcp /status /history /copy /quit  ·  ? shortcuts"
             )
         );
         println!(

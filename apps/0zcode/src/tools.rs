@@ -79,14 +79,46 @@ pub fn time_now(cfg: &Config) -> Result<ToolOutput> {
             let dt = string_field(&body, "datetime").unwrap_or_else(|| body.clone());
             Ok(ToolOutput {
                 name: "time",
-                body: format!("│ UTC {dt}"),
+                body: format!("│ UTC {dt}\n│ source: worldtimeapi"),
             })
         }
-        Err(e) => Ok(ToolOutput {
-            name: "time",
-            body: format!("│ unavailable ({e})"),
-        }),
+        Err(_e) => {
+            // Network flaky on mobile — always ship a local clock fallback.
+            Ok(ToolOutput {
+                name: "time",
+                body: format!(
+                    "│ local (device) {}\n│ UTC network unavailable — using system clock\n│ source: local",
+                    local_clock_string()
+                ),
+            })
+        }
     }
+}
+
+fn local_clock_string() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // rough UTC breakdown without chrono crate
+    let days = secs / 86400;
+    let rem = secs % 86400;
+    let h = rem / 3600;
+    let m = (rem % 3600) / 60;
+    let s = rem % 60;
+    // civil date from days since 1970-01-01 (Howard Hinnant algorithm)
+    let z = days as i64 + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mth = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mth <= 2 { y + 1 } else { y };
+    format!("{y:04}-{mth:02}-{d:02} {h:02}:{m:02}:{s:02} UTC")
 }
 
 pub fn wikipedia(topic: &str, cfg: &Config) -> Result<ToolOutput> {

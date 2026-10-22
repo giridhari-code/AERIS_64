@@ -202,19 +202,21 @@ Built-in schema:
             _ => {}
         }
 
-        theme.print_user(line);
         history.push("user", line);
 
         let lang = locale::detect(line);
         let hint = tool_hint(line);
-        // progress only when not pure meta/calc offline-safe one-shot still show for network-ish
-        let show_progress = !cfg.offline || hint == "calculator";
-        if show_progress && !lower.starts_with('/') {
+        let networkish = matches!(
+            hint,
+            "weather" | "time" | "wikipedia" | "search" | "currency" | "crypto" | "github" | "headlines"
+        );
+        let show_progress = networkish && !cfg.offline && !lower.starts_with('/');
+        if show_progress {
             theme.print_progress(&locale::progress_label(lang, hint));
         }
 
         let r = handle(line, cfg);
-        if show_progress && !lower.starts_with('/') {
+        if show_progress {
             theme.clear_progress_line();
         }
 

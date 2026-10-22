@@ -23,6 +23,16 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         };
     }
 
+    let lower = msg.to_lowercase();
+
+    if is_greeting(&lower) {
+        return AgentResponse {
+            text: greeting_reply(&lower),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+
     if policy::is_code_request(msg) {
         return AgentResponse {
             text: policy::refusal_message(),
@@ -30,8 +40,6 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
             tool_names: vec![],
         };
     }
-
-    let lower = msg.to_lowercase();
 
     if let Some(mcp_msg) = crate::mcp_store::handle_command(msg) {
         return AgentResponse {
@@ -145,10 +153,12 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         || lower.contains("latest news")
         || lower.contains("headline")
         || lower.contains("khabar");
+    let math_expr = extract_math_expr(msg);
     let wants_calc = lower.starts_with("calculate")
         || lower.starts_with("compute")
         || lower.starts_with("kitna")
-        || looks_like_math(msg);
+        || looks_like_math(msg)
+        || math_expr.is_some();
 
     let wants_units = lower.contains(" km ")
         || lower.contains(" to mi")
@@ -185,7 +195,8 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         || lower == "note list";
 
     if wants_calc {
-        push_tool(&mut outputs, &mut names, tools::calculator(msg));
+        let calc_in = math_expr.as_deref().unwrap_or(msg);
+        push_tool(&mut outputs, &mut names, tools::calculator(calc_in));
     }
     if wants_units {
         push_tool(&mut outputs, &mut names, tools::units(msg));
@@ -306,6 +317,60 @@ fn push_tool(
     }
 }
 
+fn is_greeting(lower: &str) -> bool {
+    let t = lower.trim().trim_end_matches(['!', '.', ',']);
+    matches!(
+        t,
+        "hi" | "hello" | "hey" | "hiya" | "yo" | "sup"
+            | "hi sir" | "hello sir" | "hey sir"
+            | "good morning" | "good evening" | "good afternoon"
+            | "namaste" | "namaskar" | "hola"
+    ) || t.starts_with("hi ") && t.len() < 16
+}
+
+fn greeting_reply(lower: &str) -> String {
+    if lower.contains("namaste") || lower.contains("namaskar") {
+        "Namaste — main 0zcode hoon. Weather, time, calc, search, notes, MCP tools. /help".into()
+    } else {
+        "Hi — 0zcode here. I answer with tools, not guesses.\nTry: time · weather in Mumbai · 938+29 · /help".into()
+    }
+}
+
+/// Pull first arithmetic expression like 938+29 or 25*4 from free text.
+fn extract_math_expr(msg: &str) -> Option<String> {
+    let chars: Vec<char> = msg.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].is_ascii_digit() {
+            let start = i;
+            let mut has_op = false;
+            while i < chars.len() {
+                let c = chars[i];
+                if c.is_ascii_digit() || c == '.' {
+                    i += 1;
+                } else if "+-*/".contains(c) {
+                    has_op = true;
+                    i += 1;
+                } else if c == '(' || c == ')' || c == ' ' {
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            if has_op {
+                let expr: String = chars[start..i].iter().collect();
+                let expr = expr.trim().to_string();
+                if looks_like_math(&expr) || expr.chars().any(|c| "+-*/".contains(c)) {
+                    return Some(expr);
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
 fn extract_crypto_sym(msg: &str) -> String {
     let l = msg.to_lowercase();
     for s in ["bitcoin", "btc", "ethereum", "eth", "solana", "sol", "dogecoin", "doge"] {
@@ -403,6 +468,18 @@ mod tests {
         assert!(looks_like_math("2+2"));
         assert!(looks_like_math("15 * 3"));
         assert!(!looks_like_math("weather in Delhi"));
+    }
+
+    #[test]
+    fn extract_math_from_sentence() {
+        assert_eq!(extract_math_expr("now find to 938+29").as_deref(), Some("938+29"));
+    }
+
+    #[test]
+    fn greeting_hi() {
+        let r = handle("hi sir", &Config::default());
+        assert!(r.text.to_lowercase().contains("hi") || r.text.contains("0zcode"));
+        assert!(!r.refused);
     }
 
     #[test]
