@@ -51,24 +51,6 @@ impl Theme {
         println!("     {}", self.paint("36", &self.cwd));
         println!();
 
-        // Accent bar
-        println!(
-            "  {}",
-            self.paint("36", &"━".repeat(44))
-        );
-        println!(
-            "  {}",
-            self.paint(
-                "90",
-                "/help  /tools  /mcp  /status  /history  /copy  /quit"
-            )
-        );
-        println!(
-            "  {}",
-            self.paint("36", &"━".repeat(44))
-        );
-        println!();
-
         // Rotating tip — makes the shell feel alive
         let tip = tip_of_session();
         println!(
