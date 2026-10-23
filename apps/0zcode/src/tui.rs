@@ -634,7 +634,7 @@ pub struct Screen {
     pub drawn: bool,
     cursor_col: usize,
     /// Visible width of every frame line above the cursor row.
-    widths_above: Vec<usize>,
+    pub widths_above: Vec<usize>,
     /// Terminal width when the frame was drawn.
     cols: usize,
 }

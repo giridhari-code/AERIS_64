@@ -386,6 +386,8 @@ struct Tui<'a> {
     /// Keys typed while a tool was running; replayed into the editor.
     stash: Vec<Key>,
     last_size: (usize, usize),
+    /// 1-based first line of the scrolling body (header is above this).
+    nav_top: usize,
 }
 
 fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
@@ -399,6 +401,7 @@ fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
         armed: None,
         stash: Vec::new(),
         last_size: (0, 0),
+        nav_top: 1,
     };
     ui.editor.load_history(editor::load_history());
     ui.run();
@@ -461,6 +464,7 @@ impl<'a> Tui<'a> {
         }
         let bye = self.session.theme.paint("38;5;245", "bye.");
         emit(&format!("  {bye}\n"));
+        emit("[r"); // reset scroll region
     }
 
     fn footer(&self) -> Footer {
@@ -526,6 +530,37 @@ impl<'a> Tui<'a> {
         }
     }
 
+
+    /// Sticky header like a web navbar: VT scroll region so the header never moves.
+    /// Messages scroll only in the body under the header.
+    fn install_navbar(&mut self) {
+        let (cols, rows) = self.term.size();
+        let header = self.session.welcome(cols);
+        let mut hh = 0usize;
+        for line in header.lines() {
+            if !line.is_empty() {
+                hh += 1;
+            }
+        }
+        hh = hh.max(3);
+        // Full clear + header pinned at top
+        emit("\x1b[H\x1b[2J");
+        emit(&header);
+        if !header.ends_with('\n') {
+            emit("\n");
+        }
+        emit("\n");
+        // Body starts after header + gap (1-based row)
+        let top = (hh + 2).min(rows.saturating_sub(2)).max(2);
+        let bot = rows.max(top);
+        emit(&format!("\x1b[{top};{bot}r"));
+        emit(&format!("\x1b[{top};1H"));
+        self.nav_top = top;
+        self.last_size = (cols, rows);
+        self.screen.drawn = false;
+        self.screen.widths_above.clear();
+    }
+
     /// Read one line. `None` means the user quit (Ctrl-D, double Ctrl-C, EOF).
     fn prompt(&mut self) -> Option<String> {
         for k in std::mem::take(&mut self.stash) {
@@ -534,7 +569,11 @@ impl<'a> Tui<'a> {
         let mut dirty = true;
         loop {
             let size = self.term.size();
-            if dirty || size != self.last_size {
+            if size != self.last_size {
+                self.install_navbar();
+                dirty = true;
+            }
+            if dirty {
                 let f = self.frame(size.0, false);
                 self.screen.draw(&f, size.0);
                 self.last_size = size;
@@ -639,9 +678,8 @@ impl<'a> Tui<'a> {
                     return None;
                 }
                 Key::Ctrl('l') => {
-                    let w = self.term.size().0;
-                    self.screen.clear(w);
-                    emit(Theme::clear_seq());
+                    self.install_navbar();
+                    dirty = true;
                 }
                 Key::Ctrl('o') => {
                     let w = self.term.size().0;
