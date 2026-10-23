@@ -265,13 +265,19 @@ pub fn status() -> ToolOutput {
     ToolOutput {
         name: "ws.status",
         body: format!(
-            "│ workspace {}\n│ read/list/grep: on\n│ shell allowlist: {}\n│ set ZEROZ_WORKSPACE to pin root",
+            "│ workspace {}\n│ read/list/grep: on\n│ write/mkdir: {}\n│ shell allowlist: {}\n│ agent loop: {}\n│ set ZEROZ_WORKSPACE to pin root",
             root_display(),
+            if write_enabled() { "ZEROZ_WRITE=1 (on)" } else { "off (export ZEROZ_WRITE=1)" },
             if env::var("ZEROZ_SHELL").ok().as_deref() == Some("1") {
                 "ZEROZ_SHELL=1 (on)"
             } else {
                 "off (export ZEROZ_SHELL=1)"
-            }
+            },
+            if env::var("ZEROZ_AGENT").ok().as_deref() == Some("1") {
+                "ZEROZ_AGENT=1 (on)"
+            } else {
+                "off (export ZEROZ_AGENT=1)"
+            },
         ),
     }
 }
@@ -302,4 +308,115 @@ mod tests {
         let _ = resolve_under_root("../../../../../../etc/passwd");
         env::remove_var("ZEROZ_WORKSPACE");
     }
+}
+
+const MAX_WRITE_BYTES: usize = 256 * 1024;
+
+/// Resolve a path for create/write — parent must stay inside workspace.
+pub fn resolve_for_write(rel: &str) -> Result<PathBuf> {
+    let root = root();
+    let canon_root = root.canonicalize().unwrap_or(root.clone());
+    let raw = rel.trim().trim_start_matches("./");
+    if raw.is_empty() {
+        return Err(Error::Tool("empty path".into()));
+    }
+    if Path::new(raw).is_absolute() {
+        let p = PathBuf::from(raw);
+        if let Ok(c) = p.canonicalize() {
+            if !c.starts_with(&canon_root) {
+                return Err(Error::Tool("path escapes workspace — refused".into()));
+            }
+            return Ok(c);
+        }
+        // new file: parent must exist under root
+        if let Some(parent) = p.parent() {
+            let pc = parent.canonicalize().map_err(|_| {
+                Error::Tool("parent dir outside workspace or missing".into())
+            })?;
+            if !pc.starts_with(&canon_root) {
+                return Err(Error::Tool("path escapes workspace — refused".into()));
+            }
+        }
+        return Ok(p);
+    }
+    let candidate = canon_root.join(raw);
+    if let Some(parent) = candidate.parent() {
+        if parent.exists() {
+            let pc = parent.canonicalize().map_err(|e| Error::Tool(e.to_string()))?;
+            if !pc.starts_with(&canon_root) {
+                return Err(Error::Tool("path escapes workspace — refused".into()));
+            }
+        } else {
+            // walk up to find existing ancestor under root
+            let mut a = parent.to_path_buf();
+            while !a.exists() {
+                if a == canon_root || !a.starts_with(&canon_root) {
+                    break;
+                }
+                if let Some(p) = a.parent() {
+                    a = p.to_path_buf();
+                } else {
+                    break;
+                }
+            }
+            if !a.starts_with(&canon_root) && a != canon_root {
+                return Err(Error::Tool("path escapes workspace — refused".into()));
+            }
+        }
+    }
+    Ok(candidate)
+}
+
+pub fn write_enabled() -> bool {
+    env::var("ZEROZ_WRITE").ok().as_deref() == Some("1")
+}
+
+pub fn write_file(path: &str, content: &str) -> Result<ToolOutput> {
+    if !write_enabled() {
+        return Err(Error::Tool(
+            "write disabled — export ZEROZ_WRITE=1 to allow sandboxed writes".into(),
+        ));
+    }
+    if content.len() > MAX_WRITE_BYTES {
+        return Err(Error::Tool(format!(
+            "content too large ({} > {} bytes)",
+            content.len(),
+            MAX_WRITE_BYTES
+        )));
+    }
+    let file = resolve_for_write(path)?;
+    if let Some(parent) = file.parent() {
+        fs::create_dir_all(parent).map_err(|e| Error::Tool(e.to_string()))?;
+        // re-check parent under root after create
+        let canon_root = root().canonicalize().unwrap_or_else(|_| root());
+        if let Ok(pc) = parent.canonicalize() {
+            if !pc.starts_with(&canon_root) {
+                return Err(Error::Tool("path escapes workspace — refused".into()));
+            }
+        }
+    }
+    fs::write(&file, content).map_err(|e| Error::Tool(e.to_string()))?;
+    Ok(ToolOutput {
+        name: "ws.write",
+        body: format!(
+            "│ wrote {} ({} bytes)\n│ workspace {}",
+            file.display(),
+            content.len(),
+            root_display()
+        ),
+    })
+}
+
+pub fn mkdir(path: &str) -> Result<ToolOutput> {
+    if !write_enabled() {
+        return Err(Error::Tool(
+            "write disabled — export ZEROZ_WRITE=1".into(),
+        ));
+    }
+    let dir = resolve_for_write(path)?;
+    fs::create_dir_all(&dir).map_err(|e| Error::Tool(e.to_string()))?;
+    Ok(ToolOutput {
+        name: "ws.mkdir",
+        body: format!("│ mkdir {}\n│ ok", dir.display()),
+    })
 }

@@ -83,6 +83,49 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
         };
     }
 
+    if let Some(goal) = crate::harness::parse_goal(msg) {
+        return match crate::harness::run(&goal, cfg) {
+            Ok(o) => AgentResponse {
+                text: o.render(),
+                refused: false,
+                tool_names: vec!["agent"],
+            },
+            Err(e) => AgentResponse {
+                text: format!("agent: {e}"),
+                refused: false,
+                tool_names: vec![],
+            },
+        };
+    }
+
+    // direct write/mkdir (single-step) when gated
+    if lower.starts_with("write file ") || lower.starts_with("ws write ") {
+        let rest = if lower.starts_with("write file ") {
+            msg["write file ".len()..].trim()
+        } else {
+            msg["ws write ".len()..].trim()
+        };
+        let (path, body) = match rest.split_once('|') {
+            Some((p, b)) => (p.trim(), b.trim()),
+            None => {
+                let mut sp = rest.splitn(2, char::is_whitespace);
+                (sp.next().unwrap_or(""), sp.next().unwrap_or(""))
+            }
+        };
+        return match crate::workspace::write_file(path, body) {
+            Ok(o) => AgentResponse {
+                text: o.render(),
+                refused: false,
+                tool_names: vec!["ws.write"],
+            },
+            Err(e) => AgentResponse {
+                text: format!("{e}"),
+                refused: false,
+                tool_names: vec![],
+            },
+        };
+    }
+
     // —— meta / slash (deterministic) ————————————————————————————————
     if matches!(
         lower.as_str(),
