@@ -405,7 +405,20 @@ impl Theme {
         }
 
         let rule = self.paint(RULE, &"─".repeat(w));
-        let mut lines = vec![rule.clone()];
+        // Sticky brand strip above the prompt — stays visible while scrollback
+        // pushes the welcome mascot off-screen (long chats).
+        let brand_right = if footer.right.is_empty() {
+            String::new()
+        } else {
+            format!(" · {}", footer.right)
+        };
+        let brand = format!(
+            " {}{}{}",
+            self.paint(&format!("{ACCENT};1"), "0zcode"),
+            self.dim(&format!(" v{PRODUCT_VERSION}")),
+            self.dim(&fit(&brand_right, w.saturating_sub(16))),
+        );
+        let mut lines = vec![brand, rule.clone()];
         for (ri, r) in rows.iter().enumerate() {
             let prefix = if ri == 0 {
                 self.paint("1", "❯")
@@ -455,7 +468,7 @@ impl Theme {
 
         Frame {
             lines,
-            cursor_row: 1 + cur_pos.0,
+            cursor_row: 2 + cur_pos.0, // brand + top rule + input rows
             cursor_col: 2 + cur_pos.1,
         }
     }
@@ -1018,13 +1031,14 @@ mod tests {
         let t = plain();
         let buf: Vec<char> = "hello".chars().collect();
         let f = t.prompt_frame(60, &buf, 5, &[], 0, &footer(), false);
-        assert_eq!(f.lines.len(), 4); // rule, input, rule, footer
-        assert_eq!((f.cursor_row, f.cursor_col), (1, 2 + 5));
-        assert_eq!(f.lines[0], "─".repeat(60));
-        assert_eq!(f.lines[2], "─".repeat(60));
-        assert_eq!(f.lines[1], "❯ hello");
-        assert!(f.lines[3].starts_with("  / commands"), "{:?}", f.lines[3]);
-        assert!(f.lines[3].ends_with("model"));
+        assert_eq!(f.lines.len(), 5); // brand, rule, input, rule, footer
+        assert_eq!((f.cursor_row, f.cursor_col), (2, 2 + 5)); // brand + rule + input
+        assert!(f.lines[0].contains("0zcode"), "{:?}", f.lines[0]);
+        assert_eq!(f.lines[1], "─".repeat(60));
+        assert_eq!(f.lines[2], "❯ hello");
+        assert_eq!(f.lines[3], "─".repeat(60));
+        assert!(f.lines[4].starts_with("  / commands"), "{:?}", f.lines[4]);
+        assert!(f.lines[4].ends_with("model"));
         for l in &f.lines {
             assert!(visible_width(l) <= 60, "{l}");
         }
@@ -1040,20 +1054,21 @@ mod tests {
             assert!(visible_width(l) <= 40, "{l}");
         }
         // continuation rows are indented under the text, not re-prefixed
-        assert!(f.lines[2].starts_with("  a"), "{:?}", f.lines[2]);
+        assert!(f.lines[3].starts_with("  a"), "{:?}", f.lines[3]);
     }
 
     #[test]
     fn prompt_frame_empty_shows_placeholder_and_menu_replaces_footer() {
         let t = plain();
         let f = t.prompt_frame(60, &[], 0, &[], 0, &footer(), false);
-        assert!(f.lines[1].contains("weather in Mumbai"));
-        assert_eq!((f.cursor_row, f.cursor_col), (1, 2));
+        assert!(f.lines[2].contains("weather in Mumbai"), "{:?}", f.lines);
+        assert_eq!((f.cursor_row, f.cursor_col), (2, 2));
         let menu = [("/help", "commands"), ("/history", "turns")];
         let f = t.prompt_frame(60, &['/', 'h'], 2, &menu, 1, &footer(), false);
-        assert_eq!(f.lines.len(), 5);
-        assert!(f.lines[4].contains("▸") && f.lines[4].contains("/history"));
-        assert!(!f.lines.iter().any(|l| l.contains("model")));
+        assert_eq!(f.lines.len(), 6); // brand, rule, input, rule, 2 menu rows
+        assert!(f.lines[5].contains("▸") && f.lines[5].contains("/history"), "{:?}", f.lines);
+        assert!(f.lines[0].contains("0zcode"));
+        assert!(!f.lines[1..].iter().any(|l| l.contains("? for shortcuts")));
     }
 
     #[test]
