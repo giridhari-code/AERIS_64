@@ -169,6 +169,63 @@ pub fn web_search(query: &str, cfg: &Config) -> Result<ToolOutput> {
     })
 }
 
+pub fn web_fetch(url: &str, cfg: &Config) -> Result<ToolOutput> {
+    let url = url.trim();
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .ok_or_else(|| Error::Tool("WebFetch: only http:// or https:// URLs".into()))?;
+    let (host, path) = match rest.split_once('/') {
+        Some((h, p)) => (h.to_string(), format!("/{p}")),
+        None => (rest.to_string(), "/".into()),
+    };
+    // std client is HTTP-only; https needs curl (same as MCP)
+    let body = if url.starts_with("https://") {
+        fetch_https_curl(url, cfg.http_timeout)?
+    } else {
+        let host_only = host.split(':').next().unwrap_or(&host);
+        get_text(host_only, &path, cfg)?
+    };
+    // strip tags lightly
+    let text = strip_tags(&body);
+    let short: String = text.chars().take(cfg.max_output_chars.min(3000)).collect();
+    Ok(ToolOutput {
+        name: "WebFetch",
+        body: format!("│ {url}\n│ {}\n│ source: WebFetch", short.replace('\n', "\n│ ")),
+    })
+}
+
+fn strip_tags(html: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn fetch_https_curl(url: &str, timeout: std::time::Duration) -> Result<String> {
+    use std::process::Command;
+    let secs = timeout.as_secs().clamp(1, 60).to_string();
+    let out = Command::new("curl")
+        .args(["-sS", "-L", "--max-time", &secs, "-H", "Accept: text/html,text/plain,*/*", url])
+        .output()
+        .map_err(|e| Error::Tool(format!("WebFetch https needs curl ({e})")))?;
+    if !out.status.success() {
+        return Err(Error::Tool(format!(
+            "WebFetch curl failed: {}",
+            String::from_utf8_lossy(&out.stderr).chars().take(200).collect::<String>()
+        )));
+    }
+    String::from_utf8(out.stdout).map_err(|e| Error::Parse(e.to_string()))
+}
+
+
 pub fn currency(arg: &str, cfg: &Config) -> Result<ToolOutput> {
     let upper = arg.to_uppercase();
     let amount = arg

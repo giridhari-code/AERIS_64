@@ -83,6 +83,71 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
         };
     }
 
+    // —— Task / Team / Workflow / Web meta tools ————————————————
+    if lower.starts_with("taskcreate ") || lower.starts_with("task create ") {
+        let rest = if lower.starts_with("taskcreate ") { &msg[11..] } else { &msg[12..] };
+        let (title, detail) = rest.split_once('|').map(|(a,b)| (a.trim(), b.trim())).unwrap_or((rest.trim(), ""));
+        return map_tool(crate::tasks::create(title, detail));
+    }
+    if lower == "tasklist" || lower == "task list" || lower == "/tasks" {
+        return map_tool(crate::tasks::list());
+    }
+    if lower.starts_with("taskget ") || lower.starts_with("task get ") {
+        let id = msg.split_whitespace().last().unwrap_or("");
+        return map_tool(crate::tasks::get(id));
+    }
+    if lower.starts_with("taskupdate ") || lower.starts_with("task update ") {
+        let parts: Vec<&str> = msg.split_whitespace().collect();
+        // TaskUpdate id status [detail...]
+        let id = parts.get(1).copied().unwrap_or("");
+        let status = parts.get(2).copied();
+        let detail = if parts.len() > 3 { Some(parts[3..].join(" ")) } else { None };
+        return map_tool(crate::tasks::update(id, status, detail.as_deref()));
+    }
+    if lower.starts_with("taskstop ") || lower.starts_with("task stop ") {
+        let id = msg.split_whitespace().last().unwrap_or("");
+        return map_tool(crate::tasks::stop(id));
+    }
+    if lower.starts_with("teamcreate ") || lower.starts_with("team create ") {
+        let rest = if lower.starts_with("teamcreate ") { &msg[11..] } else { &msg[12..] };
+        let (name, members) = rest.split_once('|').map(|(a,b)| (a.trim(), b.trim())).unwrap_or((rest.trim(), "explore,test"));
+        return map_tool(crate::teams::create(name, members));
+    }
+    if lower.starts_with("teamdelete ") || lower.starts_with("team delete ") {
+        let id = msg.split_whitespace().last().unwrap_or("");
+        return map_tool(crate::teams::delete(id));
+    }
+    if lower == "listagents" || lower == "list agents" || lower == "/agents" {
+        // /agents already handled above as catalog — also full list
+        return AgentResponse {
+            text: crate::teams::list_agents().render(),
+            refused: false,
+            tool_names: vec!["ListAgents"],
+        };
+    }
+    if lower.starts_with("sendmessage ") || lower.starts_with("send message ") {
+        let rest = msg.split_whitespace().skip(1).collect::<Vec<_>>();
+        if rest.len() < 2 {
+            return AgentResponse { text: "SendMessage <target> <message>".into(), refused: false, tool_names: vec![] };
+        }
+        let target = rest[0];
+        let message = rest[1..].join(" ");
+        return map_tool(crate::teams::send_message(target, &message));
+    }
+    if lower.starts_with("workflow ") {
+        return map_tool(crate::teams::workflow(msg[9..].trim()));
+    }
+    if lower.starts_with("webfetch ") || lower.starts_with("web fetch ") || lower.starts_with("fetch ") {
+        let url = msg.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
+        return map_tool(tools::web_fetch(&url, cfg));
+    }
+    if lower.starts_with("websearch ") || lower.starts_with("web search ") {
+        let q = msg.split_whitespace().skip(2).collect::<Vec<_>>().join(" ");
+        let q = if q.is_empty() { msg.split_whitespace().skip(1).collect::<Vec<_>>().join(" ") } else { q };
+        return map_tool(tools::web_search(&q, cfg));
+    }
+
+
     if lower == "/subagents" || lower == "/agents" {
         return AgentResponse {
             text: crate::subagents::catalog().into(),
@@ -550,6 +615,21 @@ fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentRespon
     }
 }
 
+
+fn map_tool(r: crate::error::Result<crate::tools::ToolOutput>) -> AgentResponse {
+    match r {
+        Ok(o) => AgentResponse {
+            text: o.render(),
+            refused: false,
+            tool_names: vec![o.name],
+        },
+        Err(e) => AgentResponse {
+            text: format!("{e}"),
+            refused: false,
+            tool_names: vec![],
+        },
+    }
+}
 
 fn push_tool(
     outputs: &mut Vec<ToolOutput>,
