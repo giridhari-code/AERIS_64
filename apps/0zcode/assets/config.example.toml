@@ -10,10 +10,18 @@ history_size = 40
 # Shown in the Claude Code-style header (model line)
 model_label = "AERIS-64 · tools-first"
 
-# Link to local AERIS-64 / SENTINEL LLM (optional, recommended)
-# When set, free-form questions that tools cannot answer are forwarded here.
-# Start the Python server first:
-#   uvicorn "sentinel.api.app:create_app" --factory --port 8000
-aeris_url = "http://127.0.0.1:8000/chat"
+# ── AERIS-64 / SENTINEL LLM link ─────────────────────────────────────────
+# Anything no tool can answer (chat, questions, Hinglish…) goes to the model.
+# Only host:port matter; any path is ignored. http:// only (no TLS in this binary).
+# Start the server:  scripts/zeroz/run_aeris.sh
+#   or: uvicorn "sentinel.api.app:create_app" --factory --port 8000
+aeris_url = "http://127.0.0.1:8000"
+
+# Only if the server runs with NEUROFIELD_API_KEYS (sent as X-API-Key).
+# aeris_key = ""
+
+aeris_stream = true          # live tokens (/v1/chat/stream); false = one reply (/v1/chat)
+aeris_max_tokens = 256       # server caps at 8192
+aeris_timeout_secs = 60      # give up after this long with no data
 
 # user_agent = "0zcode/1.3"

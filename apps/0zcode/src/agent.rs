@@ -5,6 +5,7 @@ use crate::config::Config;
 use crate::policy::{self, PRODUCT_NAME, PRODUCT_TAGLINE};
 use crate::locale;
 use crate::tools::{self, ToolOutput};
+use std::sync::atomic::AtomicBool;
 
 #[derive(Debug)]
 pub struct AgentResponse {
@@ -13,7 +14,25 @@ pub struct AgentResponse {
     pub tool_names: Vec<&'static str>,
 }
 
+/// Live-chat plumbing for the interactive TUI: the AERIS session, a flag the
+/// UI sets on Esc, and a sink that receives tokens as they are generated.
+pub struct ChatCtx<'a> {
+    pub session: &'a str,
+    pub cancel: &'a AtomicBool,
+    pub on_token: &'a mut dyn FnMut(&str),
+}
+
+/// True when free-form messages go to the AERIS-64 model.
+pub fn llm_linked(cfg: &Config) -> bool {
+    cfg.aeris_url.is_some() && !cfg.offline
+}
+
+/// One-shot entry (no streaming, fresh AERIS session).
 pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
+    handle_with(user, cfg, None)
+}
+
+pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentResponse {
     let msg = user.trim();
     if msg.is_empty() {
         return AgentResponse {
@@ -269,8 +288,9 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         }
     }
 
-    // Fallback: question mark → search once (don't invent answers)
-    if outputs.is_empty() && msg.contains('?') {
+    // Fallback: question mark → search once (don't invent answers).
+    // With AERIS linked the model answers instead.
+    if outputs.is_empty() && msg.contains('?') && !llm_linked(cfg) {
         if cfg.offline {
             return AgentResponse {
                 text: "Offline mode: calculator + units + /commands only. Turn off ZEROZ_OFFLINE for search/weather.".into(),
@@ -281,28 +301,10 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         net(&mut outputs, &mut names, tools::web_search(msg, cfg));
     }
 
-    // Optional AERIS / SENTINEL LLM fallback (company link)
+    // No tool matched → the AERIS-64 model answers (when linked).
     if outputs.is_empty() {
-        if let Some(url) = cfg.aeris_url.as_deref() {
-            if !cfg.offline {
-                match crate::http::aeris_chat(url, msg, cfg) {
-                    Ok(reply) if !reply.trim().is_empty() => {
-                        return AgentResponse {
-                            text: reply,
-                            refused: false,
-                            tool_names: vec!["aeris"],
-                        };
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        return AgentResponse {
-                            text: format!("AERIS link error: {e}\n(tools still available — set ZEROZ_AERIS_URL)"),
-                            refused: false,
-                            tool_names: vec![],
-                        };
-                    }
-                }
-            }
+        if llm_linked(cfg) {
+            return ask_aeris(msg, cfg, chat);
         }
         let lang = locale::detect(msg);
         return AgentResponse {
@@ -322,6 +324,38 @@ pub fn handle(user: &str, cfg: &Config) -> AgentResponse {
         text,
         refused: false,
         tool_names: names,
+    }
+}
+
+/// Ask the AERIS-64 server. Streams when the UI provides a [`ChatCtx`] and
+/// `aeris_stream` is on; otherwise one `POST /v1/chat`. Failures come back as
+/// an `error` frame so the UI renders them as an error block.
+fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentResponse {
+    let fresh = crate::llm::new_session_id();
+    let never = AtomicBool::new(false);
+    let result = match chat {
+        Some(ctx) if cfg.aeris_stream => {
+            crate::llm::stream(cfg, ctx.session, msg, ctx.cancel, &mut *ctx.on_token)
+        }
+        Some(ctx) => crate::llm::chat(cfg, ctx.session, msg, ctx.cancel),
+        None => crate::llm::chat(cfg, &fresh, msg, &never),
+    };
+    match result {
+        Ok(text) if !text.trim().is_empty() => AgentResponse {
+            text,
+            refused: false,
+            tool_names: vec!["aeris"],
+        },
+        Ok(_) => AgentResponse {
+            text: "┌ error ──\n│ AERIS-64 returned an empty reply (tiny models often need more training).\n└──".into(),
+            refused: false,
+            tool_names: vec![],
+        },
+        Err(e) => AgentResponse {
+            text: format!("┌ error ──\n│ {e}\n│ (tools still work — try: time · 938+29 · /help)\n└──"),
+            refused: false,
+            tool_names: vec![],
+        },
     }
 }
 

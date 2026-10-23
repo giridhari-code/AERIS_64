@@ -10,6 +10,7 @@ pub mod error;
 pub mod history;
 pub mod http;
 pub mod json_util;
+pub mod llm;
 pub mod locale;
 pub mod mcp_store;
 pub mod notes;
@@ -20,7 +21,7 @@ pub mod term;
 pub mod tools;
 pub mod tui;
 
-pub use agent::{handle, AgentResponse};
+pub use agent::{handle, handle_with, AgentResponse, ChatCtx};
 pub use config::Config;
 pub use error::{Error, Result};
 pub use policy::{PRODUCT_NAME, PRODUCT_TAGLINE, PRODUCT_VERSION};

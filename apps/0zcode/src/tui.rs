@@ -202,6 +202,7 @@ impl Theme {
         last_tool: &str,
         uptime_secs: u64,
         config_path: &str,
+        llm: &str,
     ) -> String {
         let bw = width.clamp(MIN_W, 100);
         let room = bw.saturating_sub(14);
@@ -216,6 +217,7 @@ impl Theme {
                     self.paint(OK, "online")
                 },
             ),
+            self.kv("llm", &fit(llm, room)),
             self.kv("turns", &turns.to_string()),
             self.kv("last", if last_tool.is_empty() { "—" } else { last_tool }),
             self.kv("uptime", &fmt_uptime(uptime_secs)),
@@ -487,6 +489,121 @@ fn layout_input(buf: &[char], cur: usize, cap: usize) -> (Vec<String>, (usize, u
         cur_pos = (rows.len() - 1, col);
     }
     (rows, cur_pos)
+}
+
+// ───────────── live (streamed) replies ─────────────
+
+/// Word-wraps a reply that arrives token by token, printing under a `● `
+/// bullet with the same 2-column hanging indent as [`Theme::render_assistant`].
+///
+/// Words are held back until their last character arrives, so the terminal
+/// never wraps mid-word. It also mirrors the server's reply cleanup: when the
+/// first line is at least 8 characters, everything after it is dropped (the
+/// server's final text does the same).
+pub struct StreamWriter {
+    limit: usize,
+    col: usize,
+    word: String,
+    word_w: usize,
+    space: bool,
+    started: bool,
+    had_newline: bool,
+    first_line_len: usize,
+    cut: bool,
+}
+
+impl StreamWriter {
+    pub fn new(width: usize) -> Self {
+        Self {
+            limit: width.clamp(MIN_W, 110) - 2,
+            col: 0,
+            word: String::new(),
+            word_w: 0,
+            space: false,
+            started: false,
+            had_newline: false,
+            first_line_len: 0,
+            cut: false,
+        }
+    }
+
+    /// Bytes to write to the (raw-mode) terminal for this chunk.
+    pub fn push(&mut self, chunk: &str) -> String {
+        let mut out = String::new();
+        for c in chunk.chars() {
+            if self.cut || c == '\r' {
+                continue;
+            }
+            if c == '\n' {
+                if !self.started {
+                    continue;
+                }
+                self.flush_word(&mut out);
+                if !self.had_newline && self.first_line_len >= 8 {
+                    self.cut = true;
+                    continue;
+                }
+                self.had_newline = true;
+                out.push_str("\r\n  ");
+                self.col = 0;
+                self.space = false;
+            } else if c.is_whitespace() {
+                if self.started {
+                    self.flush_word(&mut out);
+                    self.space = true;
+                }
+            } else {
+                self.started = true;
+                self.word.push(c);
+                self.word_w += char_width(c);
+            }
+        }
+        out
+    }
+
+    /// Flush the last word. The cursor stays at the end of the text.
+    pub fn finish(&mut self) -> String {
+        let mut out = String::new();
+        self.flush_word(&mut out);
+        out
+    }
+
+    /// Nothing visible was produced yet.
+    pub fn is_blank(&self) -> bool {
+        !self.started
+    }
+
+    fn flush_word(&mut self, out: &mut String) {
+        if self.word.is_empty() {
+            return;
+        }
+        let mut sp = usize::from(self.space && self.col > 0);
+        if self.col > 0 && self.col + sp + self.word_w > self.limit {
+            out.push_str("\r\n  ");
+            self.col = 0;
+            sp = 0;
+        }
+        if sp == 1 {
+            out.push(' ');
+            self.col += 1;
+        }
+        for ch in self.word.chars() {
+            let w = char_width(ch);
+            if self.col + w > self.limit {
+                out.push_str("\r\n  ");
+                self.col = 0;
+            }
+            out.push(ch);
+            self.col += w;
+        }
+        if !self.had_newline {
+            self.first_line_len += usize::from(self.space && self.first_line_len > 0)
+                + self.word.chars().count();
+        }
+        self.word.clear();
+        self.word_w = 0;
+        self.space = false;
+    }
 }
 
 // ───────────── in-place redraw ─────────────
@@ -1007,7 +1124,17 @@ mod tests {
                 let panels = [
                     t.render_welcome(width, "a-rather-long-model-label / tools-first", true),
                     t.render_help(width),
-                    t.render_status(width, "m", "agent", false, 3, "calc", 3700, "/etc/x/config"),
+                    t.render_status(
+                        width,
+                        "m",
+                        "agent",
+                        false,
+                        3,
+                        "calc",
+                        3700,
+                        "/etc/x/config",
+                        "online · AERIS_main",
+                    ),
                 ];
                 for p in panels {
                     for l in p.lines() {
@@ -1051,6 +1178,79 @@ mod tests {
         let (l, r) = fit_footer(left, "local / tools-first · offline", 20);
         assert!(str_width(&l) + str_width(&r) < 20, "{l:?} {r:?}");
         assert!(l.starts_with("/ commands"), "{l:?}");
+    }
+
+    fn stream_all(w: usize, chunks: &[&str]) -> String {
+        let mut sw = StreamWriter::new(w);
+        let mut out = String::new();
+        for c in chunks {
+            out.push_str(&sw.push(c));
+        }
+        out.push_str(&sw.finish());
+        out
+    }
+
+    #[test]
+    fn stream_writer_wraps_words_with_hanging_indent() {
+        let out = stream_all(30, &["the quick brown fox ", "jumps over ", "the lazy dog again"]);
+        let lines: Vec<&str> = out.split("\r\n").collect();
+        assert!(lines.len() >= 2, "{out:?}");
+        // 28 text columns + 2 indent on continuation lines
+        for (i, l) in lines.iter().enumerate() {
+            assert!(str_width(l) <= 30, "{l:?}");
+            if i > 0 {
+                assert!(l.starts_with("  "), "{l:?}");
+            }
+        }
+        assert_eq!(
+            lines.iter().map(|l| l.trim()).collect::<Vec<_>>().join(" "),
+            "the quick brown fox jumps over the lazy dog again"
+        );
+    }
+
+    #[test]
+    fn stream_writer_is_independent_of_token_boundaries() {
+        let text = "namaste doston, aaj mausam bahut accha hai aur sab theek hai";
+        let whole = stream_all(40, &[text]);
+        let chars: Vec<String> = text.chars().map(|c| c.to_string()).collect();
+        let refs: Vec<&str> = chars.iter().map(String::as_str).collect();
+        assert_eq!(stream_all(40, &refs), whole);
+    }
+
+    #[test]
+    fn stream_writer_holds_partial_words() {
+        let mut sw = StreamWriter::new(40);
+        assert_eq!(sw.push("hel"), "");
+        assert_eq!(sw.push("lo "), "hello");
+        assert_eq!(sw.push("wor"), "");
+        assert_eq!(sw.push("ld"), "");
+        assert_eq!(sw.finish(), " world");
+        assert!(!sw.is_blank());
+    }
+
+    #[test]
+    fn stream_writer_mirrors_server_first_line_cut() {
+        // first line >= 8 chars: later lines are dropped
+        let out = stream_all(60, &["Hello there friend\nuser: ignore me"]);
+        assert_eq!(out, "Hello there friend");
+        // very short first line: keep going, newline rendered
+        let out = stream_all(60, &["ok\nsecond line"]);
+        assert_eq!(out, "ok\r\n  second line");
+        // leading blank lines / spaces are stripped, like Python's .strip()
+        assert_eq!(stream_all(60, &["\n\n  hi"]), "hi");
+        assert!(StreamWriter::new(60).is_blank());
+    }
+
+    #[test]
+    fn stream_writer_breaks_overlong_tokens_and_devanagari() {
+        let out = stream_all(30, &[&"x".repeat(70)]);
+        for l in out.split("\r\n") {
+            assert!(str_width(l) <= 30, "{l:?}");
+        }
+        let out = stream_all(30, &["नमस्ते दोस्तों आज मौसम बहुत अच्छा है और सब ठीक है"]);
+        for l in out.split("\r\n") {
+            assert!(str_width(l) <= 30, "{l:?}");
+        }
     }
 
     #[test]

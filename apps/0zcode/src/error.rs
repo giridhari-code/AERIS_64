@@ -12,6 +12,8 @@ pub enum Error {
     Policy(String),
     Io(String),
     Offline(String),
+    /// AERIS-64 / SENTINEL LLM link (own prefix: not an internet problem).
+    Llm(String),
 }
 
 impl fmt::Display for Error {
@@ -26,6 +28,7 @@ impl fmt::Display for Error {
             Error::Policy(m) => write!(f, "policy — {m}"),
             Error::Io(m) => write!(f, "io — {m}"),
             Error::Offline(m) => write!(f, "offline mode — {m}"),
+            Error::Llm(m) => write!(f, "AERIS-64 — {m}"),
         }
     }
 }

@@ -5,18 +5,21 @@
 //! * **Plain mode** (pipe, `TERM=dumb`, `ZEROZ_PLAIN=1`, no `stty`): the same
 //!   renderers, line-at-a-time input, no cursor control.
 
-use crate::agent::{handle, AgentResponse};
+use crate::agent::{handle_with, llm_linked, AgentResponse, ChatCtx};
 use crate::config::Config;
 use crate::editor::{self, Editor};
 use crate::history::History;
+use crate::llm;
 use crate::locale;
 use crate::term::{self, emit, Input, Key, RawMode, Term};
-use crate::tui::{split_frames, Footer, Frame, Screen, Theme};
+use crate::tui::{split_frames, Footer, Frame, Screen, StreamWriter, Theme};
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, TryRecvError};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -72,6 +75,8 @@ enum Dispatch {
 
 enum Finish {
     Text(String),
+    /// The reply was already printed live, token by token.
+    Streamed,
     Clear,
     Quit,
 }
@@ -90,6 +95,8 @@ struct Session<'a> {
     last_tool: String,
     last_run: Option<LastRun>,
     started: Instant,
+    /// AERIS-64 conversation id (server keeps the history); `/clear` rotates it.
+    llm_session: String,
 }
 
 impl<'a> Session<'a> {
@@ -104,6 +111,35 @@ impl<'a> Session<'a> {
             last_tool: String::new(),
             last_run: None,
             started: Instant::now(),
+            llm_session: llm::new_session_id(),
+        }
+    }
+
+    /// Blocking agent call for plain mode (no live tokens, same AERIS session).
+    fn ask(&self, line: &str) -> AgentResponse {
+        let cancel = AtomicBool::new(false);
+        let mut sink = |_: &str| {};
+        let mut ctx = ChatCtx {
+            session: &self.llm_session,
+            cancel: &cancel,
+            on_token: &mut sink,
+        };
+        handle_with(line, self.cfg, Some(&mut ctx))
+    }
+
+    /// One line for `/status` and `/model`: link state, with a quick ping.
+    fn llm_state(&self) -> String {
+        let cfg = self.cfg;
+        let Some(url) = cfg.aeris_url.as_deref() else {
+            return "not linked — set ZEROZ_AERIS_URL".into();
+        };
+        if cfg.offline {
+            return "off (offline mode)".into();
+        }
+        let base = llm::endpoint(url).map(|e| e.base()).unwrap_or_else(|_| url.to_string());
+        match llm::ping(cfg) {
+            Ok(model) => format!("online · {model} · {base}"),
+            Err(e) => format!("{e}"),
         }
     }
 
@@ -197,16 +233,26 @@ impl<'a> Session<'a> {
                 &self.last_tool,
                 self.started.elapsed().as_secs(),
                 &Config::config_path_display(),
+                &self.llm_state(),
             )),
             "/model" | "model" => Dispatch::Print(t.render_assistant(
                 &format!(
-                    "Active label: {}\nSet ZEROZ_MODEL_LABEL or model_label in config.toml.",
-                    self.cfg.model_label
+                    "Active label: {}\nAERIS-64: {}\nSet ZEROZ_MODEL_LABEL or model_label in config.toml.",
+                    self.cfg.model_label,
+                    self.llm_state()
                 ),
                 width,
             )),
             _ => Dispatch::Agent,
         }
+    }
+
+    /// Bookkeeping for a reply that was already written to the screen live.
+    fn finish_streamed(&mut self, r: AgentResponse) -> Finish {
+        self.last_reply = r.text.clone();
+        self.last_tool = r.tool_names.join("+");
+        self.history.push("assistant", &r.text);
+        Finish::Streamed
     }
 
     fn finish(&mut self, line: &str, r: AgentResponse, secs: f32, width: usize) -> Finish {
@@ -218,6 +264,7 @@ impl<'a> Session<'a> {
             self.last_reply.clear();
             self.last_tool.clear();
             self.last_run = None;
+            self.llm_session = llm::new_session_id();
             return Finish::Clear;
         }
         self.last_reply = r.text.clone();
@@ -284,9 +331,10 @@ fn run_plain(cfg: &Config) -> ExitCode {
         }
         session.history.push("user", line);
         let start = Instant::now();
-        let r = handle(line, cfg);
+        let r = session.ask(line);
         match session.finish(line, r, start.elapsed().as_secs_f32(), width) {
             Finish::Text(s) => println!("{s}\n"),
+            Finish::Streamed => println!(),
             Finish::Clear => println!("{}", session.welcome(width)),
             Finish::Quit => break,
         }
@@ -296,10 +344,21 @@ fn run_plain(cfg: &Config) -> ExitCode {
 
 // ───────────────────────── TUI mode ─────────────────────────
 
+enum Msg {
+    Token(String),
+    Done(AgentResponse),
+}
+
 enum Run {
-    Done(AgentResponse, f32),
+    /// Reply, seconds, and whether it was already printed live.
+    Done(AgentResponse, f32, bool),
     Interrupted,
     Failed,
+}
+
+/// A successful model reply (as opposed to a tool answer or an error frame).
+fn is_model_reply(r: &AgentResponse) -> bool {
+    !r.refused && r.tool_names == ["aeris"]
 }
 
 struct Tui<'a> {
@@ -351,16 +410,27 @@ impl<'a> Tui<'a> {
             }
             self.session.history.push("user", &line);
             match self.run_agent(&line) {
-                Run::Done(r, secs) => match self.session.finish(&line, r, secs, width) {
-                    Finish::Text(s) => emit(&format!("{s}\n\n")),
-                    Finish::Clear => {
-                        emit(Theme::clear_seq());
-                        let w = self.term.size().0;
-                        emit(&self.session.welcome(w));
-                        emit("\n");
+                Run::Done(r, secs, streamed) => {
+                    let fin = if streamed && is_model_reply(&r) {
+                        self.session.finish_streamed(r)
+                    } else {
+                        if streamed {
+                            emit("\r\n"); // partial text, then the error block
+                        }
+                        self.session.finish(&line, r, secs, width)
+                    };
+                    match fin {
+                        Finish::Text(s) => emit(&format!("{s}\n\n")),
+                        Finish::Streamed => emit("\r\n\r\n"),
+                        Finish::Clear => {
+                            emit(Theme::clear_seq());
+                            let w = self.term.size().0;
+                            emit(&self.session.welcome(w));
+                            emit("\n");
+                        }
+                        Finish::Quit => break,
                     }
-                    Finish::Quit => break,
-                },
+                }
                 Run::Interrupted => {
                     let n = self.session.theme.render_notice("Interrupted");
                     emit(&format!("{n}\n\n"));
@@ -559,34 +629,84 @@ impl<'a> Tui<'a> {
         }
     }
 
-    /// Run the agent on a worker thread, animating a spinner until it finishes
-    /// or the user presses Esc / Ctrl-C.
+    /// Run the agent on a worker thread. Until the first word of a model reply
+    /// arrives a spinner animates; then the reply is written live under `●`.
+    /// Esc / Ctrl-C interrupts (and tells the worker to drop the connection).
     fn run_agent(&mut self, line: &str) -> Run {
         let (tx, rx) = mpsc::channel();
         let cfg = self.session.cfg.clone();
         let msg = line.to_string();
+        let sid = self.session.llm_session.clone();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let worker_cancel = Arc::clone(&cancel);
         thread::spawn(move || {
-            let _ = tx.send(handle(&msg, &cfg));
+            let tok_tx = tx.clone();
+            let mut sink = move |t: &str| {
+                let _ = tok_tx.send(Msg::Token(t.to_string()));
+            };
+            let mut ctx = ChatCtx {
+                session: &sid,
+                cancel: &worker_cancel,
+                on_token: &mut sink,
+            };
+            let r = handle_with(&msg, &cfg, Some(&mut ctx));
+            let _ = tx.send(Msg::Done(r));
         });
 
         let lang = locale::detect(line);
+        let mut hint = tool_hint(line);
+        if hint == "tools" && llm_linked(self.session.cfg) {
+            hint = "aeris";
+        }
         let label = capitalize(
-            locale::progress_label(lang, tool_hint(line))
+            locale::progress_label(lang, hint)
                 .trim_start_matches('…')
                 .trim(),
         ) + "…";
+        let width = self.term.size().0;
+        let mut writer = StreamWriter::new(width);
+        let bullet = self.session.theme.paint("1", "●");
         let start = Instant::now();
         let mut tick = 0usize;
         let mut spinner_shown = false;
+        let mut live = false; // reply text is on screen
         emit("\x1b[?25l");
+
+        // Print the `● ` lead-in the first time there is text to show.
+        let show = |text: &str, spinner_shown: &mut bool, live: &mut bool| {
+            if text.is_empty() {
+                return;
+            }
+            if !*live {
+                if *spinner_shown {
+                    emit("\r\x1b[2K");
+                    *spinner_shown = false;
+                }
+                emit(&format!("{bullet} "));
+                *live = true;
+            }
+            emit(text);
+        };
+
         let outcome = loop {
             match rx.try_recv() {
-                Ok(r) => break Run::Done(r, start.elapsed().as_secs_f32()),
+                Ok(Msg::Token(t)) => {
+                    let out = writer.push(&t);
+                    show(&out, &mut spinner_shown, &mut live);
+                    continue;
+                }
+                Ok(Msg::Done(r)) => {
+                    let tail = writer.finish();
+                    if is_model_reply(&r) {
+                        show(&tail, &mut spinner_shown, &mut live);
+                    }
+                    break Run::Done(r, start.elapsed().as_secs_f32(), live);
+                }
                 Err(TryRecvError::Disconnected) => break Run::Failed,
                 Err(TryRecvError::Empty) => {}
             }
             // instant tools (calc, meta) never flash a spinner
-            if start.elapsed() > Duration::from_millis(180) {
+            if !live && start.elapsed() > Duration::from_millis(180) {
                 let s = self
                     .session
                     .theme
@@ -601,7 +721,14 @@ impl<'a> Tui<'a> {
                 Duration::from_millis(80)
             };
             match self.input.next_key(wait) {
-                Some(Key::Esc) | Some(Key::Ctrl('c')) => break Run::Interrupted,
+                Some(Key::Esc) | Some(Key::Ctrl('c')) => {
+                    cancel.store(true, Ordering::Relaxed);
+                    if live {
+                        emit(&writer.finish());
+                        emit("\r\n");
+                    }
+                    break Run::Interrupted;
+                }
                 Some(k) => self.stash.push(k),
                 None => {}
             }
@@ -617,6 +744,7 @@ impl<'a> Tui<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::handle;
 
     fn cfg_offline() -> Config {
         Config {

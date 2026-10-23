@@ -16,6 +16,14 @@ pub struct Config {
     /// Optional AERIS / SENTINEL chat endpoint (e.g. http://127.0.0.1:8000).
     /// When set and offline=false, free-form questions can be routed to the LLM.
     pub aeris_url: Option<String>,
+    /// `X-API-Key` for a server started with `NEUROFIELD_API_KEYS`.
+    pub aeris_key: Option<String>,
+    /// Give up when the server sends nothing for this long (model can be slow).
+    pub aeris_timeout: Duration,
+    /// `max_new_tokens` sent with every chat request (server caps at 8192).
+    pub aeris_max_tokens: u32,
+    /// Stream tokens live (`/v1/chat/stream`) instead of one reply (`/v1/chat`).
+    pub aeris_stream: bool,
     /// Skip network tools; calculator + meta still work.
     pub offline: bool,
     pub history_size: usize,
@@ -31,6 +39,10 @@ impl Default for Config {
             color: true,
             model_label: "AERIS-64 · tools-first".into(),
             aeris_url: None,
+            aeris_key: None,
+            aeris_timeout: Duration::from_secs(60),
+            aeris_max_tokens: 256,
+            aeris_stream: true,
             offline: false,
             history_size: 40,
         }
@@ -56,6 +68,15 @@ impl Config {
         config_path()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "~/.config/0zcode/config.toml".into())
+    }
+}
+
+fn non_empty(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
     }
 }
 
@@ -101,6 +122,18 @@ fn apply_toml_lite(c: &mut Config, text: &str) {
                 let t = v.trim();
                 c.aeris_url = if t.is_empty() { None } else { Some(t.to_string()) };
             }
+            "aeris_key" => c.aeris_key = non_empty(v),
+            "aeris_timeout_secs" => {
+                if let Ok(n) = v.parse::<u64>() {
+                    c.aeris_timeout = Duration::from_secs(n.clamp(1, 600));
+                }
+            }
+            "aeris_max_tokens" => {
+                if let Ok(n) = v.parse::<u32>() {
+                    c.aeris_max_tokens = n.clamp(1, 8192);
+                }
+            }
+            "aeris_stream" => c.aeris_stream = v == "true" || v == "1",
             "user_agent" => {
                 if !v.is_empty() {
                     c.user_agent = v.to_string();
@@ -146,6 +179,22 @@ fn apply_env(c: &mut Config) {
         let t = s.trim();
         c.aeris_url = if t.is_empty() { None } else { Some(t.to_string()) };
     }
+    if let Ok(s) = env::var("ZEROZ_AERIS_KEY") {
+        c.aeris_key = non_empty(&s);
+    }
+    if let Ok(s) = env::var("ZEROZ_AERIS_TIMEOUT_SECS") {
+        if let Ok(n) = s.parse::<u64>() {
+            c.aeris_timeout = Duration::from_secs(n.clamp(1, 600));
+        }
+    }
+    if let Ok(s) = env::var("ZEROZ_AERIS_MAX_TOKENS") {
+        if let Ok(n) = s.parse::<u32>() {
+            c.aeris_max_tokens = n.clamp(1, 8192);
+        }
+    }
+    if let Ok(s) = env::var("ZEROZ_AERIS_STREAM") {
+        c.aeris_stream = !(s == "0" || s.eq_ignore_ascii_case("false"));
+    }
     if let Ok(s) = env::var("ZEROZ_USER_AGENT") {
         let t = s.trim();
         if !t.is_empty() {
@@ -184,5 +233,20 @@ mod tests {
         assert!(c.offline);
         assert_eq!(c.history_size, 12);
         assert_eq!(c.model_label, "demo");
+    }
+
+    #[test]
+    fn parses_aeris_settings() {
+        let mut c = Config::default();
+        assert!(c.aeris_stream && c.aeris_key.is_none());
+        apply_toml_lite(
+            &mut c,
+            "aeris_url = \"http://127.0.0.1:8000\"\naeris_key = \"k1\"\naeris_timeout_secs = 5\naeris_max_tokens = 99999\naeris_stream = false\n",
+        );
+        assert_eq!(c.aeris_url.as_deref(), Some("http://127.0.0.1:8000"));
+        assert_eq!(c.aeris_key.as_deref(), Some("k1"));
+        assert_eq!(c.aeris_timeout, Duration::from_secs(5));
+        assert_eq!(c.aeris_max_tokens, 8192);
+        assert!(!c.aeris_stream);
     }
 }

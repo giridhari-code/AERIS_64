@@ -9,7 +9,7 @@
 | Version | 1.3.0 |
 | UI | **std only** (raw mode via `stty`, no external crates) |
 | Policy | No code write / edit / execute |
-| LLM | Optional AERIS-64 link via `ZEROZ_AERIS_URL` |
+| LLM | AERIS-64 chat + live streaming via `ZEROZ_AERIS_URL` |
 
 ## Architecture
 
@@ -108,21 +108,34 @@ http_timeout_secs = 12
 | `ZEROZ_PLAIN` | `1` forces plain line mode (no TUI) |
 | `ZEROZ_HISTORY_FILE` | Input history file path |
 | `ZEROZ_MODEL_LABEL` | TUI display label only |
-| `ZEROZ_AERIS_URL` | AERIS-64 / SENTINEL chat endpoint |
+| `ZEROZ_AERIS_URL` | AERIS-64 server, e.g. `http://127.0.0.1:8000` |
+| `ZEROZ_AERIS_KEY` | `X-API-Key` when the server uses `NEUROFIELD_API_KEYS` |
+| `ZEROZ_AERIS_STREAM` | `0` = one reply instead of live tokens (default on) |
+| `ZEROZ_AERIS_MAX_TOKENS` | `max_new_tokens` per request (default 256, max 8192) |
+| `ZEROZ_AERIS_TIMEOUT_SECS` | give up after this long without data (default 60) |
 | `ZEROZ_USER_AGENT` | HTTP User-Agent override |
 | `ZEROZ_NO_COLOR` / `NO_COLOR` | disable ANSI |
 | `ZEROZ_OFFLINE` | calc + commands only |
 
-### AERIS-64 link
+### AERIS-64 link (real LLM)
 
-When tools cannot answer and `aeris_url` / `ZEROZ_AERIS_URL` is set, the query is forwarded to your local AERIS-64 / SENTINEL endpoint. Coding requests are still refused by policy before any LLM call.
+Anything no tool can answer — chat, open questions, Hinglish — goes to your AERIS-64 / SENTINEL server. Tools still win when one matches (`938+29`, `weather in Mumbai`), and coding requests are refused by policy *before* any model call.
 
 ```bash
-# start model server
-uvicorn "sentinel.api.app:create_app" --factory --port 8000
-export ZEROZ_AERIS_URL=http://127.0.0.1:8000/chat
-0zcode
+scripts/zeroz/run_aeris.sh        # starts the server, waits for the model, runs 0zcode, stops the server
+# or by hand:
+NEUROFIELD_CHECKPOINT=checkpoints/local_run PYTHONPATH=packages \
+  uvicorn "sentinel.api.app:create_app" --factory --port 8000
+ZEROZ_AERIS_URL=http://127.0.0.1:8000 0zcode
 ```
+
+* Live tokens over `POST /v1/chat/stream` (SSE), word-wrapped under `●`; `esc` drops the connection. `ZEROZ_AERIS_STREAM=0` uses `POST /v1/chat` (one polished reply) instead.
+* One `session_id` per run, so the server keeps the conversation; `/clear` starts a new one.
+* `/status` and `/model` ping `GET /v1/models` and show `online · <model>` or the exact problem (not running, 401 → set `ZEROZ_AERIS_KEY`, 503 → model not loaded).
+* Only `http://` (this binary is std-only, no TLS). Any path in the URL is ignored, so old `…:8000/chat` values keep working.
+* With the model linked, a `?` question that matches no tool goes to the model instead of a web search.
+* The model does not see tool results yet; it answers from its own weights and session history.
+* `ZEROZ_OFFLINE=1` disables the link.
 
 ## Test
 
@@ -139,5 +152,5 @@ cargo clippy --all-targets
 ## Non-goals
 
 - Source code generation or shell execution
-- Fake LLM token streaming (tools-first progress only)
+- Fake streaming — tokens shown are the server's real token stream
 - External TUI crates (ratatui / crossterm) — this binary is std-only

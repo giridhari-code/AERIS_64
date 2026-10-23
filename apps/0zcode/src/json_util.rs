@@ -14,22 +14,36 @@ pub fn string_field(body: &str, key: &str) -> Option<String> {
     while let Some(c) = chars.next() {
         if c == '\\' {
             if let Some(n) = chars.next() {
-                out.push(match n {
-                    'n' => '\n',
-                    't' => '\t',
-                    '"' => '"',
-                    '\\' => '\\',
+                match n {
+                    'n' => out.push('\n'),
+                    't' => out.push('\t'),
+                    'r' => out.push('\r'),
+                    'b' => out.push('\u{8}'),
+                    'f' => out.push('\u{c}'),
                     'u' => {
-                        // skip simple \uXXXX
-                        let hex: String = chars.by_ref().take(4).collect();
-                        if let Ok(cp) = u32::from_str_radix(&hex, 16) {
-                            char::from_u32(cp).unwrap_or('?')
-                        } else {
-                            '?'
+                        let hi = read_hex4(&mut chars);
+                        match hi {
+                            // UTF-16 surrogate pair (emoji etc.): \ud83d\ude00
+                            Some(h) if (0xD800..0xDC00).contains(&h) => {
+                                let mut ahead = chars.clone();
+                                let lo = (ahead.next() == Some('\\') && ahead.next() == Some('u'))
+                                    .then(|| read_hex4(&mut ahead))
+                                    .flatten()
+                                    .filter(|l| (0xDC00..0xE000).contains(l));
+                                if let Some(l) = lo {
+                                    chars = ahead;
+                                    let cp = 0x10000 + ((h - 0xD800) << 10) + (l - 0xDC00);
+                                    out.push(char::from_u32(cp).unwrap_or('\u{fffd}'));
+                                } else {
+                                    out.push('\u{fffd}');
+                                }
+                            }
+                            Some(h) => out.push(char::from_u32(h).unwrap_or('\u{fffd}')),
+                            None => out.push('\u{fffd}'),
                         }
                     }
-                    other => other,
-                });
+                    other => out.push(other), // \" \\ \/
+                }
             }
         } else if c == '"' {
             break;
@@ -38,6 +52,15 @@ pub fn string_field(body: &str, key: &str) -> Option<String> {
         }
     }
     Some(out)
+}
+
+fn read_hex4(chars: &mut std::str::Chars<'_>) -> Option<u32> {
+    let hex: String = chars.by_ref().take(4).collect();
+    if hex.len() == 4 {
+        u32::from_str_radix(&hex, 16).ok()
+    } else {
+        None
+    }
 }
 
 /// Extract a JSON number for `"key": 1.23`.
@@ -61,6 +84,14 @@ mod tests {
     fn parses_string() {
         let j = r#"{"name":"Mumbai","x":1}"#;
         assert_eq!(string_field(j, "name").as_deref(), Some("Mumbai"));
+    }
+
+    #[test]
+    fn decodes_escapes_and_surrogates() {
+        let j = r#"{"t":"a\r\nb \u0928\u092e \ud83d\ude00 \"q\" \/"}"#;
+        assert_eq!(string_field(j, "t").as_deref(), Some("a\r\nb नम 😀 \"q\" /"));
+        // lone surrogate must not panic
+        assert!(string_field(r#"{"t":"\ud83d x"}"#, "t").is_some());
     }
 
     #[test]

@@ -27,6 +27,12 @@ pub fn detect(text: &str) -> Lang {
 }
 
 pub fn progress_label(lang: Lang, tool_hint: &str) -> String {
+    if tool_hint == "aeris" {
+        return match lang {
+            Lang::Hi | Lang::Hinglish => "… soch raha hoon".into(),
+            Lang::En => "… thinking".into(),
+        };
+    }
     match lang {
         Lang::Hi | Lang::Hinglish => format!("… {tool_hint} laa raha hoon"),
         Lang::En => format!("… fetching {tool_hint}"),
