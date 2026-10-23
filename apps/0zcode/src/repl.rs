@@ -386,8 +386,8 @@ struct Tui<'a> {
     /// Keys typed while a tool was running; replayed into the editor.
     stash: Vec<Key>,
     last_size: (usize, usize),
-    /// 1-based first line of the scrolling body (header is above this).
-    nav_top: usize,
+    /// Full transcript; paint shows a window under a fixed header.
+    log: Vec<String>,
 }
 
 fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
@@ -401,7 +401,7 @@ fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
         armed: None,
         stash: Vec::new(),
         last_size: (0, 0),
-        nav_top: 1,
+        log: Vec::new(),
     };
     ui.editor.load_history(editor::load_history());
     ui.run();
@@ -411,16 +411,18 @@ fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
 impl<'a> Tui<'a> {
     fn run(&mut self) {
         emit("\x1b[?2004h"); // bracketed paste
-        let w = self.term.size().0;
-        emit(Theme::clear_seq());
-        emit(&self.session.welcome(w));
-        emit("\n");
+        self.paint_workspace();
 
         while let Some(line) = self.prompt() {
             let width = self.term.size().0;
             match self.session.dispatch(&line, width) {
                 Dispatch::Print(s) => {
-                    emit(&format!("{s}\n\n"));
+                    for ln in s.lines() {
+                        self.log.push(ln.to_string());
+                    }
+                    self.log.push(String::new());
+                    self.trim_log();
+                    self.paint_workspace();
                     continue;
                 }
                 Dispatch::Agent => {}
@@ -432,40 +434,59 @@ impl<'a> Tui<'a> {
                         self.session.finish_streamed(r)
                     } else {
                         if streamed {
-                            emit("\r\n"); // partial text, then the error block
+                            emit("\r\n");
                         }
                         self.session.finish(&line, r, secs, width)
                     };
                     match fin {
-                        Finish::Text(s) => emit(&format!("{s}\n\n")),
-                        Finish::Streamed => emit("\r\n\r\n"),
-                        Finish::Silent => {}
+                        Finish::Text(s) => {
+                            for ln in s.lines() {
+                                self.log.push(ln.to_string());
+                            }
+                            self.log.push(String::new());
+                            self.trim_log();
+                            self.paint_workspace();
+                        }
+                        Finish::Streamed => {
+                            if !self.session.last_reply.is_empty() {
+                                for ln in self.session.last_reply.lines() {
+                                    self.log.push(ln.to_string());
+                                }
+                                self.log.push(String::new());
+                                self.trim_log();
+                            }
+                            self.paint_workspace();
+                        }
+                        Finish::Silent => self.paint_workspace(),
                         Finish::Clear => {
-                            emit(Theme::clear_seq());
-                            let w = self.term.size().0;
-                            emit(&self.session.welcome(w));
-                            emit("\n");
+                            self.log.clear();
+                            self.paint_workspace();
                         }
                         Finish::Quit => break,
                     }
                 }
                 Run::Interrupted => {
-                    let n = self.session.theme.render_notice("Interrupted");
-                    emit(&format!("{n}\n\n"));
+                    self.log.push(self.session.theme.render_notice("Interrupted"));
+                    self.log.push(String::new());
+                    self.paint_workspace();
                 }
                 Run::Failed => {
-                    let e = self
-                        .session
-                        .theme
-                        .render_error("The tool stopped unexpectedly. Try again.", width);
-                    emit(&format!("{e}\n\n"));
+                    let e = self.session.theme.render_error(
+                        "The tool stopped unexpectedly. Try again.",
+                        width,
+                    );
+                    for ln in e.lines() {
+                        self.log.push(ln.to_string());
+                    }
+                    self.log.push(String::new());
+                    self.paint_workspace();
                 }
             }
         }
         let bye = self.session.theme.paint("38;5;245", "bye.");
         emit(&format!("  {bye}\n"));
-        emit("[r"); // reset scroll region
     }
+
 
     fn footer(&self) -> Footer {
         let cfg = self.session.cfg;
@@ -531,34 +552,39 @@ impl<'a> Tui<'a> {
     }
 
 
-    /// Sticky header like a web navbar: VT scroll region so the header never moves.
-    /// Messages scroll only in the body under the header.
-    fn install_navbar(&mut self) {
+    /// Company-standard chrome (Termux-safe): always repaint
+    ///   fixed header + recent transcript + prompt region.
+    /// Header never "lives" in scrollback; messages stay in `log`.
+    fn trim_log(&mut self) {
+        if self.log.len() > 500 {
+            let n = self.log.len() - 500;
+            self.log.drain(..n);
+        }
+    }
+
+    fn paint_workspace(&mut self) {
+
         let (cols, rows) = self.term.size();
         let header = self.session.welcome(cols);
-        let mut hh = 0usize;
-        for line in header.lines() {
-            if !line.is_empty() {
-                hh += 1;
-            }
-        }
-        hh = hh.max(3);
-        // Full clear + header pinned at top
+        let header_lines = header.lines().count().max(1) + 1; // + blank
+        let prompt_reserve = 6usize; // rules + input + footer
+        let body_h = rows.saturating_sub(header_lines + prompt_reserve).max(2);
+
         emit("\x1b[H\x1b[2J");
         emit(&header);
         if !header.ends_with('\n') {
             emit("\n");
         }
         emit("\n");
-        // Body starts after header + gap (1-based row)
-        let top = (hh + 2).min(rows.saturating_sub(2)).max(2);
-        let bot = rows.max(top);
-        emit(&format!("\x1b[{top};{bot}r"));
-        emit(&format!("\x1b[{top};1H"));
-        self.nav_top = top;
-        self.last_size = (cols, rows);
+
+        let start = self.log.len().saturating_sub(body_h);
+        for line in &self.log[start..] {
+            emit(line);
+            emit("\r\n");
+        }
         self.screen.drawn = false;
         self.screen.widths_above.clear();
+        self.last_size = (cols, rows);
     }
 
     /// Read one line. `None` means the user quit (Ctrl-D, double Ctrl-C, EOF).
@@ -570,7 +596,7 @@ impl<'a> Tui<'a> {
         loop {
             let size = self.term.size();
             if size != self.last_size {
-                self.install_navbar();
+                self.paint_workspace();
                 dirty = true;
             }
             if dirty {
@@ -639,7 +665,6 @@ impl<'a> Tui<'a> {
                     ed.push_history(&line);
                     editor::append_history(&line);
                     ed.clear();
-                    // draw the submitted text (no menu/footer) into scrollback
                     let w = self.term.size().0;
                     let chars: Vec<char> = line.chars().collect();
                     let f = self.session.theme.prompt_frame(
@@ -651,8 +676,13 @@ impl<'a> Tui<'a> {
                         &self.footer(),
                         true,
                     );
-                    self.screen.finish(&f, w);
-                    emit("\n"); // blank row between the echo band and the reply
+                    for l in &f.lines {
+                        self.log.push(l.clone());
+                    }
+                    if self.log.len() > 500 {
+                        let n = self.log.len() - 500;
+                        self.log.drain(..n);
+                    }
                     return Some(line.trim().to_string());
                 }
                 Key::Ctrl('c') => {
@@ -678,7 +708,8 @@ impl<'a> Tui<'a> {
                     return None;
                 }
                 Key::Ctrl('l') => {
-                    self.install_navbar();
+                    self.log.clear();
+                    self.paint_workspace();
                     dirty = true;
                 }
                 Key::Ctrl('o') => {
