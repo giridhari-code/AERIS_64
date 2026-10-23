@@ -83,6 +83,55 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
         };
     }
 
+    // —— MCP / Skills / Plan / Cron ——————————————————————————
+    if lower.starts_with("toolsearch ") || lower.starts_with("tool search ") || lower == "toolsearch" {
+        let q = if lower == "toolsearch" {
+            String::new()
+        } else {
+            msg.split_whitespace().skip(1).collect::<Vec<_>>().join(" ")
+        };
+        return map_tool(Ok(crate::skills::tool_search(&q)));
+    }
+    if lower.starts_with("skill ") {
+        return map_tool(crate::skills::run_skill(msg[6..].trim()));
+    }
+    if lower == "listmcpresources" || lower == "list mcp resources" || lower == "/mcp resources" {
+        return map_tool(Ok(crate::skills::list_mcp_resources()));
+    }
+    if lower.starts_with("readmcpresource ") || lower.starts_with("read mcp resource ") {
+        let name = msg.split_whitespace().last().unwrap_or("");
+        return map_tool(crate::skills::read_mcp_resource(name));
+    }
+    if lower == "enterplanmode" || lower == "enter plan mode" || lower == "/plan" {
+        return map_tool(Ok(crate::plan_mode::enter()));
+    }
+    if lower == "exitplanmode" || lower == "exit plan mode" || lower == "/plan done" {
+        return map_tool(crate::plan_mode::exit_review());
+    }
+    if lower.starts_with("askuserquestion ") || lower.starts_with("ask user ") {
+        let q = if let Some(i) = lower.find("askuserquestion ") {
+            msg[i + "askuserquestion ".len()..].trim().to_string()
+        } else if let Some(i) = lower.find("ask user ") {
+            msg[i + "ask user ".len()..].trim().to_string()
+        } else {
+            String::new()
+        };
+        return map_tool(Ok(crate::plan_mode::ask_user(&q)));
+    }
+    if lower.starts_with("croncreate ") || lower.starts_with("cron create ") {
+        let rest = if lower.starts_with("croncreate ") { &msg[11..] } else { &msg[12..] };
+        let (expr, cmd) = rest.split_once('|').map(|(a,b)| (a.trim(), b.trim())).unwrap_or((rest.trim(), ""));
+        return map_tool(crate::cron::create(expr, cmd));
+    }
+    if lower.starts_with("crondelete ") || lower.starts_with("cron delete ") {
+        let id = msg.split_whitespace().last().unwrap_or("");
+        return map_tool(crate::cron::delete(id));
+    }
+    if lower == "cronlist" || lower == "cron list" || lower == "/cron" {
+        return map_tool(crate::cron::list());
+    }
+
+
     // —— Task / Team / Workflow / Web meta tools ————————————————
     if lower.starts_with("taskcreate ") || lower.starts_with("task create ") {
         let rest = if lower.starts_with("taskcreate ") { &msg[11..] } else { &msg[12..] };

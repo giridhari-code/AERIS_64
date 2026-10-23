@@ -25,6 +25,9 @@ pub mod harness;
 pub mod subagents;
 pub mod teams;
 pub mod tasks;
+pub mod cron;
+pub mod plan_mode;
+pub mod skills;
 pub mod tui;
 
 pub use agent::{handle, handle_with, AgentResponse, ChatCtx};
