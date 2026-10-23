@@ -188,6 +188,22 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
         || lower.contains("headline")
         || lower.contains("khabar");
     let math_expr = extract_math_expr(msg);
+    let wants_ws_list = lower == "list" || lower == "ls" || lower == "list files"
+        || lower.starts_with("list files")
+        || lower.starts_with("list dir")
+        || lower.starts_with("show files")
+        || lower.starts_with("project structure")
+        || lower == "/ws" || lower == "/workspace" || lower.starts_with("/ws ");
+    let wants_ws_read = lower.starts_with("read ")
+        || lower.starts_with("show file ")
+        || lower.starts_with("open file ")
+        || lower.starts_with("cat ");
+    let wants_ws_grep = lower.starts_with("grep ")
+        || lower.starts_with("search in files ")
+        || lower.starts_with("find in code ");
+    let wants_shell = lower.starts_with("shell ")
+        || lower.starts_with("$ ")
+        || lower.starts_with("run allowlisted ");
     let wants_calc = lower.starts_with("calculate")
         || lower.starts_with("compute")
         || lower.starts_with("kitna")
@@ -237,6 +253,42 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
     }
     if wants_units {
         push_tool(&mut outputs, &mut names, tools::units(msg));
+    }
+
+    if wants_ws_list {
+        let path = if lower.starts_with("/ws ") {
+            msg[4..].trim()
+        } else {
+            "."
+        };
+        push_tool(&mut outputs, &mut names, crate::workspace::list(path));
+    }
+    if lower == "/ws" || lower == "/workspace" {
+        push_tool(&mut outputs, &mut names, Ok(crate::workspace::status()));
+    }
+    if wants_ws_read {
+        let path = msg.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
+        push_tool(&mut outputs, &mut names, crate::workspace::read(&path));
+    }
+    if wants_ws_grep {
+        let rest = msg.split_whitespace().skip(1).collect::<Vec<_>>();
+        let pat = rest.first().copied().unwrap_or("");
+        let path = if rest.len() > 1 { rest[1..].join(" ") } else { ".".into() };
+        push_tool(&mut outputs, &mut names, crate::workspace::grep(pat, &path));
+    }
+    if wants_shell {
+        let cmd_owned: String = if lower.starts_with("$ ") {
+            msg[2..].trim().to_string()
+        } else if lower.starts_with("shell ") {
+            msg[6..].trim().to_string()
+        } else {
+            msg.split_whitespace().skip(2).collect::<Vec<_>>().join(" ")
+        };
+        push_tool(
+            &mut outputs,
+            &mut names,
+            crate::workspace::shell_allowlisted(cmd_owned.trim()),
+        );
     }
 
     let net = |outputs: &mut Vec<ToolOutput>, names: &mut Vec<&'static str>, r: crate::error::Result<ToolOutput>| {
