@@ -179,6 +179,13 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
             tool_names: vec![],
         };
     }
+    if matches!(lower.as_str(), "/llm" | "llm" | "/connect" | "/model-status") {
+        return AgentResponse {
+            text: crate::llm::diagnose(cfg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
     if lower.starts_with("/mcp") || lower == "mcp" {
         return AgentResponse {
             text: crate::registry::tools_json(cfg),
@@ -494,18 +501,23 @@ fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentRespon
         },
         Err(e) => {
             let s = e.to_string();
-            let short = if s.contains("not reachable") {
+            let short = if s.contains("not reachable") || s.contains("Connection refused") {
                 if OFFLINE_HINT_SHOWN.swap(true, Ordering::Relaxed) {
-                    // Already told once — stay quiet (footer shows offline)
                     String::new()
                 } else {
-                    "Model offline. Tools work — try time or 938+29.".to_string()
+                    format!(
+                        "LLM offline (not reachable).\n{}",
+                        crate::llm::diagnose(cfg)
+                    )
                 }
             } else if s.contains("model not loaded") || s.contains("not loaded") {
                 if OFFLINE_HINT_SHOWN.swap(true, Ordering::Relaxed) {
                     String::new()
                 } else {
-                    "Model not loaded. Set NEUROFIELD_CHECKPOINT.".to_string()
+                    format!(
+                        "Model not loaded.\n{}",
+                        crate::llm::diagnose(cfg)
+                    )
                 }
             } else if s.len() > 120 {
                 format!("{}…", s.chars().take(120).collect::<String>())

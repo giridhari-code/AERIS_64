@@ -212,6 +212,18 @@ fn apply_env(c: &mut Config) {
             c.history_size = n.clamp(4, 200);
         }
     }
+
+    // LLM link: default local AERIS unless offline or auto off.
+    // ZEROZ_AERIS_URL="" clears the link explicitly.
+    if c.aeris_url.is_none() && !c.offline {
+        let auto = match env::var("ZEROZ_AERIS_AUTO") {
+            Ok(s) => !(s == "0" || s.eq_ignore_ascii_case("false") || s.eq_ignore_ascii_case("off")),
+            Err(_) => true,
+        };
+        if auto {
+            c.aeris_url = Some("http://127.0.0.1:8000".into());
+        }
+    }
 }
 
 #[cfg(test)]

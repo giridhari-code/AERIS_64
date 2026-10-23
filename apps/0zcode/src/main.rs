@@ -28,6 +28,10 @@ fn main() -> ExitCode {
         println!("{}", refusal_message());
         return ExitCode::SUCCESS;
     }
+    if args.first().map(String::as_str) == Some("llm") {
+        println!("{}", zeroz::llm::diagnose(&cfg));
+        return ExitCode::SUCCESS;
+    }
 
     // Interactive launch: open the UI at once; AERIS-64 boots in the background.
     let plain = env::var("ZEROZ_PLAIN")
@@ -62,6 +66,6 @@ fn main() -> ExitCode {
 fn print_help() {
     println!("0zcode {VERSION} — Agentic work. Zero code.");
     println!(
-        "\nUsage:\n  0zcode                 interactive TUI (auto-starts AERIS-64 LLM if local)\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv / config:\n  ~/.config/0zcode/config.toml  (or ZEROZ_CONFIG)\n  ZEROZ_AERIS_URL               default http://127.0.0.1:8000 when auto-on\n  ZEROZ_AERIS_AUTO=0            disable auto-start LLM\n  ZEROZ_REPO=~/AERIS_64         repo root for auto-start\n  NEUROFIELD_CHECKPOINT         model.safetensors folder\n  ZEROZ_OFFLINE=1               calc-only\n  ZEROZ_PLAIN=1                 force plain line mode\n"
+        "\nUsage:\n  0zcode                 interactive TUI (auto-starts AERIS-64 LLM if local)\n  0zcode <message>       one-shot\n  0zcode tools|policy|llm  meta\n  0zcode --version\n\nEnv / config:\n  ~/.config/0zcode/config.toml  (or ZEROZ_CONFIG)\n  ZEROZ_AERIS_URL               default http://127.0.0.1:8000 when auto-on\n  ZEROZ_AERIS_AUTO=0            disable auto-start LLM\n  ZEROZ_REPO=~/AERIS_64         repo root for auto-start\n  NEUROFIELD_CHECKPOINT         model.safetensors folder\n  ZEROZ_OFFLINE=1               calc-only\n  ZEROZ_PLAIN=1                 force plain line mode\n"
     );
 }

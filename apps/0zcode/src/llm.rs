@@ -391,6 +391,38 @@ pub fn ping(cfg: &Config) -> Result<String> {
     Ok(string_field(&body, "id").unwrap_or_else(|| "model".into()))
 }
 
+/// Human-readable link diagnosis for `/llm` and boot messages.
+pub fn diagnose(cfg: &Config) -> String {
+    let url = match cfg.aeris_url.as_deref() {
+        None => {
+            return "LLM not linked.\n  fix: export ZEROZ_AERIS_URL=http://127.0.0.1:8000\n       or aeris_url in ~/.config/0zcode/config.toml".into();
+        }
+        Some(u) => u,
+    };
+    if cfg.offline {
+        return format!(
+            "LLM linked to {url} but ZEROZ_OFFLINE=1 — chat disabled.\n  fix: unset ZEROZ_OFFLINE"
+        );
+    }
+    match crate::aeris_boot::probe_status(url) {
+        crate::aeris_boot::AerisStatus::Ready => {
+            let model = ping(cfg).unwrap_or_else(|_| "model".into());
+            format!(
+                "LLM online\n  url: {url}\n  model: {model}\n  stream: {}\n  max_tokens: {}\n  timeout: {}s",
+                cfg.aeris_stream,
+                cfg.aeris_max_tokens,
+                cfg.aeris_timeout.as_secs()
+            )
+        }
+        crate::aeris_boot::AerisStatus::ServerOnly => format!(
+            "LLM server up at {url} but model NOT loaded\n  fix: export NEUROFIELD_CHECKPOINT=/path/to/folder/with/model.safetensors\n       then restart AERIS (scripts/zeroz/run_aeris.sh) or 0zcode (auto-start)"
+        ),
+        crate::aeris_boot::AerisStatus::Down => format!(
+            "LLM not reachable at {url}\n  fix:\n    1) export ZEROZ_AERIS_URL=http://127.0.0.1:8000\n    2) start server:  cd AERIS_64 && PYTHONPATH=packages uvicorn sentinel.api.app:create_app --factory --host 127.0.0.1 --port 8000\n       or:  bash scripts/zeroz/run_aeris.sh\n    3) set NEUROFIELD_CHECKPOINT to your trained model folder\n    4) 0zcode /llm   # re-check\n  note: only http:// supported (not https) in this client"
+        ),
+    }
+}
+
 /// One-shot reply via `POST /v1/chat` (polished text, tool-first + Megha gate server-side).
 pub fn chat(cfg: &Config, session: &str, prompt: &str, cancel: &AtomicBool) -> Result<String> {
     let ep = link(cfg)?;
