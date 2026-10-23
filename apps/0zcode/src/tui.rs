@@ -140,24 +140,24 @@ impl Theme {
     /// Claude Code–style header: robot on the left, name · version / model /
     /// cwd on the right. No border, so the prompt sits right under it.
     pub fn render_welcome(&self, width: usize, model: &str, offline: bool) -> String {
-        let w = width.clamp(MIN_W, 100);
+        let w = width.clamp(MIN_W, 120);
         let room = w.saturating_sub(MASCOT_W + 4);
         let status = if offline { "offline" } else { "ready" };
-        let model_line = fit(&format!("{model} · {status}"), room);
+        let line2 = fit(&format!("{model} · {status}"), room);
+        let line3 = fit(&self.cwd, room);
         let texts = [
             format!(
                 "{}  {}",
                 self.paint("1", "0zcode"),
                 self.dim(&format!("v{PRODUCT_VERSION}"))
             ),
-            self.dim(&model_line),
-            self.dim(&fit(&self.cwd, room)),
+            self.dim(&line2),
+            self.dim(&line3),
         ];
-        let mut out = String::from("\n");
+        let mut out = String::new();
         for (art, text) in MASCOT_ART.iter().zip(texts.iter()) {
             out.push_str(&format!(" {}  {}\n", self.paint(MASCOT, art), text));
         }
-        out.push('\n');
         out
     }
 
@@ -631,7 +631,7 @@ pub fn rows_above_cursor(
 /// Owns the "where is the cursor inside the last drawn frame" bookkeeping.
 #[derive(Default)]
 pub struct Screen {
-    drawn: bool,
+    pub drawn: bool,
     cursor_col: usize,
     /// Visible width of every frame line above the cursor row.
     widths_above: Vec<usize>,
