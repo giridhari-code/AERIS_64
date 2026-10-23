@@ -386,8 +386,6 @@ struct Tui<'a> {
     /// Keys typed while a tool was running; replayed into the editor.
     stash: Vec<Key>,
     last_size: (usize, usize),
-    /// Completed chat lines. Header is fixed; only this region scrolls.
-    log: Vec<String>,
 }
 
 fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
@@ -401,7 +399,6 @@ fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
         armed: None,
         stash: Vec::new(),
         last_size: (0, 0),
-        log: Vec::new(),
     };
     ui.editor.load_history(editor::load_history());
     ui.run();
@@ -437,30 +434,14 @@ impl<'a> Tui<'a> {
                         self.session.finish(&line, r, secs, width)
                     };
                     match fin {
-                        Finish::Text(s) => {
-                            for line in s.lines() {
-                                self.log.push(line.to_string());
-                            }
-                            self.log.push(String::new());
-                            self.workspace_redraw();
-                        }
-                        Finish::Streamed => {
-                            // stream already pushed tokens into log via on_token? 
-                            // streamed path prints live — capture last_reply
-                            if !self.session.last_reply.is_empty() {
-                                for line in self.session.last_reply.lines() {
-                                    self.log.push(line.to_string());
-                                }
-                                self.log.push(String::new());
-                            }
-                            self.workspace_redraw();
-                        }
-                        Finish::Silent => {
-                            self.workspace_redraw();
-                        }
+                        Finish::Text(s) => emit(&format!("{s}\n\n")),
+                        Finish::Streamed => emit("\r\n\r\n"),
+                        Finish::Silent => {}
                         Finish::Clear => {
-                            self.log.clear();
-                            self.workspace_redraw();
+                            emit(Theme::clear_seq());
+                            let w = self.term.size().0;
+                            emit(&self.session.welcome(w));
+                            emit("\n");
                         }
                         Finish::Quit => break,
                     }
@@ -545,30 +526,6 @@ impl<'a> Tui<'a> {
         }
     }
 
-    /// Full-screen chrome: fixed header + recent log body (header never scrolls away).
-    fn workspace_redraw(&mut self) {
-        let (cols, rows) = self.term.size();
-        let header = self.session.welcome(cols);
-        let header_h = header.lines().count().max(1) + 1;
-        let prompt_h = 5usize;
-        let body_h = rows.saturating_sub(header_h + prompt_h).max(3);
-
-        emit("\x1b[H\x1b[2J");
-        emit(&header);
-        if !header.ends_with('\n') {
-            emit("\n");
-        }
-        emit("\n");
-
-        let start = self.log.len().saturating_sub(body_h);
-        for line in &self.log[start..] {
-            emit(line);
-            emit("\r\n");
-        }
-        self.screen.drawn = false;
-        self.last_size = (cols, rows);
-    }
-
     /// Read one line. `None` means the user quit (Ctrl-D, double Ctrl-C, EOF).
     fn prompt(&mut self) -> Option<String> {
         for k in std::mem::take(&mut self.stash) {
@@ -577,11 +534,7 @@ impl<'a> Tui<'a> {
         let mut dirty = true;
         loop {
             let size = self.term.size();
-            if size != self.last_size {
-                self.workspace_redraw();
-                dirty = true;
-            }
-            if dirty {
+            if dirty || size != self.last_size {
                 let f = self.frame(size.0, false);
                 self.screen.draw(&f, size.0);
                 self.last_size = size;
@@ -686,8 +639,9 @@ impl<'a> Tui<'a> {
                     return None;
                 }
                 Key::Ctrl('l') => {
-                    self.log.clear();
-                    self.workspace_redraw();
+                    let w = self.term.size().0;
+                    self.screen.clear(w);
+                    emit(Theme::clear_seq());
                 }
                 Key::Ctrl('o') => {
                     let w = self.term.size().0;
