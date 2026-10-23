@@ -5,7 +5,10 @@ use crate::config::Config;
 use crate::policy::{self, PRODUCT_NAME, PRODUCT_TAGLINE};
 use crate::locale;
 use crate::tools::{self, ToolOutput};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// One full offline hint per process; further offline replies stay one short line.
+static OFFLINE_HINT_SHOWN: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 pub struct AgentResponse {
@@ -353,23 +356,34 @@ fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentRespon
         None => crate::llm::chat(cfg, &fresh, msg, &never),
     };
     match result {
-        Ok(text) if !text.trim().is_empty() => AgentResponse {
-            text,
-            refused: false,
-            tool_names: vec!["aeris"],
-        },
+        Ok(text) if !text.trim().is_empty() => {
+            OFFLINE_HINT_SHOWN.store(false, Ordering::Relaxed);
+            AgentResponse {
+                text,
+                refused: false,
+                tool_names: vec!["aeris"],
+            }
+        }
         Ok(_) => AgentResponse {
             text: "AERIS returned empty (checkpoint may need more training).".into(),
             refused: false,
             tool_names: vec![],
         },
         Err(e) => {
-            // Short UI line — no multi-line uvicorn paste on every keystroke
             let s = e.to_string();
             let short = if s.contains("not reachable") {
-                "AERIS offline — tools only (time · calc · /help). Start: scripts/zeroz/run_aeris.sh".to_string()
+                if OFFLINE_HINT_SHOWN.swap(true, Ordering::Relaxed) {
+                    "· still offline".to_string()
+                } else {
+                    "AERIS offline — tools only (time · calc · /help). Start: scripts/zeroz/run_aeris.sh"
+                        .to_string()
+                }
             } else if s.contains("model not loaded") || s.contains("not loaded") {
-                "AERIS: model not loaded — set NEUROFIELD_CHECKPOINT".to_string()
+                if OFFLINE_HINT_SHOWN.swap(true, Ordering::Relaxed) {
+                    "· model still not loaded".to_string()
+                } else {
+                    "AERIS: model not loaded — set NEUROFIELD_CHECKPOINT".to_string()
+                }
             } else if s.len() > 140 {
                 format!("{}…", s.chars().take(140).collect::<String>())
             } else {
