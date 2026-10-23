@@ -359,17 +359,31 @@ fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentRespon
             tool_names: vec!["aeris"],
         },
         Ok(_) => AgentResponse {
-            text: "┌ error ──\n│ AERIS-64 returned an empty reply (tiny models often need more training).\n└──".into(),
+            text: "AERIS returned empty (checkpoint may need more training).".into(),
             refused: false,
             tool_names: vec![],
         },
-        Err(e) => AgentResponse {
-            text: format!("┌ error ──\n│ {e}\n│ (tools still work — try: time · 938+29 · /help)\n└──"),
-            refused: false,
-            tool_names: vec![],
-        },
+        Err(e) => {
+            // Short UI line — no multi-line uvicorn paste on every keystroke
+            let s = e.to_string();
+            let short = if s.contains("not reachable") {
+                "AERIS offline — tools only (time · calc · /help). Start: scripts/zeroz/run_aeris.sh".to_string()
+            } else if s.contains("model not loaded") || s.contains("not loaded") {
+                "AERIS: model not loaded — set NEUROFIELD_CHECKPOINT".to_string()
+            } else if s.len() > 140 {
+                format!("{}…", s.chars().take(140).collect::<String>())
+            } else {
+                s
+            };
+            AgentResponse {
+                text: short,
+                refused: false,
+                tool_names: vec![],
+            }
+        }
     }
 }
+
 
 fn push_tool(
     outputs: &mut Vec<ToolOutput>,

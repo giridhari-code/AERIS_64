@@ -189,9 +189,8 @@ impl Conn {
         }
         let Some(sock) = sock else {
             return llm_err(format!(
-                "not reachable at {} — start it: scripts/zeroz/run_aeris.sh  (or: uvicorn \"sentinel.api.app:create_app\" --factory --port {})",
-                ep.base(),
-                ep.port
+                "not reachable at {} (AERIS offline)",
+                ep.base()
             ));
         };
         sock.set_read_timeout(Some(POLL)).ok();
