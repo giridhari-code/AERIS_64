@@ -132,14 +132,13 @@ impl<'a> Session<'a> {
 
     /// One line for `/status` and `/model`: link state, with a quick ping.
     fn llm_state(&self) -> String {
-            // Claude Code / OpenCode parity: one clear line for /model and /status.
-            crate::llm::diagnose(self.cfg)
-                .lines()
-                .take(4)
-                .collect::<Vec<_>>()
-                .join("
-")
-        }
+        // Claude Code / OpenCode parity: one clear block for /model and /status.
+        crate::llm::diagnose(self.cfg)
+            .lines()
+            .take(4)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 
     fn welcome(&self, width: usize) -> String {
         self.theme
