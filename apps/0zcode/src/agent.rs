@@ -83,6 +83,34 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
         };
     }
 
+    if lower == "/subagents" || lower == "/agents" {
+        return AgentResponse {
+            text: crate::subagents::catalog().into(),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if let Some((kind, goal)) = crate::subagents::parse_kind_goal(msg) {
+        let goal = if goal.is_empty() {
+            format!("{} task", kind.as_str())
+        } else {
+            goal
+        };
+        // pin kind by prefixing so infer stays stable — harness uses infer; pass kind via goal tag
+        let tagged = format!("[{}] {}", kind.as_str(), goal);
+        return match crate::harness::run(&tagged, cfg) {
+            Ok(o) => AgentResponse {
+                text: o.render(),
+                refused: false,
+                tool_names: vec!["agent"],
+            },
+            Err(e) => AgentResponse {
+                text: format!("agent: {e}"),
+                refused: false,
+                tool_names: vec![],
+            },
+        };
+    }
     if let Some(goal) = crate::harness::parse_goal(msg) {
         return match crate::harness::run(&goal, cfg) {
             Ok(o) => AgentResponse {

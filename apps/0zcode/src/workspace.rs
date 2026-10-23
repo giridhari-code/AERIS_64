@@ -202,6 +202,11 @@ pub fn shell_allowlisted(cmd_line: &str) -> Result<ToolOutput> {
         "git branch",
         "cargo --version",
         "rustc --version",
+        "cargo test",
+        "cargo test -- --nocapture",
+        "cargo check",
+        "cargo build",
+        "cargo clippy",
     ];
     if !allowed.iter().any(|a| line == *a) {
         return Err(Error::Tool(format!(
@@ -403,6 +408,41 @@ pub fn write_file(path: &str, content: &str) -> Result<ToolOutput> {
             file.display(),
             content.len(),
             root_display()
+        ),
+    })
+}
+
+pub fn search_replace(path: &str, old: &str, new: &str) -> Result<ToolOutput> {
+    if !write_enabled() {
+        return Err(Error::Tool(
+            "edit disabled — export ZEROZ_WRITE=1".into(),
+        ));
+    }
+    if old.is_empty() {
+        return Err(Error::Tool("search_replace: empty old string".into()));
+    }
+    let file = resolve_under_root(path).or_else(|_| resolve_for_write(path))?;
+    if !file.is_file() {
+        return Err(Error::Tool(format!("not a file: {}", file.display())));
+    }
+    let content = fs::read_to_string(&file).map_err(|e| Error::Tool(e.to_string()))?;
+    let count = content.matches(old).count();
+    if count == 0 {
+        return Err(Error::Tool("search_replace: old string not found".into()));
+    }
+    let updated = content.replacen(old, new, 1);
+    if updated.len() > MAX_WRITE_BYTES {
+        return Err(Error::Tool("edit result too large".into()));
+    }
+    fs::write(&file, &updated).map_err(|e| Error::Tool(e.to_string()))?;
+    Ok(ToolOutput {
+        name: "ws.edit",
+        body: format!(
+            "│ edited {}\n│ replaced 1 occurrence ({} matches in file)\n│ {} → {} bytes",
+            file.display(),
+            count,
+            content.len(),
+            updated.len()
         ),
     })
 }

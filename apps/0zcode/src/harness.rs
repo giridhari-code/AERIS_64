@@ -59,7 +59,9 @@ pub fn run(goal: &str, _cfg: &Config) -> Result<ToolOutput> {
 
     let mut steps: Vec<Step> = Vec::new();
     let mut transcript = String::new();
-    let plan = plan_for(goal);
+    let kind = crate::subagents::infer(goal);
+    let plan = crate::subagents::plan(kind, goal);
+    transcript.push_str(&format!("subagent={}\n", kind.as_str()));
 
     for (i, action) in plan.iter().enumerate() {
         if i >= max_steps() {
@@ -206,6 +208,14 @@ fn execute_action(action: &str) -> Result<ToolOutput> {
     }
     if let Some(path) = rest.strip_prefix("mkdir ") {
         return workspace::mkdir(path.trim());
+    }
+    if let Some(rest) = rest.strip_prefix("edit ") {
+        // edit path | old | new
+        let parts: Vec<&str> = rest.splitn(3, '|').map(str::trim).collect();
+        if parts.len() < 3 {
+            return Err(Error::Tool("usage: TOOL edit path | old | new".into()));
+        }
+        return workspace::search_replace(parts[0], parts[1], parts[2]);
     }
     if let Some(cmd) = rest.strip_prefix("shell ") {
         return workspace::shell_allowlisted(cmd.trim());

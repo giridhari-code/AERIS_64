@@ -22,6 +22,7 @@ pub mod term;
 pub mod tools;
 pub mod workspace;
 pub mod harness;
+pub mod subagents;
 pub mod tui;
 
 pub use agent::{handle, handle_with, AgentResponse, ChatCtx};
