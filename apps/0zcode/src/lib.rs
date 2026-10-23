@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
+pub mod aeris_boot;
 pub mod agent;
 pub mod config;
 pub mod editor;

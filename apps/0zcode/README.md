@@ -6,7 +6,7 @@
 |--|--|
 | Binary | `0zcode` |
 | Crate | `zeroz` |
-| Version | 1.3.0 |
+| Version | 1.3.1 |
 | UI | **std only** (raw mode via `stty`, no external crates) |
 | Policy | No code write / edit / execute |
 | LLM | AERIS-64 chat + live streaming via `ZEROZ_AERIS_URL` |
@@ -31,6 +31,9 @@ cargo install --path .
 ```
 
 ## Usage
+
+On launch, **0zcode auto-starts AERIS-64** at `http://127.0.0.1:8000` when it is down (`ZEROZ_AERIS_AUTO=0` to disable; set `ZEROZ_REPO` / `NEUROFIELD_CHECKPOINT` if needed).
+
 
 ```text
 0zcode                         # interactive TUI

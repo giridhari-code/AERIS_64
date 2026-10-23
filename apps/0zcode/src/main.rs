@@ -9,7 +9,7 @@ use zeroz::tools;
 use zeroz::VERSION;
 
 fn main() -> ExitCode {
-    let cfg = Config::from_env();
+    let mut cfg = Config::from_env();
     let args: Vec<String> = env::args().skip(1).collect();
 
     if args.iter().any(|a| a == "--version" || a == "-V") {
@@ -28,6 +28,14 @@ fn main() -> ExitCode {
         println!("{}", refusal_message());
         return ExitCode::SUCCESS;
     }
+
+    // LLM auto-on: start local AERIS-64 if down (ZEROZ_AERIS_AUTO=0 to disable)
+    if let Some(msg) = zeroz::aeris_boot::ensure_aeris(&mut cfg) {
+        if env::var("ZEROZ_QUIET_BOOT").ok().as_deref() != Some("1") {
+            eprintln!("• {msg}");
+        }
+    }
+
     if !args.is_empty() {
         let msg = args.join(" ");
         let r = handle(&msg, &cfg);
@@ -45,6 +53,6 @@ fn main() -> ExitCode {
 fn print_help() {
     println!("0zcode {VERSION} — Agentic work. Zero code.");
     println!(
-        "\nUsage:\n  0zcode                 interactive TUI\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv / config:\n  ~/.config/0zcode/config.toml  (or ZEROZ_CONFIG)\n  ZEROZ_OFFLINE=1               calc-only\n  ZEROZ_HTTP_TIMEOUT_SECS\n  ZEROZ_MODEL_LABEL\n  ZEROZ_NO_COLOR / NO_COLOR\n  ZEROZ_PLAIN=1                 force plain line mode\n  ZEROZ_HISTORY_FILE\n  ZEROZ_AERIS_URL               AERIS-64 LLM fallback\n"
+        "\nUsage:\n  0zcode                 interactive TUI (auto-starts AERIS-64 LLM if local)\n  0zcode <message>       one-shot\n  0zcode tools|policy    meta\n  0zcode --version\n\nEnv / config:\n  ~/.config/0zcode/config.toml  (or ZEROZ_CONFIG)\n  ZEROZ_AERIS_URL               default http://127.0.0.1:8000 when auto-on\n  ZEROZ_AERIS_AUTO=0            disable auto-start LLM\n  ZEROZ_REPO=~/AERIS_64         repo root for auto-start\n  NEUROFIELD_CHECKPOINT         model.safetensors folder\n  ZEROZ_OFFLINE=1               calc-only\n  ZEROZ_PLAIN=1                 force plain line mode\n"
     );
 }
