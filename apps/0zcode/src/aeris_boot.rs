@@ -170,6 +170,22 @@ fn python_bin() -> String {
     env::var("PYTHON").unwrap_or_else(|_| "python3".into())
 }
 
+/// Interactive launch: fix up the URL now, then run the (possibly slow, up to
+/// ~90 s) start-up on a background thread so the UI opens immediately. The
+/// footer shows the live status; `/status` explains a failed start.
+pub fn ensure_aeris_background(cfg: &mut Config) {
+    if cfg.offline || !auto_enabled() {
+        return;
+    }
+    if cfg.aeris_url.is_none() {
+        cfg.aeris_url = Some(DEFAULT_URL.into());
+    }
+    let mut bg = cfg.clone();
+    thread::spawn(move || {
+        let _ = ensure_aeris(&mut bg);
+    });
+}
+
 /// Ensure URL is set; try start server; return human status for stderr.
 pub fn ensure_aeris(cfg: &mut Config) -> Option<String> {
     if cfg.offline {

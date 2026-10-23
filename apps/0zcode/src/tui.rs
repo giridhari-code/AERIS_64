@@ -175,8 +175,13 @@ impl Theme {
         offline: bool,
     ) -> String {
         let class = DeviceClass::from_size(cols, rows);
-        let status = if offline { "offline" } else { "ready" };
-        let model_s = format!("{model} · {status}");
+        // Live link state belongs to the footer; the header only states what
+        // is configured, never a claim that the model is ready.
+        let model_s = if offline {
+            format!("{model} · offline")
+        } else {
+            model.to_string()
+        };
 
         match class {
             DeviceClass::Phone => {
@@ -757,14 +762,14 @@ impl Screen {
         self.rewind(&mut out, cols);
         self.paint_frame(f, cols, &mut out);
         out.push_str("\x1b[?25h");
-        term::emit(&out);
+        term::emit_sync(&out);
     }
 
     /// Erase the frame; the cursor ends where the frame started.
     pub fn clear(&mut self, cols: usize) {
         let mut out = String::new();
         self.rewind(&mut out, cols);
-        term::emit(&out);
+        term::emit_sync(&out);
         self.drawn = false;
         self.widths_above.clear();
     }
@@ -779,7 +784,7 @@ impl Screen {
             out.push_str(&format!("\x1b[{down}B"));
         }
         out.push_str("\r\n\x1b[?25h");
-        term::emit(&out);
+        term::emit_sync(&out);
         self.drawn = false;
         self.widths_above.clear();
     }
@@ -1171,6 +1176,14 @@ mod tests {
         assert!(rows[2].contains("▀▀ ▀▀"), "feet");
         let off = t.render_welcome_sized(100, 40, "m", true);
         assert!(off.contains("m · offline"));
+    }
+
+    #[test]
+    fn welcome_never_claims_ready() {
+        let t = plain();
+        let w = t.render_welcome_sized(100, 40, "m", false);
+        assert!(!w.contains("ready"), "{w}");
+        assert!(w.contains("m"));
     }
 
     #[test]

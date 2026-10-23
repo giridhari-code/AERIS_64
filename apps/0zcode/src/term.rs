@@ -8,6 +8,8 @@
 
 use std::io::{self, IsTerminal, Read, Write};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -39,6 +41,49 @@ pub fn emit(s: &str) {
     let mut o = io::stdout().lock();
     let _ = o.write_all(s.as_bytes());
     let _ = o.flush();
+}
+
+/// Write one frame atomically. DEC private mode 2026 (synchronized output)
+/// makes the terminal hold back painting until the frame is complete, which
+/// removes flicker on every redraw; terminals without it ignore the codes.
+pub fn emit_sync(s: &str) {
+    let mut buf = String::with_capacity(s.len() + 16);
+    buf.push_str("\x1b[?2026h");
+    buf.push_str(s);
+    buf.push_str("\x1b[?2026l");
+    emit(&buf);
+}
+
+static ALT_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Switch to the alternate screen so full repaints never leak into (or
+/// duplicate in) the user's scrollback. Undone by [`leave_alt_screen`], which
+/// the raw-mode guard and the panic hook also call.
+pub fn enter_alt_screen() {
+    ALT_ACTIVE.store(true, Ordering::Relaxed);
+    emit("\x1b[?1049h\x1b[H");
+}
+
+static MOUSE_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Ask the terminal to report wheel / touch scrolling as events (SGR mouse
+/// mode). On the alternate screen Termux and most terminals otherwise turn a
+/// swipe into ↑/↓ key presses, which would walk the input history.
+pub fn enable_mouse() {
+    MOUSE_ACTIVE.store(true, Ordering::Relaxed);
+    emit("\x1b[?1000h\x1b[?1006h");
+}
+
+pub fn disable_mouse() {
+    if MOUSE_ACTIVE.swap(false, Ordering::Relaxed) {
+        emit("\x1b[?1006l\x1b[?1000l");
+    }
+}
+
+pub fn leave_alt_screen() {
+    if ALT_ACTIVE.swap(false, Ordering::Relaxed) {
+        emit("\x1b[?1049l");
+    }
 }
 
 // ───────────────────────── raw mode ─────────────────────────
@@ -76,16 +121,22 @@ impl Drop for RawMode {
 }
 
 fn restore(saved: &str) {
-    // bracketed paste off, cursor visible, then original termios
+    // sync output off, alt screen off, bracketed paste off, cursor visible,
+    // then original termios
+    emit("\x1b[?2026l");
+    disable_mouse();
+    leave_alt_screen();
     emit("\x1b[?2004l\x1b[?25h");
     let _ = stty(&[saved]);
 }
 
 // ───────────────────────── size ─────────────────────────
 
-/// Terminal size with a short cache (querying spawns `stty`).
+/// Terminal size. Querying spawns `stty`, which is slow on phones (Termux), so
+/// the first call asks once and a background thread then refreshes the value;
+/// the UI thread only ever reads it and never waits on a child process.
 pub struct Term {
-    cache: Option<(Instant, (usize, usize))>,
+    shared: Option<Arc<Mutex<(usize, usize)>>>,
 }
 
 impl Default for Term {
@@ -96,19 +147,24 @@ impl Default for Term {
 
 impl Term {
     pub fn new() -> Self {
-        Self { cache: None }
+        Self { shared: None }
     }
 
     /// `(columns, rows)`
     pub fn size(&mut self) -> (usize, usize) {
-        if let Some((t, s)) = self.cache {
-            if t.elapsed() < Duration::from_millis(300) {
-                return s;
-            }
+        if let Some(shared) = &self.shared {
+            return *shared.lock().unwrap_or_else(|e| e.into_inner());
         }
-        let s = query_size();
-        self.cache = Some((Instant::now(), s));
-        s
+        let first = query_size();
+        let shared = Arc::new(Mutex::new(first));
+        let bg = Arc::clone(&shared);
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_millis(400));
+            let s = query_size();
+            *bg.lock().unwrap_or_else(|e| e.into_inner()) = s;
+        });
+        self.shared = Some(shared);
+        first
     }
 }
 
@@ -157,6 +213,9 @@ pub enum Key {
     WordLeft,
     WordRight,
     Esc,
+    /// Mouse wheel / touch scroll (only when mouse reporting is on).
+    ScrollUp,
+    ScrollDown,
     /// `Ctrl(a)` … `Ctrl(z)`
     Ctrl(char),
     Alt(char),
@@ -256,7 +315,35 @@ fn decode_csi(b: &[u8]) -> Decoded {
     let fin = b[i];
     let used = i + 1;
     let modified = params.contains(&b';') && params.last().is_some_and(|m| matches!(m, b'3' | b'5'));
+    // legacy X10 mouse report: ESC [ M then three raw bytes (button, col, row)
+    if fin == b'M' && params.is_empty() {
+        if b.len() < used + 3 {
+            return Decoded::Incomplete;
+        }
+        let k = match b[used].wrapping_sub(32) & !28 {
+            64 => Key::ScrollUp,
+            65 => Key::ScrollDown,
+            _ => Key::Unknown,
+        };
+        return Decoded::Key(k, used + 3);
+    }
     let key = match fin {
+        // SGR mouse report: ESC [ < button ; col ; row (M = press, m = release)
+        b'M' | b'm' if params.first() == Some(&b'<') => {
+            let button = std::str::from_utf8(&params[1..])
+                .ok()
+                .and_then(|p| p.split(';').next())
+                .and_then(|n| n.parse::<u32>().ok());
+            match button {
+                // strip the shift / alt / ctrl modifier bits
+                Some(n) if fin == b'M' => match n & !28 {
+                    64 => Key::ScrollUp,
+                    65 => Key::ScrollDown,
+                    _ => Key::Unknown,
+                },
+                _ => Key::Unknown,
+            }
+        }
         b'A' => Key::Up,
         b'B' => Key::Down,
         b'C' if modified => Key::WordRight,
@@ -454,6 +541,18 @@ mod tests {
             Decoded::Key(k, n) => (k, n),
             other => panic!("expected key, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn decodes_mouse_wheel_and_swallows_clicks() {
+        assert_eq!(key(b"\x1b[<64;10;5M"), (Key::ScrollUp, 11));
+        assert_eq!(key(b"\x1b[<65;10;5M"), (Key::ScrollDown, 11));
+        assert_eq!(key(b"\x1b[<68;10;5M").0, Key::ScrollUp); // with shift
+        assert_eq!(key(b"\x1b[<0;10;5M").0, Key::Unknown); // tap down
+        assert_eq!(key(b"\x1b[<0;10;5m").0, Key::Unknown); // tap up
+        // legacy encoding: button byte 64 + 32, then column and row
+        assert_eq!(key(&[0x1b, b'[', b'M', 96, 40, 40]), (Key::ScrollUp, 6));
+        assert_eq!(decode(&[0x1b, b'[', b'M', 96]), Decoded::Incomplete);
     }
 
     #[test]

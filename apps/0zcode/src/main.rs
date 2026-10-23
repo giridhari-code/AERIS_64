@@ -29,6 +29,15 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // Interactive launch: open the UI at once; AERIS-64 boots in the background.
+    let plain = env::var("ZEROZ_PLAIN")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if args.is_empty() && !plain && zeroz::term::is_interactive() {
+        zeroz::aeris_boot::ensure_aeris_background(&mut cfg);
+        return zeroz::repl::run(&cfg);
+    }
+
     // LLM auto-on: start local AERIS-64 if down (ZEROZ_AERIS_AUTO=0 to disable)
     if let Some(msg) = zeroz::aeris_boot::ensure_aeris(&mut cfg) {
         if env::var("ZEROZ_QUIET_BOOT").ok().as_deref() != Some("1") {

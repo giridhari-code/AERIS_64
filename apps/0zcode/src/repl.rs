@@ -11,15 +11,16 @@ use crate::editor::{self, Editor};
 use crate::history::History;
 use crate::llm;
 use crate::locale;
-use crate::term::{self, emit, Input, Key, RawMode, Term};
-use crate::tui::{split_frames, Footer, Frame, Screen, StreamWriter, Theme};
+use crate::term::{self, emit, emit_sync, visible_width, Input, Key, RawMode, Term};
+use crate::tui::{clip_ansi, fit, split_frames, wrap, Footer, Frame, Screen, StreamWriter, Theme};
 use std::env;
 use std::fs;
 use std::io::{self, BufRead, IsTerminal, Write};
+use std::cell::Cell;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, TryRecvError};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -388,6 +389,72 @@ struct Tui<'a> {
     last_size: (usize, usize),
     /// Full transcript; paint shows a window under a fixed header.
     log: Vec<String>,
+    /// Background AERIS health probe (never blocks the UI thread).
+    status: StatusProbe,
+    /// How many rows the transcript is scrolled up from the bottom.
+    scroll: usize,
+}
+
+/// AERIS health, refreshed on a worker thread every few seconds. The footer
+/// reads the last known value instead of doing blocking HTTP on every redraw.
+struct StatusProbe {
+    shared: Arc<Mutex<Option<crate::aeris_boot::AerisStatus>>>,
+    probing: Arc<AtomicBool>,
+    changed: Arc<AtomicBool>,
+    checked: Cell<Option<Instant>>,
+}
+
+impl StatusProbe {
+    const TTL: Duration = Duration::from_secs(5);
+
+    fn new() -> Self {
+        Self {
+            shared: Arc::new(Mutex::new(None)),
+            probing: Arc::new(AtomicBool::new(false)),
+            changed: Arc::new(AtomicBool::new(false)),
+            checked: Cell::new(None),
+        }
+    }
+
+    /// Last known status (`None` until the first probe returns); starts a
+    /// refresh in the background when the cached value is stale.
+    fn get(&self, url: &str) -> Option<crate::aeris_boot::AerisStatus> {
+        let stale = self
+            .checked
+            .get()
+            .map_or(true, |t| t.elapsed() > Self::TTL);
+        if stale && !self.probing.swap(true, Ordering::AcqRel) {
+            self.checked.set(Some(Instant::now()));
+            let shared = Arc::clone(&self.shared);
+            let probing = Arc::clone(&self.probing);
+            let changed = Arc::clone(&self.changed);
+            let url = url.to_string();
+            thread::spawn(move || {
+                let s = crate::aeris_boot::probe_status(&url);
+                if let Ok(mut g) = shared.lock() {
+                    if *g != Some(s) {
+                        changed.store(true, Ordering::Release);
+                    }
+                    *g = Some(s);
+                }
+                probing.store(false, Ordering::Release);
+            });
+        }
+        self.shared.lock().ok().and_then(|g| *g)
+    }
+
+    /// True once after the probe result changed (so the footer should redraw).
+    fn take_changed(&self) -> bool {
+        self.changed.swap(false, Ordering::AcqRel)
+    }
+}
+
+fn mouse_enabled() -> bool {
+    !matches!(env::var("ZEROZ_MOUSE").as_deref(), Ok("0") | Ok("false") | Ok("off"))
+}
+
+fn alt_screen_enabled() -> bool {
+    !matches!(env::var("ZEROZ_ALT_SCREEN").as_deref(), Ok("0") | Ok("false") | Ok("off"))
 }
 
 fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
@@ -402,6 +469,8 @@ fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
         stash: Vec::new(),
         last_size: (0, 0),
         log: Vec::new(),
+        status: StatusProbe::new(),
+        scroll: 0,
     };
     ui.editor.load_history(editor::load_history());
     ui.run();
@@ -410,13 +479,28 @@ fn run_tui(cfg: &Config, raw: RawMode) -> ExitCode {
 
 impl<'a> Tui<'a> {
     fn run(&mut self) {
+        if alt_screen_enabled() {
+            term::enter_alt_screen();
+            // Wheel / touch scroll becomes app events (transcript scroll).
+            if mouse_enabled() {
+                term::enable_mouse();
+            }
+        }
         emit("\x1b[?2004h"); // bracketed paste
         self.paint_workspace();
 
         while let Some(line) = self.prompt() {
+            self.scroll = 0;
             let width = self.term.size().0;
             match self.session.dispatch(&line, width) {
                 Dispatch::Print(s) => {
+                    // Tall panels (help, status) would be cut off by the
+                    // transcript window; show them in a scrollable overlay.
+                    let (_, rows) = self.term.size();
+                    if s.lines().count() > rows.saturating_sub(12).max(4) {
+                        self.overlay(&s);
+                        continue;
+                    }
                     for ln in s.lines() {
                         self.log.push(ln.to_string());
                     }
@@ -449,7 +533,13 @@ impl<'a> Tui<'a> {
                         }
                         Finish::Streamed => {
                             if !self.session.last_reply.is_empty() {
-                                for ln in self.session.last_reply.lines() {
+                                // Same look as the live stream: `●` lead-in,
+                                // hanging indent, wrapped to the width.
+                                let shown = self
+                                    .session
+                                    .theme
+                                    .render_assistant(&self.session.last_reply, width);
+                                for ln in shown.lines() {
                                     self.log.push(ln.to_string());
                                 }
                                 self.log.push(String::new());
@@ -483,6 +573,8 @@ impl<'a> Tui<'a> {
                 }
             }
         }
+        term::disable_mouse();
+        term::leave_alt_screen();
         let bye = self.session.theme.paint("38;5;245", "bye.");
         emit(&format!("  {bye}\n"));
     }
@@ -494,16 +586,17 @@ impl<'a> Tui<'a> {
         let right = if cfg.offline {
             format!("{} · offline", cfg.model_label)
         } else if let Some(url) = cfg.aeris_url.as_deref() {
-            match crate::aeris_boot::probe_status(url) {
-                crate::aeris_boot::AerisStatus::Ready => {
+            match self.status.get(url) {
+                Some(crate::aeris_boot::AerisStatus::Ready) => {
                     format!("{} · online", cfg.model_label)
                 }
-                crate::aeris_boot::AerisStatus::ServerOnly => {
+                Some(crate::aeris_boot::AerisStatus::ServerOnly) => {
                     format!("{} · no model", cfg.model_label)
                 }
-                crate::aeris_boot::AerisStatus::Down => {
+                Some(crate::aeris_boot::AerisStatus::Down) => {
                     format!("{} · offline", cfg.model_label)
                 }
+                None => format!("{} · checking", cfg.model_label),
             }
         } else {
             cfg.model_label.clone()
@@ -567,28 +660,114 @@ impl<'a> Tui<'a> {
     }
 
     fn paint_workspace(&mut self) {
-
         let (cols, rows) = self.term.size();
         let header = self.session.welcome(cols);
         let header_lines = header.lines().count().max(1) + 1; // + blank
         let prompt_reserve = 6usize; // rules + input + footer
         let body_h = rows.saturating_sub(header_lines + prompt_reserve).max(2);
 
-        emit("\x1b[H\x1b[2J");
-        emit(&header);
-        if !header.ends_with('\n') {
-            emit("\n");
+        // Every log line fitted to the terminal width, oldest first, so one
+        // part is exactly one screen row and the window below is exact.
+        let mut body: Vec<String> = Vec::new();
+        for line in self.log.iter() {
+            if visible_width(line) <= cols {
+                body.push(line.clone());
+            } else if line.contains('\x1b') {
+                body.push(clip_ansi(line, cols));
+            } else {
+                body.extend(wrap(line, cols));
+            }
         }
-        emit("\n");
+        let total = body.len();
+        let max_scroll = total.saturating_sub(body_h);
+        if self.scroll > max_scroll {
+            self.scroll = max_scroll;
+        }
+        let end = total - self.scroll;
+        let start = end.saturating_sub(body_h);
+        let mut body: Vec<String> = body[start..end].to_vec();
+        if self.scroll > 0 {
+            let hint = format!("↓ {} more rows · scroll down or type to return", self.scroll);
+            if let Some(last) = body.last_mut() {
+                *last = self
+                    .session
+                    .theme
+                    .render_dim(&fit(&hint, cols.saturating_sub(2)));
+            }
+        }
 
-        let start = self.log.len().saturating_sub(body_h);
-        for line in &self.log[start..] {
-            emit(line);
-            emit("\r\n");
+        // Build the whole screen first, then write it in one synchronized
+        // chunk: no flash between clear and repaint.
+        let mut out = String::with_capacity(4096);
+        out.push_str("\x1b[H\x1b[2J");
+        out.push_str(&header);
+        if !header.ends_with('\n') {
+            out.push('\n');
         }
+        out.push('\n');
+        for line in &body {
+            out.push_str(line);
+            out.push_str("\r\n");
+        }
+        emit_sync(&out);
+
         self.screen.drawn = false;
         self.screen.widths_above.clear();
         self.last_size = (cols, rows);
+    }
+
+    /// Full-screen, scrollable view for tall content (help, status, expanded
+    /// tool output). ↑ ↓ / j k / PgUp PgDn / Home End scroll; any other key
+    /// returns to the workspace.
+    fn overlay(&mut self, text: &str) {
+        let lines: Vec<&str> = text.lines().collect();
+        let mut top = 0usize;
+        let mut drawn: Option<(usize, usize, usize)> = None;
+        loop {
+            let (cols, rows) = self.term.size();
+            let page = rows.saturating_sub(2).max(3);
+            let max_top = lines.len().saturating_sub(page);
+            top = top.min(max_top);
+            if drawn != Some((cols, rows, top)) {
+                let mut out = String::from("\x1b[?25l\x1b[H\x1b[2J");
+                for l in lines.iter().skip(top).take(page) {
+                    out.push_str(&clip_ansi(l, cols));
+                    out.push_str("\r\n");
+                }
+                let hint = if max_top > 0 {
+                    format!(
+                        "↑↓ scroll · {}-{} of {} · any other key to return",
+                        top + 1,
+                        (top + page).min(lines.len()),
+                        lines.len()
+                    )
+                } else {
+                    "press any key to return".to_string()
+                };
+                out.push_str(
+                    &self
+                        .session
+                        .theme
+                        .render_dim(&fit(&hint, cols.saturating_sub(2))),
+                );
+                emit_sync(&out);
+                drawn = Some((cols, rows, top));
+            }
+            match self.input.next_key(Duration::from_millis(600)) {
+                None => {}
+                Some(Key::Unknown) => {} // mouse click: don't close by accident
+                Some(Key::ScrollUp) => top = top.saturating_sub(3),
+                Some(Key::ScrollDown) => top += 3,
+                Some(Key::Up) | Some(Key::Char('k')) => top = top.saturating_sub(1),
+                Some(Key::Down) | Some(Key::Char('j')) => top += 1,
+                Some(Key::PageUp) => top = top.saturating_sub(page),
+                Some(Key::PageDown) | Some(Key::Char(' ')) => top += page,
+                Some(Key::Home) => top = 0,
+                Some(Key::End) => top = max_top,
+                Some(_) => break,
+            }
+        }
+        self.paint_workspace();
     }
 
     /// Read one line. `None` means the user quit (Ctrl-D, double Ctrl-C, EOF).
@@ -614,14 +793,36 @@ impl<'a> Tui<'a> {
                     self.armed = None;
                     dirty = true;
                 }
+                if self.status.take_changed() {
+                    dirty = true;
+                }
                 continue;
             };
             dirty = true;
             if key != Key::Ctrl('c') {
                 self.armed = None;
             }
+            // Anything but scrolling (or a stray mouse click) returns to the bottom.
+            if self.scroll > 0 && !matches!(key, Key::ScrollUp | Key::ScrollDown | Key::Unknown) {
+                self.scroll = 0;
+                self.paint_workspace();
+            }
             let ed = &mut self.editor;
             match key {
+                Key::ScrollUp => {
+                    self.scroll += 3;
+                    self.paint_workspace();
+                }
+                Key::ScrollDown => {
+                    self.scroll = self.scroll.saturating_sub(3);
+                    self.paint_workspace();
+                }
+                Key::Char('?') if ed.is_empty() => {
+                    let w = self.term.size().0;
+                    let help = self.session.theme.render_help(w);
+                    self.overlay(&help);
+                    dirty = true;
+                }
                 Key::Char(c) => ed.insert(c),
                 Key::Paste(s) => ed.insert_str(&s),
                 Key::Backspace => ed.backspace(),
@@ -680,13 +881,13 @@ impl<'a> Tui<'a> {
                         &self.footer(),
                         true,
                     );
+                    // Leave the echo band on screen and move below it; without
+                    // this the reply is written over the live prompt frame.
+                    self.screen.finish(&f, w);
                     for l in &f.lines {
                         self.log.push(l.clone());
                     }
-                    if self.log.len() > 500 {
-                        let n = self.log.len() - 500;
-                        self.log.drain(..n);
-                    }
+                    self.trim_log();
                     return Some(line.trim().to_string());
                 }
                 Key::Ctrl('c') => {
@@ -718,9 +919,9 @@ impl<'a> Tui<'a> {
                 }
                 Key::Ctrl('o') => {
                     let w = self.term.size().0;
-                    self.screen.clear(w);
                     let out = self.session.expand(w);
-                    emit(&format!("{out}\n\n"));
+                    self.overlay(&out);
+                    dirty = true;
                 }
                 _ => {}
             }

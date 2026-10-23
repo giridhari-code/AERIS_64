@@ -80,7 +80,8 @@ A real terminal UI, still **Rust std only** (raw mode via `stty`, no crates):
 | `ctrl+a / e` | start / end of line |
 | `alt+b / f` | word left / right |
 | `ctrl+w` · `ctrl+u` · `ctrl+k` | delete word · to start · to end |
-| `ctrl+o` | expand last tool output |
+| `?` (empty prompt) | shortcuts overlay |
+| `ctrl+o` | expand last tool output (scrollable: `↑ ↓` `j k` `PgUp PgDn`) |
 | `ctrl+l` | clear screen |
 | `ctrl+c` | clear input · twice to exit |
 | `ctrl+d` | exit on empty line |
@@ -109,6 +110,8 @@ http_timeout_secs = 12
 | `ZEROZ_HTTP_TIMEOUT_SECS` | HTTP timeout 1–60 (default 12) |
 | `ZEROZ_MAX_OUTPUT_CHARS` | Tool output clamp (default 8000) |
 | `ZEROZ_PLAIN` | `1` forces plain line mode (no TUI) |
+| `ZEROZ_MOUSE` | `0` turns off wheel / touch scrolling of the transcript (then a swipe on the alt screen sends ↑ ↓) |
+| `ZEROZ_ALT_SCREEN` | `0` stays on the main screen (chat remains in scrollback after exit) |
 | `ZEROZ_HISTORY_FILE` | Input history file path |
 | `ZEROZ_MODEL_LABEL` | TUI display label only |
 | `ZEROZ_AERIS_URL` | AERIS-64 server, e.g. `http://127.0.0.1:8000` |
