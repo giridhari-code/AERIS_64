@@ -131,15 +131,23 @@ impl<'a> Session<'a> {
     fn llm_state(&self) -> String {
         let cfg = self.cfg;
         let Some(url) = cfg.aeris_url.as_deref() else {
-            return "not linked — set ZEROZ_AERIS_URL".into();
+            return "not configured — LLM auto-start uses http://127.0.0.1:8000".into();
         };
         if cfg.offline {
             return "off (offline mode)".into();
         }
-        let base = llm::endpoint(url).map(|e| e.base()).unwrap_or_else(|_| url.to_string());
-        match llm::ping(cfg) {
-            Ok(model) => format!("online · {model} · {base}"),
-            Err(e) => format!("{e}"),
+        // Live probe (honest): Down / ServerOnly / Ready
+        match crate::aeris_boot::probe_status(url) {
+            crate::aeris_boot::AerisStatus::Ready => match llm::ping(cfg) {
+                Ok(model) => format!("online · {model} · {url}"),
+                Err(_) => format!("online · {url}"),
+            },
+            crate::aeris_boot::AerisStatus::ServerOnly => format!(
+                "server up at {url} but model not loaded — set NEUROFIELD_CHECKPOINT (model.safetensors)"
+            ),
+            crate::aeris_boot::AerisStatus::Down => format!(
+                "offline at {url} — start backend or check ZEROZ_REPO / checkpoint"
+            ),
         }
     }
 
@@ -453,8 +461,18 @@ impl<'a> Tui<'a> {
         // Claude Code parity: left shortcuts hint · right model / status
         let right = if cfg.offline {
             format!("{} · offline", cfg.model_label)
-        } else if cfg.aeris_url.is_some() {
-            format!("{} · linked", cfg.model_label)
+        } else if let Some(url) = cfg.aeris_url.as_deref() {
+            match crate::aeris_boot::probe_status(url) {
+                crate::aeris_boot::AerisStatus::Ready => {
+                    format!("{} · online", cfg.model_label)
+                }
+                crate::aeris_boot::AerisStatus::ServerOnly => {
+                    format!("{} · no model", cfg.model_label)
+                }
+                crate::aeris_boot::AerisStatus::Down => {
+                    format!("{} · offline", cfg.model_label)
+                }
+            }
         } else {
             cfg.model_label.clone()
         };

@@ -22,9 +22,21 @@ pub struct ChatCtx<'a> {
     pub on_token: &'a mut dyn FnMut(&str),
 }
 
-/// True when free-form messages go to the AERIS-64 model.
+/// True when free-form messages should try the AERIS-64 model (URL configured).
+/// Does **not** guarantee the server is up — call sites still handle errors.
 pub fn llm_linked(cfg: &Config) -> bool {
     cfg.aeris_url.is_some() && !cfg.offline
+}
+
+/// True when /readyz reports the model is loaded (live probe).
+pub fn llm_online(cfg: &Config) -> bool {
+    if cfg.offline {
+        return false;
+    }
+    let Some(url) = cfg.aeris_url.as_deref() else {
+        return false;
+    };
+    crate::aeris_boot::probe_status(url) == crate::aeris_boot::AerisStatus::Ready
 }
 
 /// One-shot entry (no streaming, fresh AERIS session).
