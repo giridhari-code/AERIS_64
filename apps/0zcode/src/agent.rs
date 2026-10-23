@@ -373,22 +373,29 @@ fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentRespon
             let s = e.to_string();
             let short = if s.contains("not reachable") {
                 if OFFLINE_HINT_SHOWN.swap(true, Ordering::Relaxed) {
-                    "· still offline".to_string()
+                    // Already told once — stay quiet (footer shows offline)
+                    String::new()
                 } else {
-                    "AERIS offline — tools only (time · calc · /help). Start: scripts/zeroz/run_aeris.sh"
-                        .to_string()
+                    "Model offline. Tools work — try time or 938+29.".to_string()
                 }
             } else if s.contains("model not loaded") || s.contains("not loaded") {
                 if OFFLINE_HINT_SHOWN.swap(true, Ordering::Relaxed) {
-                    "· model still not loaded".to_string()
+                    String::new()
                 } else {
-                    "AERIS: model not loaded — set NEUROFIELD_CHECKPOINT".to_string()
+                    "Model not loaded. Set NEUROFIELD_CHECKPOINT.".to_string()
                 }
-            } else if s.len() > 140 {
-                format!("{}…", s.chars().take(140).collect::<String>())
+            } else if s.len() > 120 {
+                format!("{}…", s.chars().take(120).collect::<String>())
             } else {
                 s
             };
+            if short.is_empty() {
+                return AgentResponse {
+                    text: String::new(),
+                    refused: false,
+                    tool_names: vec!["_silent"],
+                };
+            }
             AgentResponse {
                 text: short,
                 refused: false,

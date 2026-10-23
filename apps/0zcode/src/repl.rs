@@ -77,6 +77,8 @@ enum Finish {
     Text(String),
     /// The reply was already printed live, token by token.
     Streamed,
+    /// Nothing to show (e.g. repeated offline notice suppressed).
+    Silent,
     Clear,
     Quit,
 }
@@ -275,6 +277,9 @@ impl<'a> Session<'a> {
             self.llm_session = llm::new_session_id();
             return Finish::Clear;
         }
+        if r.text.trim().is_empty() || r.tool_names == ["_silent"] {
+            return Finish::Silent;
+        }
         self.last_reply = r.text.clone();
         self.last_tool = r.tool_names.join("+");
         self.history.push("assistant", &r.text);
@@ -343,6 +348,7 @@ fn run_plain(cfg: &Config) -> ExitCode {
         match session.finish(line, r, start.elapsed().as_secs_f32(), width) {
             Finish::Text(s) => println!("{s}\n"),
             Finish::Streamed => println!(),
+            Finish::Silent => {}
             Finish::Clear => println!("{}", session.welcome(width)),
             Finish::Quit => break,
         }
@@ -430,6 +436,7 @@ impl<'a> Tui<'a> {
                     match fin {
                         Finish::Text(s) => emit(&format!("{s}\n\n")),
                         Finish::Streamed => emit("\r\n\r\n"),
+                        Finish::Silent => {}
                         Finish::Clear => {
                             emit(Theme::clear_seq());
                             let w = self.term.size().0;
