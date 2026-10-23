@@ -516,7 +516,11 @@ impl<'a> Tui<'a> {
             }
         } else {
             Footer {
-                left: "? for shortcuts".into(),
+                left: if self.last_size.0 > 0 && self.last_size.0 < 48 {
+                    "? · /help".into()
+                } else {
+                    "? for shortcuts".into()
+                },
                 right,
                 warn: false,
             }

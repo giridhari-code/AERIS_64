@@ -40,7 +40,30 @@ const MASCOT_W: usize = 9;
 pub const COLLAPSE_AFTER: usize = 14;
 
 /// Narrowest layout we draw (phones, tmux splits).
-pub const MIN_W: usize = 30;
+pub const MIN_W: usize = 24;
+
+/// Terminal form-factor for responsive chrome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceClass {
+    /// Narrow phone / Termux portrait (~&lt;48 cols or short height)
+    Phone,
+    /// Tablet / small laptop
+    Tablet,
+    /// Wide desktop
+    Desktop,
+}
+
+impl DeviceClass {
+    pub fn from_size(cols: usize, rows: usize) -> Self {
+        if cols < 48 || rows < 18 {
+            Self::Phone
+        } else if cols < 90 {
+            Self::Tablet
+        } else {
+            Self::Desktop
+        }
+    }
+}
 
 pub struct Theme {
     pub color: bool,
@@ -140,32 +163,83 @@ impl Theme {
     /// Claude Code–style header: robot on the left, name · version / model /
     /// cwd on the right. No border, so the prompt sits right under it.
     pub fn render_welcome(&self, width: usize, model: &str, offline: bool) -> String {
-        let w = width.clamp(MIN_W, 120);
-        let room = w.saturating_sub(MASCOT_W + 4);
+        self.render_welcome_sized(width, 24, model, offline)
+    }
+
+    /// Device-aware header: compact on phone, full mascot on desktop.
+    pub fn render_welcome_sized(
+        &self,
+        cols: usize,
+        rows: usize,
+        model: &str,
+        offline: bool,
+    ) -> String {
+        let class = DeviceClass::from_size(cols, rows);
         let status = if offline { "offline" } else { "ready" };
-        let line2 = fit(&format!("{model} · {status}"), room);
-        let line3 = fit(&self.cwd, room);
-        let texts = [
-            format!(
-                "{}  {}",
-                self.paint("1", "0zcode"),
-                self.dim(&format!("v{PRODUCT_VERSION}"))
-            ),
-            self.dim(&line2),
-            self.dim(&line3),
-        ];
-        let mut out = String::new();
-        for (art, text) in MASCOT_ART.iter().zip(texts.iter()) {
-            out.push_str(&format!(" {}  {}\n", self.paint(MASCOT, art), text));
+        let model_s = format!("{model} · {status}");
+
+        match class {
+            DeviceClass::Phone => {
+                // One/two tight lines — max space for chat on small screens
+                let w = cols.max(MIN_W);
+                let line1 = format!(
+                    "{} {}",
+                    self.paint("1", "0z"),
+                    self.dim(&format!("v{PRODUCT_VERSION}"))
+                );
+                let line2 = self.dim(&fit(&model_s, w.saturating_sub(1)));
+                format!("{line1}\n{line2}\n")
+            }
+            DeviceClass::Tablet => {
+                let w = cols.clamp(MIN_W, 100);
+                let room = w.saturating_sub(MASCOT_W + 3);
+                let texts = [
+                    format!(
+                        "{} {}",
+                        self.paint("1", "0zcode"),
+                        self.dim(&format!("v{PRODUCT_VERSION}"))
+                    ),
+                    self.dim(&fit(&model_s, room)),
+                ];
+                // 2-row mascot
+                let art = [MASCOT_ART[0], MASCOT_ART[1]];
+                let mut out = String::new();
+                for (a, text) in art.iter().zip(texts.iter()) {
+                    out.push_str(&format!(" {}  {}\n", self.paint(MASCOT, a), text));
+                }
+                out
+            }
+            DeviceClass::Desktop => {
+                let w = cols.clamp(MIN_W, 120);
+                let room = w.saturating_sub(MASCOT_W + 4);
+                let texts = [
+                    format!(
+                        "{}  {}",
+                        self.paint("1", "0zcode"),
+                        self.dim(&format!("v{PRODUCT_VERSION}"))
+                    ),
+                    self.dim(&fit(&model_s, room)),
+                    self.dim(&fit(&self.cwd, room)),
+                ];
+                let mut out = String::new();
+                for (art, text) in MASCOT_ART.iter().zip(texts.iter()) {
+                    out.push_str(&format!(" {}  {}\n", self.paint(MASCOT, art), text));
+                }
+                out
+            }
         }
-        out
     }
 
     pub fn render_help(&self, width: usize) -> String {
         let bw = width.clamp(MIN_W, 100);
+        let phone = width < 48;
         let mut rows = vec![self.paint(&format!("{ACCENT};1"), "Commands")];
         for (c, d) in COMMANDS {
-            rows.push(format!("{}  {}", self.paint(INFO, &format!("{c:<9}")), self.dim(d)));
+            if phone {
+                rows.push(format!("{}  {}", self.paint(INFO, c), self.dim(d)));
+            } else {
+                rows.push(format!("{}  {}", self.paint(INFO, &format!("{c:<9}")), self.dim(d)));
+            }
         }
         rows.push(String::new());
         rows.push(self.paint(&format!("{ACCENT};1"), "Shortcuts"));
@@ -412,7 +486,11 @@ impl Theme {
                 " ".to_string()
             };
             let text = if buf.is_empty() && ri == 0 {
-                self.dim(r#"try "weather in Mumbai""#)
+                if w < 48 {
+                    self.dim("message…")
+                } else {
+                    self.dim(r#"try "weather in Mumbai""#)
+                }
             } else {
                 r.clone()
             };
@@ -1083,7 +1161,7 @@ mod tests {
     #[test]
     fn welcome_has_mascot_and_three_info_lines() {
         let t = plain();
-        let w = t.render_welcome(80, "AERIS-64 · tools-first", false);
+        let w = t.render_welcome_sized(100, 40, "AERIS-64 · tools-first", false);
         let rows: Vec<&str> = w.lines().filter(|l| !l.is_empty()).collect();
         assert_eq!(rows.len(), 3, "{w}");
         assert!(rows[0].contains("███████") && rows[0].contains("0zcode"));
@@ -1091,7 +1169,7 @@ mod tests {
         assert!(rows[1].contains("AERIS-64 · tools-first"));
         assert!(rows[2].contains("~/proj"));
         assert!(rows[2].contains("▀▀ ▀▀"), "feet");
-        let off = t.render_welcome(80, "m", true);
+        let off = t.render_welcome_sized(100, 40, "m", true);
         assert!(off.contains("m · offline"));
     }
 
