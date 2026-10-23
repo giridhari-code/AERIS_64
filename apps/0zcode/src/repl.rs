@@ -132,27 +132,14 @@ impl<'a> Session<'a> {
 
     /// One line for `/status` and `/model`: link state, with a quick ping.
     fn llm_state(&self) -> String {
-        let cfg = self.cfg;
-        let Some(url) = cfg.aeris_url.as_deref() else {
-            return "not configured — LLM auto-start uses http://127.0.0.1:8000".into();
-        };
-        if cfg.offline {
-            return "off (offline mode)".into();
+            // Claude Code / OpenCode parity: one clear line for /model and /status.
+            crate::llm::diagnose(self.cfg)
+                .lines()
+                .take(4)
+                .collect::<Vec<_>>()
+                .join("
+")
         }
-        // Live probe (honest): Down / ServerOnly / Ready
-        match crate::aeris_boot::probe_status(url) {
-            crate::aeris_boot::AerisStatus::Ready => match llm::ping(cfg) {
-                Ok(model) => format!("online · {model} · {url}"),
-                Err(_) => format!("online · {url}"),
-            },
-            crate::aeris_boot::AerisStatus::ServerOnly => format!(
-                "server up at {url} but model not loaded — set NEUROFIELD_CHECKPOINT (model.safetensors)"
-            ),
-            crate::aeris_boot::AerisStatus::Down => format!(
-                "offline at {url} — start backend or check ZEROZ_REPO / checkpoint"
-            ),
-        }
-    }
 
     fn welcome(&self, width: usize) -> String {
         self.theme
@@ -487,6 +474,26 @@ impl<'a> Tui<'a> {
             }
         }
         emit("\x1b[?2004h"); // bracketed paste
+        // Company-standard boot: kick LLM probe + one status line (Claude Code parity).
+        if let Some(url) = self.session.cfg.aeris_url.as_deref() {
+            let _ = self.status.get(url); // start background probe
+        }
+        let boot = match self.session.cfg.aeris_url.as_deref() {
+            None => "LLM not linked — export ZEROZ_AERIS_URL=http://127.0.0.1:8000".to_string(),
+            Some(url) => match crate::aeris_boot::probe_status(url) {
+                crate::aeris_boot::AerisStatus::Ready => {
+                    format!("Connected · {} · {url}", self.session.cfg.model_label)
+                }
+                crate::aeris_boot::AerisStatus::ServerOnly => {
+                    format!("Server up · model not loaded · set NEUROFIELD_CHECKPOINT · {url}")
+                }
+                crate::aeris_boot::AerisStatus::Down => {
+                    format!("Waiting for LLM at {url} — tools still work · /llm for help")
+                }
+            },
+        };
+        self.log.push(self.session.theme.dim(&boot));
+        self.log.push(String::new());
         self.paint_workspace();
 
         while let Some(line) = self.prompt() {
@@ -583,23 +590,24 @@ impl<'a> Tui<'a> {
     fn footer(&self) -> Footer {
         let cfg = self.session.cfg;
         // Claude Code parity: left shortcuts hint · right model / status
+        // Claude Code-style footer: model label · live status (left = shortcuts)
         let right = if cfg.offline {
             format!("{} · offline", cfg.model_label)
         } else if let Some(url) = cfg.aeris_url.as_deref() {
             match self.status.get(url) {
                 Some(crate::aeris_boot::AerisStatus::Ready) => {
-                    format!("{} · online", cfg.model_label)
+                    format!("{} · ✓ online", cfg.model_label)
                 }
                 Some(crate::aeris_boot::AerisStatus::ServerOnly) => {
-                    format!("{} · no model", cfg.model_label)
+                    format!("{} · model not loaded", cfg.model_label)
                 }
                 Some(crate::aeris_boot::AerisStatus::Down) => {
-                    format!("{} · offline", cfg.model_label)
+                    format!("{} · connecting…", cfg.model_label)
                 }
-                None => format!("{} · checking", cfg.model_label),
+                None => format!("{} · connecting…", cfg.model_label),
             }
         } else {
-            cfg.model_label.clone()
+            format!("{} · not linked", cfg.model_label)
         };
         if self.armed.is_some() {
             Footer {

@@ -104,7 +104,7 @@ impl Theme {
         }
     }
 
-    fn dim(&self, s: &str) -> String {
+    pub fn dim(&self, s: &str) -> String {
         self.paint(DIM, s)
     }
 

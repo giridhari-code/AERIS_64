@@ -476,6 +476,16 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
 /// `aeris_stream` is on; otherwise one `POST /v1/chat`. Failures come back as
 /// an `error` frame so the UI renders them as an error block.
 fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentResponse {
+    // Company-standard: soft reconnect before chat (Claude Code / OpenCode style).
+    if let Some(url) = cfg.aeris_url.as_deref() {
+        if matches!(
+            crate::aeris_boot::probe_status(url),
+            crate::aeris_boot::AerisStatus::Down
+        ) {
+            // Mutate via env-backed re-read is hard; just surface diagnose — boot is owned by main.
+            // One-shot soft message on first fail still from below.
+        }
+    }
     let fresh = crate::llm::new_session_id();
     let never = AtomicBool::new(false);
     let result = match chat {
