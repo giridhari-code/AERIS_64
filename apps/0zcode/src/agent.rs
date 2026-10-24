@@ -58,6 +58,10 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
     }
 
     let lower = msg.to_lowercase();
+    if !lower.starts_with('/') {
+        crate::buddy::on_user_message();
+    }
+
 
     if is_greeting(&lower) {
         return AgentResponse {
@@ -69,7 +73,11 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
 
     if policy::is_code_request(msg) {
         return AgentResponse {
-            text: policy::refusal_message(),
+            text: crate::grounding::seal(
+                policy::refusal_message(),
+                crate::grounding::Plane::Refused,
+                &[],
+            ),
             refused: true,
             tool_names: vec![],
         };
@@ -78,6 +86,38 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
     if let Some(mcp_msg) = crate::mcp_store::handle_command(msg) {
         return AgentResponse {
             text: mcp_msg,
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+
+    if let Some(rec) = crate::receipts::handle_command(msg) {
+        return AgentResponse {
+            text: rec,
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+
+    if let Some(b) = crate::buddy::handle_command(msg) {
+        return AgentResponse {
+            text: b,
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+
+    if let Some(g) = crate::grounding::handle_command(msg) {
+        return AgentResponse {
+            text: g,
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+
+    if let Some(br) = crate::brief::handle_command(msg) {
+        return AgentResponse {
+            text: br,
             refused: false,
             tool_names: vec![],
         };
@@ -673,8 +713,9 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
         .collect::<Vec<_>>()
         .join("\n\n");
 
+    let sealed = crate::grounding::seal(text, crate::grounding::Plane::Evidence, &names);
     AgentResponse {
-        text,
+        text: sealed,
         refused: false,
         tool_names: names,
     }
@@ -720,7 +761,11 @@ fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentRespon
         Ok(text) if !text.trim().is_empty() => {
             OFFLINE_HINT_SHOWN.store(false, Ordering::Relaxed);
             AgentResponse {
-                text,
+                text: crate::grounding::seal(
+                    text,
+                    crate::grounding::Plane::ModelOnly,
+                    &["aeris"],
+                ),
                 refused: false,
                 tool_names: vec!["aeris"],
             }
@@ -792,15 +837,22 @@ fn push_tool(
     names: &mut Vec<&'static str>,
     r: crate::error::Result<ToolOutput>,
 ) {
+    // Evidence receipt: every tool outcome is hash-chained for audit.
+    let cfg_r = Config::from_env();
     match r {
         Ok(o) => {
+            crate::receipts::record_output(o.name, o.name, &o, &cfg_r);
             names.push(o.name);
             outputs.push(o);
         }
-        Err(e) => outputs.push(ToolOutput {
-            name: "error",
-            body: format!("│ {e}\n│ (honest miss — try another phrasing or check network)"),
-        }),
+        Err(e) => {
+            let body = format!("│ {e}\n│ (honest miss — try another phrasing or check network)");
+            crate::receipts::record_err("error", "tool_error", &e.to_string(), &cfg_r);
+            outputs.push(ToolOutput {
+                name: "error",
+                body,
+            });
+        }
     }
 }
 
@@ -909,6 +961,10 @@ Policy: no source-code write/edit/execute."
 
 fn extract_place(msg: &str) -> Option<String> {
     let lower = msg.to_lowercase();
+    if !lower.starts_with('/') {
+        crate::buddy::on_user_message();
+    }
+
     for key in [" in ", " at ", " for "] {
         if let Some(i) = lower.find(key) {
             let rest = msg[i + key.len()..].trim().trim_matches('?');

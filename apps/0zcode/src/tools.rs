@@ -41,7 +41,7 @@ pub fn catalog() -> &'static str {
 │ today email         via ZEROZ_EMAIL_STATUS_URL
 │ note save/list/read sandbox notes only
 └────────────────────────────────────────
-slash: /help /tools /mcp /status /history /copy /quit
+slash: /help /tools /mcp /buddy /grounding /brief /status /history /copy /quit
 policy: no shell · no code gen · notes sandbox only"
 }
 
