@@ -5,6 +5,10 @@
 
 pub mod aeris_boot;
 pub mod agent;
+pub mod approval;
+pub mod background;
+pub mod commands;
+pub mod computer;
 pub mod config;
 pub mod editor;
 pub mod error;
@@ -13,11 +17,17 @@ pub mod http;
 pub mod json_util;
 pub mod llm;
 pub mod locale;
+pub mod lsp;
+pub mod mcp_catalog;
 pub mod mcp_store;
+pub mod memory;
 pub mod notes;
+pub mod permissions;
+pub mod plugins;
 pub mod policy;
 pub mod registry;
 pub mod repl;
+pub mod rules;
 pub mod term;
 pub mod tools;
 pub mod workspace;

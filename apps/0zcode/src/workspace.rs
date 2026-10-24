@@ -189,6 +189,11 @@ pub fn shell_allowlisted(cmd_line: &str) -> Result<ToolOutput> {
             "shell disabled — export ZEROZ_SHELL=1 for allowlisted commands only".into(),
         ));
     }
+    crate::approval::require(
+        crate::approval::ActionClass::Shell,
+        &format!("shell `{cmd_line}`"),
+    )
+    .map_err(Error::Tool)?;
     let line = cmd_line.trim();
     let allowed = [
         "pwd",
@@ -382,6 +387,11 @@ pub fn write_file(path: &str, content: &str) -> Result<ToolOutput> {
             "write disabled — export ZEROZ_WRITE=1 to allow sandboxed writes".into(),
         ));
     }
+    crate::approval::require(
+        crate::approval::ActionClass::Write,
+        &format!("write `{path}` ({} bytes)", content.len()),
+    )
+    .map_err(Error::Tool)?;
     if content.len() > MAX_WRITE_BYTES {
         return Err(Error::Tool(format!(
             "content too large ({} > {} bytes)",
@@ -418,6 +428,11 @@ pub fn search_replace(path: &str, old: &str, new: &str) -> Result<ToolOutput> {
             "edit disabled — export ZEROZ_WRITE=1".into(),
         ));
     }
+    crate::approval::require(
+        crate::approval::ActionClass::Write,
+        &format!("edit `{path}` (search/replace)"),
+    )
+    .map_err(Error::Tool)?;
     if old.is_empty() {
         return Err(Error::Tool("search_replace: empty old string".into()));
     }
@@ -453,6 +468,11 @@ pub fn mkdir(path: &str) -> Result<ToolOutput> {
             "write disabled — export ZEROZ_WRITE=1".into(),
         ));
     }
+    crate::approval::require(
+        crate::approval::ActionClass::Write,
+        &format!("mkdir `{path}`"),
+    )
+    .map_err(Error::Tool)?;
     let dir = resolve_for_write(path)?;
     fs::create_dir_all(&dir).map_err(|e| Error::Tool(e.to_string()))?;
     Ok(ToolOutput {

@@ -56,13 +56,40 @@ pub fn run(goal: &str, _cfg: &Config) -> Result<ToolOutput> {
             "usage: /agent <goal>   e.g. /agent explore this project".into(),
         ));
     }
-
-    let mut steps: Vec<Step> = Vec::new();
-    let mut transcript = String::new();
+    crate::approval::require(
+        crate::approval::ActionClass::Agent,
+        &format!("agent harness · goal: {}", goal.chars().take(100).collect::<String>()),
+    )
+    .map_err(Error::Tool)?;
     let kind = crate::subagents::infer(goal);
-    let plan = crate::subagents::plan(kind, goal);
-    transcript.push_str(&format!("subagent={}\n", kind.as_str()));
+    run_kind(kind, goal, false)
+}
 
+/// Run a pinned subagent kind (used by parallel team coordination).
+/// When `gate_approval` is false, caller already obtained Human Approval.
+pub fn run_kind(
+    kind: crate::subagents::Kind,
+    goal: &str,
+    gate_approval: bool,
+) -> Result<ToolOutput> {
+    if !agent_enabled() {
+        return Err(Error::Tool(
+            "agent loop disabled — export ZEROZ_AGENT=1".into(),
+        ));
+    }
+    if gate_approval {
+        crate::approval::require(
+            crate::approval::ActionClass::Agent,
+            &format!(
+                "agent [{}] · {}",
+                kind.as_str(),
+                goal.chars().take(80).collect::<String>()
+            ),
+        )
+        .map_err(Error::Tool)?;
+    }
+    let plan = crate::subagents::plan(kind, goal);
+    let mut steps: Vec<Step> = Vec::new();
     for (i, action) in plan.iter().enumerate() {
         if i >= max_steps() {
             break;
@@ -70,7 +97,6 @@ pub fn run(goal: &str, _cfg: &Config) -> Result<ToolOutput> {
         let n = i + 1;
         let result = execute_action(action)?;
         let summary = result.body.chars().take(400).collect::<String>();
-        transcript.push_str(&format!("## step {n}: {action}\n{summary}\n\n"));
         steps.push(Step {
             n,
             action: action.clone(),
@@ -80,9 +106,9 @@ pub fn run(goal: &str, _cfg: &Config) -> Result<ToolOutput> {
             break;
         }
     }
-
     let mut body = format!(
-        "│ agent harness · {} steps · max {}\n│ goal: {}\n│ workspace {}\n",
+        "│ agent [{}] · {} steps · max {}\n│ goal: {}\n│ workspace {}\n",
+        kind.as_str(),
         steps.len(),
         max_steps(),
         goal.chars().take(120).collect::<String>(),
@@ -96,7 +122,6 @@ pub fn run(goal: &str, _cfg: &Config) -> Result<ToolOutput> {
         }
     }
     body.push_str("│\n│ done — company sandbox (write/shell gated by env)");
-    let _ = transcript;
     Ok(ToolOutput {
         name: "agent",
         body,

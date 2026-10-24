@@ -239,10 +239,180 @@ pub fn workflow(steps: &str) -> Result<ToolOutput> {
         ));
     }
     body.push_str("│ execute each /agent step in order (ZEROZ_AGENT=1)");
+    body.push_str("\n│ parallel: /team run explore,test,search | <goal>");
     Ok(ToolOutput {
         name: "Workflow",
         body,
     })
+}
+
+/// Resolve members from a team id/name or explicit comma list.
+fn resolve_members(spec: &str) -> Result<Vec<Kind>> {
+    let spec = spec.trim();
+    if spec.is_empty() {
+        return Err(Error::Tool(
+            "TeamRun: need team id/name or members (explore,test,search)".into(),
+        ));
+    }
+    // Prefer explicit kind list when every token parses.
+    let tokens: Vec<&str> = spec
+        .split(|c| c == ',' || c == '|')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    if !tokens.is_empty() && tokens.iter().all(|t| Kind::parse(t).is_some()) {
+        return Ok(tokens.iter().filter_map(|t| Kind::parse(t)).collect());
+    }
+    // Otherwise look up a saved team.
+    let teams = load()?;
+    let team = teams
+        .into_iter()
+        .find(|t| t.id == spec || t.name.eq_ignore_ascii_case(spec));
+    let Some(team) = team else {
+        return Err(Error::Tool(format!(
+            "TeamRun: unknown team `{spec}` — create with TeamCreate name | explore,test"
+        )));
+    };
+    if !team.active {
+        return Err(Error::Tool(format!(
+            "TeamRun: team `{}` is stopped",
+            team.name
+        )));
+    }
+    let kinds: Vec<Kind> = team
+        .members
+        .iter()
+        .filter_map(|m| Kind::parse(m))
+        .collect();
+    if kinds.is_empty() {
+        return Err(Error::Tool("TeamRun: team has no valid members".into()));
+    }
+    Ok(kinds)
+}
+
+/// Run multiple subagents **in parallel** on the same goal (company-standard).
+///
+/// Usage:
+///   /team run explore,test,search | map workspace
+///   TeamRun myteam | investigate flaky tests
+///   /parallel explore,research | latest AI news context
+///
+/// Requires `ZEROZ_AGENT=1`. One Human Approval covers the whole team run.
+pub fn run_parallel(spec: &str, goal: &str) -> Result<ToolOutput> {
+    let goal = goal.trim();
+    if goal.is_empty() {
+        return Err(Error::Tool(
+            "TeamRun: usage /team run <members|team> | <goal>".into(),
+        ));
+    }
+    if !crate::harness::agent_enabled() {
+        return Err(Error::Tool(
+            "TeamRun: export ZEROZ_AGENT=1 to enable multi-agent runs".into(),
+        ));
+    }
+    let kinds = resolve_members(spec)?;
+    crate::approval::require(
+        crate::approval::ActionClass::Agent,
+        &format!(
+            "parallel team [{}] · {}",
+            kinds
+                .iter()
+                .map(|k| k.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+            goal.chars().take(80).collect::<String>()
+        ),
+    )
+    .map_err(Error::Tool)?;
+
+    // Cap parallelism — company default 4 concurrent bots.
+    let max = std::env::var("ZEROZ_TEAM_MAX")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4)
+        .clamp(1, 8);
+    let kinds: Vec<Kind> = kinds.into_iter().take(max).collect();
+
+    let goal_owned = goal.to_string();
+    let mut handles = Vec::new();
+    for kind in kinds {
+        let g = goal_owned.clone();
+        handles.push(std::thread::spawn(move || {
+            let label = kind.as_str().to_string();
+            match crate::harness::run_kind(kind, &g, false) {
+                Ok(out) => (label, true, out.body),
+                Err(e) => (label, false, format!("error: {e}")),
+            }
+        }));
+    }
+
+    let mut body = format!(
+        "│ multi-agent parallel · {} bots · goal: {}\n│ workspace {}\n",
+        handles.len(),
+        goal.chars().take(100).collect::<String>(),
+        workspace::root_display()
+    );
+    let mut ok = 0usize;
+    let mut fail = 0usize;
+    for h in handles {
+        match h.join() {
+            Ok((label, success, report)) => {
+                if success {
+                    ok += 1;
+                } else {
+                    fail += 1;
+                }
+                body.push_str(&format!(
+                    "│\n│ ── bot: {label} · {}\n",
+                    if success { "ok" } else { "failed" }
+                ));
+                for line in report.lines().take(16) {
+                    body.push_str(&format!("│ {line}\n"));
+                }
+            }
+            Err(_) => {
+                fail += 1;
+                body.push_str("│\n│ ── bot: (thread panicked)\n");
+            }
+        }
+    }
+    body.push_str(&format!(
+        "│\n│ summary: {ok} ok · {fail} failed · parallel join complete"
+    ));
+    Ok(ToolOutput {
+        name: "TeamRun",
+        body,
+    })
+}
+
+/// Parse `/team run members|goal` or `TeamRun members | goal`.
+pub fn parse_run_line(msg: &str) -> Option<(String, String)> {
+    let t = msg.trim();
+    let lower = t.to_lowercase();
+    let rest = if lower.starts_with("/team run ") {
+        t["/team run ".len()..].trim()
+    } else if lower.starts_with("teamrun ") {
+        t["teamrun ".len()..].trim()
+    } else if lower.starts_with("team run ") {
+        t["team run ".len()..].trim()
+    } else if lower.starts_with("/parallel ") {
+        t["/parallel ".len()..].trim()
+    } else if lower.starts_with("parallel ") {
+        t["parallel ".len()..].trim()
+    } else {
+        return None;
+    };
+    if let Some((spec, goal)) = rest.split_once('|') {
+        return Some((spec.trim().to_string(), goal.trim().to_string()));
+    }
+    // fallback: first token = team/members blob, rest = goal
+    let mut parts = rest.splitn(2, char::is_whitespace);
+    let spec = parts.next()?.trim().to_string();
+    let goal = parts.next().unwrap_or("").trim().to_string();
+    if spec.is_empty() {
+        return None;
+    }
+    Some((spec, goal))
 }
 
 #[cfg(test)]
@@ -253,5 +423,12 @@ mod tests {
     fn list_agents_nonempty() {
         let o = list_agents();
         assert!(o.body.contains("subagents") || o.body.contains("explore"));
+    }
+
+    #[test]
+    fn parse_run_line_pipe() {
+        let (s, g) = parse_run_line("/team run explore,test | map repo").unwrap();
+        assert_eq!(s, "explore,test");
+        assert!(g.contains("map"));
     }
 }

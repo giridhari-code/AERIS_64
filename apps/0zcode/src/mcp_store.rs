@@ -199,6 +199,11 @@ pub fn match_tools(user_text: &str) -> Vec<McpTool> {
 
 /// GET url with ?q=encoded query (and &text=). HTTPS uses curl if available.
 pub fn invoke(tool: &McpTool, query: &str, cfg: &Config) -> Result<ToolOutput> {
+    crate::approval::require(
+        crate::approval::ActionClass::Mcp,
+        &format!("MCP tool `{}` → {}", tool.name, tool.url),
+    )
+    .map_err(Error::Tool)?;
     let sep = if tool.url.contains('?') { "&" } else { "?" };
     let full = format!(
         "{}{}q={}&text={}",
@@ -273,6 +278,24 @@ pub fn handle_command(line: &str) -> Option<String> {
     if lower == "/mcp" || lower == "/mcp list" || lower == "mcp list" {
         return Some(list_text());
     }
+    // 100+ external tools / integrations catalog
+    if lower == "/mcp catalog" || lower == "/mcp cat" {
+        return Some(crate::mcp_catalog::list_text(""));
+    }
+    if let Some(arg) = lower
+        .strip_prefix("/mcp catalog ")
+        .or_else(|| lower.strip_prefix("/mcp cat "))
+    {
+        // preserve original case for show names via line slice
+        let arg_orig = if let Some(i) = lower.find("/mcp catalog ") {
+            line[i + "/mcp catalog ".len()..].trim()
+        } else if let Some(i) = lower.find("/mcp cat ") {
+            line[i + "/mcp cat ".len()..].trim()
+        } else {
+            arg.trim()
+        };
+        return Some(crate::mcp_catalog::handle_catalog_arg(arg_orig));
+    }
     if let Some(rest) = lower
         .strip_prefix("/mcp add ")
         .or_else(|| line.strip_prefix("/mcp add "))
@@ -303,15 +326,19 @@ pub fn handle_command(line: &str) -> Option<String> {
     }
     if lower == "/mcp" || lower.starts_with("/mcp ") {
         return Some(
-            "MCP user tools\n\
+            "MCP user tools + external catalog (100+)\n\
   /mcp list\n\
+  /mcp catalog              browse 100+ integrations\n\
+  /mcp catalog <query>      search (github, slack, …)\n\
+  /mcp catalog kind mcp     filter by kind (http|mcp|local)\n\
+  /mcp catalog show <name>  one entry detail\n\
   /mcp add <name> <trig1,trig2> <https://url>\n\
   /mcp remove <name>\n\
   /mcp test <name> [query]\n\
-  /mcp              (built-in schema JSON via agent /mcp alone still works for builtins)\n\
 File: "
                 .to_string()
-                + &conf_path_display(),
+                + &conf_path_display()
+                + "\nCatalog: assets/mcp_catalog.conf",
         );
     }
     None

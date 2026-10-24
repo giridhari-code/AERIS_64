@@ -166,6 +166,25 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
         let id = msg.split_whitespace().last().unwrap_or("");
         return map_tool(crate::teams::delete(id));
     }
+    // Multi-agent parallel coordination
+    if let Some((spec, goal)) = crate::teams::parse_run_line(msg) {
+        return map_tool(crate::teams::run_parallel(&spec, &goal));
+    }
+    if lower == "/team" || lower == "/teams" || lower == "teams" {
+        return AgentResponse {
+            text: format!(
+                "{}\n\nParallel multi-agent:\n\
+  /team run explore,test,search | <goal>\n\
+  /parallel explore,research | <goal>\n\
+  TeamCreate squad | explore,test,search\n\
+  /team run squad | <goal>\n\
+Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
+                crate::teams::list_agents().render()
+            ),
+            refused: false,
+            tool_names: vec!["ListAgents"],
+        };
+    }
     if lower == "listagents" || lower == "list agents" || lower == "/agents" {
         // /agents already handled above as catalog — also full list
         return AgentResponse {
@@ -340,6 +359,81 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
                 "Display label: {}\n(This is cosmetic. Tools run locally via HTTP APIs; set ZEROZ_MODEL_LABEL to rename.)",
                 cfg.model_label
             ),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+
+    // —— company-standard platform surfaces ——————————————————————————
+    if lower.starts_with("/plugins") || lower == "/plugin" || lower == "plugins" {
+        return AgentResponse {
+            text: crate::plugins::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/rules") || lower == "rules" {
+        return AgentResponse {
+            text: crate::rules::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/memory") || lower == "memory" {
+        return AgentResponse {
+            text: crate::memory::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/perms")
+        || lower.starts_with("/permissions")
+        || lower == "perms"
+        || lower == "permissions"
+    {
+        return AgentResponse {
+            text: crate::permissions::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/commands")
+        || lower.starts_with("/cmd ")
+        || lower == "/cmd"
+        || lower.starts_with("/command")
+    {
+        let text = crate::commands::handle_command(msg)
+            .unwrap_or_else(|| crate::commands::list_text());
+        return AgentResponse {
+            text,
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/bg") || lower.starts_with("/background") {
+        return AgentResponse {
+            text: crate::background::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/lsp") || lower == "lsp" {
+        return AgentResponse {
+            text: crate::lsp::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/computer") || lower == "computer" {
+        return AgentResponse {
+            text: crate::computer::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
+    if lower.starts_with("/approval") || lower.starts_with("/approve") || lower == "approval" {
+        return AgentResponse {
+            text: crate::approval::handle_command(msg),
             refused: false,
             tool_names: vec![],
         };
@@ -602,12 +696,25 @@ fn ask_aeris(msg: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> AgentRespon
     }
     let fresh = crate::llm::new_session_id();
     let never = AtomicBool::new(false);
+    // Company-standard: project rules + memory ride along with the user turn.
+    let mut prompt = String::new();
+    let rules = crate::rules::context_for_prompt();
+    if !rules.is_empty() {
+        prompt.push_str(&rules);
+        prompt.push('\n');
+    }
+    let mem = crate::memory::context_for_prompt();
+    if !mem.is_empty() {
+        prompt.push_str(&mem);
+        prompt.push('\n');
+    }
+    prompt.push_str(msg);
     let result = match chat {
         Some(ctx) if cfg.aeris_stream => {
-            crate::llm::stream(cfg, ctx.session, msg, ctx.cancel, &mut *ctx.on_token)
+            crate::llm::stream(cfg, ctx.session, &prompt, ctx.cancel, &mut *ctx.on_token)
         }
-        Some(ctx) => crate::llm::chat(cfg, ctx.session, msg, ctx.cancel),
-        None => crate::llm::chat(cfg, &fresh, msg, &never),
+        Some(ctx) => crate::llm::chat(cfg, ctx.session, &prompt, ctx.cancel),
+        None => crate::llm::chat(cfg, &fresh, &prompt, &never),
     };
     match result {
         Ok(text) if !text.trim().is_empty() => {
@@ -782,14 +889,20 @@ fn help_text() -> String {
     format!(
         "{PRODUCT_NAME} — direct answers from tools, not guesses.\n\n\
 Commands\n\
-  /help /tools /status /model /version /history /clear /quit\n\n\
+  /help /tools /plugins /mcp /rules /memory /perms /approval\n\
+  /commands /cmd /bg /lsp /computer\n\
+  /status /model /version /history /clear /quit\n\n\
+Platform\n\
+  /plugins     features & integrations\n\
+  /rules       project rules (.0zcode/rules)\n\
+  /memory      durable project notes\n\
+  /perms       capability gates\n\
+  /approval    human approval (y/a/n)\n\
+  /bg          background tasks\n\
+  /lsp         diagnostics\n\
+  /computer    computer-use status (gated)\n\n\
 Examples\n\
-  weather in Mumbai\n\
-  time\n\
-  10 USD to INR\n\
-  calculate 25*4\n\
-  who is Ada Lovelace\n\
-  search latest AI news\n\n\
+  weather in Mumbai · time · 10 USD to INR · 25*4\n\n\
 Policy: no source-code write/edit/execute."
     )
 }
