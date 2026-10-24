@@ -103,70 +103,7 @@ pub fn run(goal: &str, _cfg: &Config) -> Result<ToolOutput> {
     })
 }
 
-fn plan_for(goal: &str) -> Vec<String> {
-    let g = goal.to_lowercase();
-    // Write a note / file
-    if g.contains("write ") || g.contains("create file") || g.contains("add file") {
-        let name = extract_filename(goal).unwrap_or_else(|| "notes/agent.txt".into());
-        let content = extract_write_body(goal)
-            .unwrap_or_else(|| format!("# agent note\ngoal: {goal}\n"));
-        return vec![
-            "TOOL list .".into(),
-            format!("TOOL write {name} | {}", content.replace('\n', "\\n")),
-            format!("TOOL read {name}"),
-            format!("DONE wrote {name}"),
-        ];
-    }
-    // Grep
-    if g.starts_with("find ") || g.contains("grep ") || g.contains("search for ") {
-        let pat = g
-            .split_whitespace()
-            .skip_while(|w| !matches!(*w, "find" | "grep" | "for" | "search"))
-            .nth(1)
-            .unwrap_or("TODO")
-            .to_string();
-        return vec![
-            "TOOL list .".into(),
-            format!("TOOL grep {pat}"),
-            format!("DONE searched {pat}"),
-        ];
-    }
-    // Default: explore project (OpenCode-style orientation)
-    vec![
-        "TOOL list .".into(),
-        "TOOL read README.md".into(),
-        "TOOL read Cargo.toml".into(),
-        "TOOL grep TODO".into(),
-        "DONE explored workspace".into(),
-    ]
-}
-
-fn extract_filename(goal: &str) -> Option<String> {
-    // write path/to/file.txt ...
-    let lower = goal.to_lowercase();
-    for key in ["write ", "create file ", "add file "] {
-        if let Some(rest) = lower.find(key).map(|i| goal[i + key.len()..].trim()) {
-            let name = rest.split_whitespace().next()?;
-            if name.contains('.') || name.contains('/') {
-                return Some(name.trim_matches('"').to_string());
-            }
-        }
-    }
-    None
-}
-
-fn extract_write_body(goal: &str) -> Option<String> {
-    if let Some(i) = goal.find(':') {
-        let body = goal[i + 1..].trim();
-        if !body.is_empty() {
-            return Some(body.to_string());
-        }
-    }
-    if let Some(i) = goal.find(" with ") {
-        return Some(goal[i + 6..].trim().to_string());
-    }
-    None
-}
+// Planner lives in `subagents::plan` — harness only executes TOOL steps.
 
 fn execute_action(action: &str) -> Result<ToolOutput> {
     let a = action.trim();
@@ -247,7 +184,8 @@ mod tests {
 
     #[test]
     fn plan_explore_has_list() {
-        let p = plan_for("explore this project");
+        let kind = crate::subagents::infer("explore this project");
+        let p = crate::subagents::plan(kind, "explore this project");
         assert!(p.iter().any(|s| s.contains("list")));
     }
 

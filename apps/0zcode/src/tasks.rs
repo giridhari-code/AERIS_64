@@ -4,7 +4,7 @@
 use crate::error::{Error, Result};
 use crate::tools::ToolOutput;
 use crate::workspace;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
