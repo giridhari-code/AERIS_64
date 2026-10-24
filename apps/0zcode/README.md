@@ -11,6 +11,31 @@
 | Policy | No code write / edit / execute |
 | LLM | AERIS-64 chat + live streaming via `ZEROZ_AERIS_URL` |
 
+## Rust backend (core engine link)
+
+`0zcode serve` runs a **pure-Rust std-only HTTP edge** that proxies to the SENTINEL core engine:
+
+```text
+0zcode TUI  ──►  0zcode serve (:8100)  ──►  SENTINEL core (:8000)
+                 apps/0zcode (Rust)         packages/sentinel (Python)
+```
+
+```bash
+# Terminal 1 — core engine
+./backend/run.sh          # or: make backend
+
+# Terminal 2 — Rust backend edge
+cd apps/0zcode && cargo run -- serve --port 8100 --core http://127.0.0.1:8000
+
+# Terminal 3 — TUI pointed at the Rust edge
+export ZEROZ_AERIS_URL=http://127.0.0.1:8100
+cargo run --release
+```
+
+Endpoints on the Rust backend: `/`, `/healthz`, `/readyz`, and full proxy of `/v1/*` (chat, stream, models, tools, rag, buddy, …) to the core.
+
+---
+
 ## Architecture
 
 ```text

@@ -4,6 +4,7 @@
 #![deny(clippy::unwrap_used)]
 
 pub mod aeris_boot;
+pub mod backend;
 pub mod agent;
 pub mod approval;
 pub mod brief;
