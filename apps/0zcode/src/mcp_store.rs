@@ -1,20 +1,21 @@
-//! User-configured MCP-style HTTP tools.
+//! User-configured MCP tools — **MCP v2** (JSON-RPC 2.0) + legacy GET.
 //!
-//! File: `~/.config/0zcode/mcp_tools.conf`
-//! Line format (one tool per line):
-//!   name | trigger1,trigger2 | https://endpoint.example/path
+//! Config: `~/.config/0zcode/mcp_tools.conf` or `ZEROZ_MCP_CONFIG`
 //!
-//! REPL:
-//!   /mcp list
-//!   /mcp add <name> <trigger,trigger> <url>
-//!   /mcp remove <name>
-//!   /mcp test <name> [query]
+//! ```text
+//! name | triggers | https://host/path              # legacy GET ?q=
+//! name | triggers | http://127.0.0.1:PORT/mcp | mcp-v2
+//! name | triggers | http://host/mcp | mcp-v2 | remote_tool_name
+//! ```
 //!
-//! Policy: only HTTP(S) GET to configured URLs. No shell, no code gen.
+//! MCP v2 wire: POST JSON-RPC `tools/list` · `tools/call`
+//! Policy: HTTP(S) only. Approval gate on invoke (`ZEROZ_APPROVAL=auto` in CI).
 
 use crate::config::Config;
 use crate::error::{Error, Result};
-use crate::http::{get_text, url_encode};
+use crate::http::{
+    get_text_port, json_string, post_json, post_json_https, split_host_port, url_encode,
+};
 use crate::json_util::string_field;
 use crate::tools::ToolOutput;
 use std::env;
@@ -23,11 +24,35 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpProtocol {
+    LegacyGet,
+    McpV2,
+}
+
+impl McpProtocol {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            McpProtocol::LegacyGet => "legacy",
+            McpProtocol::McpV2 => "mcp-v2",
+        }
+    }
+
+    fn parse(s: &str) -> Self {
+        match s.trim().to_lowercase().as_str() {
+            "mcp-v2" | "mcpv2" | "v2" | "jsonrpc" | "json-rpc" => McpProtocol::McpV2,
+            _ => McpProtocol::LegacyGet,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct McpTool {
     pub name: String,
     pub triggers: Vec<String>,
     pub url: String,
+    pub protocol: McpProtocol,
+    pub remote_name: String,
 }
 
 fn conf_path() -> PathBuf {
@@ -82,10 +107,20 @@ fn parse_line(line: &str) -> Option<McpTool> {
     if triggers.is_empty() {
         return None;
     }
+    let mut protocol = McpProtocol::LegacyGet;
+    let mut remote_name = name.clone();
+    if parts.len() >= 4 {
+        protocol = McpProtocol::parse(parts[3]);
+    }
+    if parts.len() >= 5 && !parts[4].is_empty() {
+        remote_name = parts[4].to_string();
+    }
     Some(McpTool {
         name,
         triggers,
         url,
+        protocol,
+        remote_name,
     })
 }
 
@@ -103,15 +138,36 @@ fn save_all(tools: &[McpTool]) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     let mut body = String::from(
-        "# 0zcode user MCP tools\n# name | trigger1,trigger2 | https://endpoint\n# Created/updated by /mcp add\n",
+        "# 0zcode MCP tools\n# name | triggers | url [| mcp-v2 [| remote_name]]\n",
     );
     for t in tools {
-        body.push_str(&format!(
-            "{} | {} | {}\n",
-            t.name,
-            t.triggers.join(","),
-            t.url
-        ));
+        match t.protocol {
+            McpProtocol::McpV2 if t.remote_name != t.name => {
+                body.push_str(&format!(
+                    "{} | {} | {} | mcp-v2 | {}\n",
+                    t.name,
+                    t.triggers.join(","),
+                    t.url,
+                    t.remote_name
+                ));
+            }
+            McpProtocol::McpV2 => {
+                body.push_str(&format!(
+                    "{} | {} | {} | mcp-v2\n",
+                    t.name,
+                    t.triggers.join(","),
+                    t.url
+                ));
+            }
+            McpProtocol::LegacyGet => {
+                body.push_str(&format!(
+                    "{} | {} | {}\n",
+                    t.name,
+                    t.triggers.join(","),
+                    t.url
+                ));
+            }
+        }
     }
     fs::write(&path, body)?;
     Ok(())
@@ -120,23 +176,23 @@ fn save_all(tools: &[McpTool]) -> Result<()> {
 pub fn list_text() -> String {
     match load() {
         Ok(tools) if tools.is_empty() => format!(
-            "No user MCP tools yet.\n\
-File: {}\n\n\
-Add one:\n  /mcp add email email,inbox,mail https://your.worker/email/today\n\n\
-Then ask: \"aaj ka email kya hai\"",
+            "No registered MCP endpoints.\nConfig: {}\n\n\
+Register (MCP JSON-RPC v2):\n  /mcp add <id> <keywords> <https://host/path> mcp-v2 [<remote_tool>]\n\
+Register (legacy HTTP GET):\n  /mcp add <id> <keywords> <https://host/path>",
             conf_path_display()
         ),
         Ok(tools) => {
             let mut out = format!("User MCP tools ({})\nFile: {}\n\n", tools.len(), conf_path_display());
-            for t in tools {
+            for t in &tools {
                 out.push_str(&format!(
-                    "• {}  triggers=[{}]  {}\n",
+                    "• {} [{}] triggers=[{}] {}\n",
                     t.name,
+                    t.protocol.as_str(),
                     t.triggers.join(", "),
                     t.url
                 ));
             }
-            out.push_str("\n/mcp add|remove|test  ·  built-in tools: /tools");
+            out.push_str("\n/mcp add|remove|test|discover|list");
             out
         }
         Err(e) => format!("Could not load MCP config: {e}"),
@@ -144,11 +200,19 @@ Then ask: \"aaj ka email kya hai\"",
 }
 
 pub fn add(name: &str, triggers: &str, url: &str) -> Result<String> {
+    add_with_protocol(name, triggers, url, McpProtocol::LegacyGet, None)
+}
+
+pub fn add_with_protocol(
+    name: &str,
+    triggers: &str,
+    url: &str,
+    protocol: McpProtocol,
+    remote_name: Option<&str>,
+) -> Result<String> {
     let name = name.trim();
     if !valid_name(name) {
-        return Err(Error::Tool(
-            "name: letters/digits/_/- only, max 40".into(),
-        ));
+        return Err(Error::Tool("name: letters/digits/_/- only, max 40".into()));
     }
     let url = url.trim();
     if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -162,16 +226,24 @@ pub fn add(name: &str, triggers: &str, url: &str) -> Result<String> {
     if triggers.is_empty() {
         return Err(Error::Tool("need at least one trigger keyword".into()));
     }
-    let mut tools = load().unwrap_or_default();
+    let remote = remote_name
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(name)
+        .to_string();
+    let mut tools = load()?;
     tools.retain(|t| t.name != name);
     tools.push(McpTool {
         name: name.to_string(),
         triggers,
         url: url.to_string(),
+        protocol,
+        remote_name: remote,
     });
     save_all(&tools)?;
     Ok(format!(
-        "Saved MCP tool `{name}` → {}\nTriggers fire when your message contains those words.",
+        "Saved `{name}` [{}] → {}",
+        protocol.as_str(),
         conf_path_display()
     ))
 }
@@ -197,13 +269,19 @@ pub fn match_tools(user_text: &str) -> Vec<McpTool> {
         .collect()
 }
 
-/// GET url with ?q=encoded query (and &text=). HTTPS uses curl if available.
 pub fn invoke(tool: &McpTool, query: &str, cfg: &Config) -> Result<ToolOutput> {
     crate::approval::require(
         crate::approval::ActionClass::Mcp,
         &format!("MCP tool `{}` → {}", tool.name, tool.url),
     )
     .map_err(Error::Tool)?;
+    match tool.protocol {
+        McpProtocol::LegacyGet => invoke_legacy(tool, query, cfg),
+        McpProtocol::McpV2 => invoke_v2_call(tool, query, cfg),
+    }
+}
+
+fn invoke_legacy(tool: &McpTool, query: &str, cfg: &Config) -> Result<ToolOutput> {
     let sep = if tool.url.contains('?') { "&" } else { "?" };
     let full = format!(
         "{}{}q={}&text={}",
@@ -212,38 +290,119 @@ pub fn invoke(tool: &McpTool, query: &str, cfg: &Config) -> Result<ToolOutput> {
         url_encode(query),
         url_encode(query)
     );
-    let body = fetch_url(&full, cfg)?;
-    let summary = string_field(&body, "summary")
-        .or_else(|| string_field(&body, "result"))
-        .or_else(|| string_field(&body, "text"))
-        .unwrap_or_else(|| body.chars().take(cfg.max_output_chars.min(2000)).collect());
+    let body = fetch_get(&full, cfg)?;
+    let summary = extract_text(&body, cfg);
     Ok(ToolOutput {
         name: "mcp",
         body: format!(
-            "│ tool: {}\n│ {}\n│ source: {}",
+            "│ tool: {} [legacy]\n│ {}\n│ source: {}",
             tool.name, summary, tool.url
         ),
     })
 }
 
-fn fetch_url(url: &str, cfg: &Config) -> Result<String> {
+fn invoke_v2_call(tool: &McpTool, query: &str, cfg: &Config) -> Result<ToolOutput> {
+    let rpc = format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":{},"arguments":{{"query":{},"text":{}}}}}}}"#,
+        json_string(&tool.remote_name),
+        json_string(query),
+        json_string(query)
+    );
+    let body = fetch_post(&tool.url, &rpc, cfg)?;
+    if let Some(err) = rpc_error(&body) {
+        return Err(Error::Tool(format!("MCP v2 error: {err}")));
+    }
+    let summary = extract_mcp_result(&body).unwrap_or_else(|| extract_text(&body, cfg));
+    Ok(ToolOutput {
+        name: "mcp",
+        body: format!(
+            "│ tool: {} [mcp-v2 → {}]\n│ {}\n│ source: {}",
+            tool.name, tool.remote_name, summary, tool.url
+        ),
+    })
+}
+
+/// Real `tools/list` against an mcp-v2 endpoint.
+pub fn discover(tool_name: &str, cfg: &Config) -> String {
+    let tools = match load() {
+        Ok(t) => t,
+        Err(e) => return e.to_string(),
+    };
+    let Some(tool) = tools.into_iter().find(|t| t.name == tool_name) else {
+        return format!("no tool `{tool_name}` — /mcp list");
+    };
+    if tool.protocol != McpProtocol::McpV2 {
+        return format!("`{}` is not mcp-v2 — re-add with mcp-v2 flag", tool.name);
+    }
+    let rpc = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#;
+    match fetch_post(&tool.url, rpc, cfg) {
+        Ok(body) => {
+            if let Some(err) = rpc_error(&body) {
+                return format!("tools/list error: {err}");
+            }
+            format!("MCP v2 tools/list (`{}`)\n{}", tool.name, body.chars().take(2000).collect::<String>())
+        }
+        Err(e) => format!("discover failed: {e}"),
+    }
+}
+
+fn extract_text(body: &str, cfg: &Config) -> String {
+    string_field(body, "summary")
+        .or_else(|| string_field(body, "result"))
+        .or_else(|| string_field(body, "text"))
+        .or_else(|| string_field(body, "content"))
+        .unwrap_or_else(|| body.chars().take(cfg.max_output_chars.min(2000)).collect())
+}
+
+fn extract_mcp_result(body: &str) -> Option<String> {
+    string_field(body, "text")
+        .or_else(|| string_field(body, "content"))
+        .or_else(|| {
+            body.find("\"result\"").and_then(|idx| {
+                let slice = &body[idx..];
+                string_field(slice, "text").or_else(|| string_field(slice, "content"))
+            })
+        })
+}
+
+fn rpc_error(body: &str) -> Option<String> {
+    if !body.contains("\"error\"") {
+        return None;
+    }
+    string_field(body, "message").or_else(|| Some(body.chars().take(300).collect()))
+}
+
+fn fetch_get(url: &str, cfg: &Config) -> Result<String> {
     if let Some(rest) = url.strip_prefix("http://") {
-        let (host, path) = match rest.split_once('/') {
+        let (auth, path) = match rest.split_once('/') {
             Some((h, p)) => (h, format!("/{p}")),
             None => (rest, "/".into()),
         };
-        // strip host:port
-        let host_only = host.split(':').next().unwrap_or(host);
-        return get_text(host_only, &path, cfg);
+        let (host, port) = split_host_port(auth, 80);
+        return get_text_port(&host, port, &path, cfg);
     }
     if url.starts_with("https://") {
-        return fetch_https_curl(url, cfg.http_timeout);
+        return fetch_https_curl_get(url, cfg.http_timeout);
     }
-    Err(Error::Tool("only http:// or https:// URLs allowed".into()))
+    Err(Error::Tool("only http:// or https://".into()))
 }
 
-fn fetch_https_curl(url: &str, timeout: Duration) -> Result<String> {
-    // Fixed argv only — not a user shell string.
+fn fetch_post(url: &str, json_body: &str, cfg: &Config) -> Result<String> {
+    if let Some(rest) = url.strip_prefix("http://") {
+        let (auth, path) = match rest.split_once('/') {
+            Some((h, p)) => (h, format!("/{p}")),
+            None => (rest, "/".into()),
+        };
+        let (host, port) = split_host_port(auth, 80);
+        return post_json(&host, port, &path, json_body, cfg);
+    }
+    if url.starts_with("https://") {
+        return post_json_https(url, json_body, cfg.http_timeout);
+    }
+    Err(Error::Tool("only http:// or https://".into()))
+}
+
+fn fetch_https_curl_get(url: &str, timeout: Duration) -> Result<String> {
     let secs = timeout.as_secs().clamp(1, 60).to_string();
     let out = Command::new("curl")
         .args([
@@ -256,89 +415,54 @@ fn fetch_https_curl(url: &str, timeout: Duration) -> Result<String> {
             url,
         ])
         .output()
-        .map_err(|e| {
-            Error::Http(format!(
-                "https needs `curl` on PATH ({e}). Or use http:// endpoint."
-            ))
-        })?;
+        .map_err(|e| Error::Http(format!("https needs curl ({e})")))?;
     if !out.status.success() {
-        let err = String::from_utf8_lossy(&out.stderr);
         return Err(Error::Http(format!(
             "curl failed: {}",
-            err.chars().take(200).collect::<String>()
+            String::from_utf8_lossy(&out.stderr)
         )));
     }
-    String::from_utf8(out.stdout).map_err(|e| Error::Parse(e.to_string()))
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Handle `/mcp …` meta commands. Returns Some(response) if consumed.
 pub fn handle_command(line: &str) -> Option<String> {
     let line = line.trim();
     let lower = line.to_lowercase();
     if lower == "/mcp" || lower == "/mcp list" || lower == "mcp list" {
         return Some(list_text());
     }
-    // 100+ external tools / integrations catalog
-    if lower == "/mcp catalog" || lower == "/mcp cat" {
-        return Some(crate::mcp_catalog::list_text(""));
+    if lower.starts_with("/mcp discover ") {
+        let name = line["/mcp discover ".len()..].trim();
+        return Some(discover(name, &Config::from_env()));
     }
-    if let Some(arg) = lower
-        .strip_prefix("/mcp catalog ")
-        .or_else(|| lower.strip_prefix("/mcp cat "))
-    {
-        // preserve original case for show names via line slice
-        let arg_orig = if let Some(i) = lower.find("/mcp catalog ") {
-            line[i + "/mcp catalog ".len()..].trim()
-        } else if let Some(i) = lower.find("/mcp cat ") {
-            line[i + "/mcp cat ".len()..].trim()
-        } else {
-            arg.trim()
-        };
-        return Some(crate::mcp_catalog::handle_catalog_arg(arg_orig));
+    if lower.starts_with("/mcp add ") || line.starts_with("/mcp add ") {
+        return Some(parse_add(line.strip_prefix("/mcp add ").unwrap_or("")));
     }
     if let Some(rest) = lower
-        .strip_prefix("/mcp add ")
-        .or_else(|| line.strip_prefix("/mcp add "))
-    {
-        // name triggers url — triggers may have commas; url is last token starting with http
-        let raw = if let Some(r) = line.strip_prefix("/mcp add ") {
-            r
-        } else {
-            rest
-        };
-        return Some(parse_add(raw));
-    }
-    if let Some(name) = lower
         .strip_prefix("/mcp remove ")
         .or_else(|| lower.strip_prefix("/mcp rm "))
     {
-        return Some(match remove(name.trim()) {
+        return Some(match remove(rest.trim()) {
             Ok(s) => s,
             Err(e) => e.to_string(),
         });
     }
     if lower.starts_with("/mcp test ") {
         let rest = line["/mcp test ".len()..].trim();
-        let mut sp = rest.splitn(2, char::is_whitespace);
-        let name = sp.next().unwrap_or("");
-        let q = sp.next().unwrap_or("test");
+        let mut parts = rest.splitn(2, char::is_whitespace);
+        let name = parts.next().unwrap_or("");
+        let q = parts.next().unwrap_or("test");
         return Some(test_tool(name, q));
     }
     if lower == "/mcp" || lower.starts_with("/mcp ") {
         return Some(
-            "MCP user tools + external catalog (100+)\n\
+            "MCP (v2)\n\
   /mcp list\n\
-  /mcp catalog              browse 100+ integrations\n\
-  /mcp catalog <query>      search (github, slack, …)\n\
-  /mcp catalog kind mcp     filter by kind (http|mcp|local)\n\
-  /mcp catalog show <name>  one entry detail\n\
-  /mcp add <name> <trig1,trig2> <https://url>\n\
-  /mcp remove <name>\n\
-  /mcp test <name> [query]\n\
+  /mcp add <name> <triggers> <url> [mcp-v2] [remote_name]\n\
+  /mcp remove|test|discover <name>\n\
 File: "
                 .to_string()
-                + &conf_path_display()
-                + "\nCatalog: assets/mcp_catalog.conf",
+                + &conf_path_display(),
         );
     }
     None
@@ -347,20 +471,29 @@ File: "
 fn parse_add(raw: &str) -> String {
     let tokens: Vec<&str> = raw.split_whitespace().collect();
     if tokens.len() < 3 {
-        return "usage: /mcp add <name> <trigger,trigger> <https://url>".into();
+        return "usage: /mcp add <name> <triggers> <url> [mcp-v2] [remote_name]".into();
     }
     let name = tokens[0];
-    // last token that looks like url
-    let url_i = tokens.iter().rposition(|t| t.starts_with("http://") || t.starts_with("https://"));
+    let url_i = tokens
+        .iter()
+        .position(|t| t.starts_with("http://") || t.starts_with("https://"));
     let Some(ui) = url_i else {
         return "url must be http:// or https://".into();
     };
     if ui < 2 {
-        return "usage: /mcp add <name> <triggers> <url>".into();
+        return "usage: /mcp add <name> <triggers> <url> [mcp-v2]".into();
     }
     let triggers = tokens[1..ui].join(" ");
     let url = tokens[ui];
-    match add(name, &triggers, url) {
+    let mut protocol = McpProtocol::LegacyGet;
+    let mut remote: Option<&str> = None;
+    if let Some(p) = tokens.get(ui + 1) {
+        if McpProtocol::parse(p) == McpProtocol::McpV2 {
+            protocol = McpProtocol::McpV2;
+            remote = tokens.get(ui + 2).copied();
+        }
+    }
+    match add_with_protocol(name, &triggers, url, protocol, remote) {
         Ok(s) => s,
         Err(e) => e.to_string(),
     }
@@ -373,7 +506,7 @@ fn test_tool(name: &str, query: &str) -> String {
         Err(e) => return e.to_string(),
     };
     let Some(tool) = tools.into_iter().find(|t| t.name == name) else {
-        return format!("no tool `{name}` — /mcp list");
+        return format!("no tool `{name}`");
     };
     match invoke(&tool, query, &cfg) {
         Ok(o) => o.render(),
@@ -384,24 +517,133 @@ fn test_tool(name: &str, query: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::net::TcpListener;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
     static LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn parse_and_roundtrip() {
+    fn parse_v2_line() {
+        let t = parse_line("mail | email | http://127.0.0.1:9/mcp | mcp-v2 | get_inbox").unwrap();
+        assert_eq!(t.protocol, McpProtocol::McpV2);
+        assert_eq!(t.remote_name, "get_inbox");
+    }
+
+    /// Integration: loopback MCP JSON-RPC server exercising tools/list + tools/call.
+    #[test]
+    fn mcp_v2_integration_tools_call() {
         let _g = LOCK.lock().unwrap();
-        let dir = env::temp_dir().join("0zcode_mcp_test");
+        env::set_var("ZEROZ_APPROVAL", "auto");
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        let stop = Arc::new(Mutex::new(false));
+        let stop2 = stop.clone();
+
+        let server = thread::spawn(move || {
+            listener.set_nonblocking(false).ok();
+            // handle a few requests then exit
+            for _ in 0..4 {
+                if *stop2.lock().unwrap() {
+                    break;
+                }
+                let Ok((mut stream, _)) = listener.accept() else {
+                    continue;
+                };
+                stream.set_read_timeout(Some(Duration::from_secs(2))).ok();
+                let mut buf = [0u8; 8192];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let body = req.split("\r\n\r\n").nth(1).unwrap_or("");
+                let resp_body = if body.contains("tools/list") {
+                    r#"{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"status_report","description":"Operational status summary"}]}}"#.to_string()
+                } else if body.contains("tools/call") {
+                    let q = body
+                        .find("\"query\"")
+                        .and_then(|i| {
+                            let s = &body[i..];
+                            let start = s.find(':')?;
+                            let s = s[start + 1..].trim();
+                            let start = s.find('"')? + 1;
+                            let end = s[start..].find('"')? + start;
+                            Some(&s[start..end])
+                        })
+                        .unwrap_or("");
+                    // Production-shaped MCP tools/call result (text content block)
+                    format!(
+                        r#"{{"jsonrpc":"2.0","id":1,"result":{{"content":[{{"type":"text","text":"status=ok query={q}"}}],"isError":false}}}}"#
+                    )
+                } else {
+                    r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}"#.to_string()
+                };
+                let resp = format!(
+                    "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    resp_body.len(),
+                    resp_body
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+
+        thread::sleep(Duration::from_millis(50));
+
+        let dir = env::temp_dir().join(format!("0zcode_mcp_v2_it_{port}"));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("mcp_tools.conf");
-        env::set_var("ZEROZ_MCP_CONFIG", &path);
-        add("email", "email,inbox", "https://example.com/mail").unwrap();
+        let conf = dir.join("mcp_tools.conf");
+        env::set_var("ZEROZ_MCP_CONFIG", &conf);
+
+        let url = format!("http://127.0.0.1:{port}/mcp");
+        add_with_protocol(
+            "ops_status",
+            "status,ops,health",
+            &url,
+            McpProtocol::McpV2,
+            Some("status_report"),
+        )
+        .unwrap();
+
         let tools = load().unwrap();
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].name, "email");
-        assert!(match_tools("check my inbox").iter().any(|t| t.name == "email"));
+        assert_eq!(tools[0].protocol, McpProtocol::McpV2);
+        assert_eq!(tools[0].remote_name, "status_report");
+
+        let cfg = Config::from_env();
+        let out = invoke(&tools[0], "region=ap-south-1", &cfg).expect("tools/call");
+        let rendered = out.render();
+        assert!(
+            rendered.contains("status=ok") && rendered.contains("region=ap-south-1"),
+            "unexpected tools/call body: {rendered}"
+        );
+
+        let listed = discover("ops_status", &cfg);
+        assert!(
+            listed.contains("status_report"),
+            "tools/list missing remote tool: {listed}"
+        );
+
+        *stop.lock().unwrap() = true;
+        let _ = TcpStream::connect(("127.0.0.1", port));
+        let _ = server.join();
+
+        remove("ops_status").ok();
+        env::remove_var("ZEROZ_MCP_CONFIG");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_roundtrip_config() {
+        let _g = LOCK.lock().unwrap();
+        let dir = env::temp_dir().join("0zcode_mcp_legacy");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        env::set_var("ZEROZ_MCP_CONFIG", dir.join("c.conf"));
+        add("email", "email,inbox", "https://example.com/mail").unwrap();
+        assert_eq!(load().unwrap()[0].protocol, McpProtocol::LegacyGet);
         remove("email").unwrap();
-        assert!(load().unwrap().is_empty());
         env::remove_var("ZEROZ_MCP_CONFIG");
     }
 }
