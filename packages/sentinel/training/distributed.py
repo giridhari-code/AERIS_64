@@ -11,6 +11,12 @@ Launch examples
 
   # with config
   torchrun --nproc_per_node=4 -m sentinel.cli train --config configs/default.yaml --data-dir data/tokens
+
+  # Tensor parallel (example: 2-way TP on 2 GPUs)
+  torchrun --nproc_per_node=2 -m sentinel.cli train --data-dir data/tokens \
+    --tensor-parallel-size 2
+
+  # WORLD_SIZE must be divisible by (tensor_parallel_size * pipeline_parallel_size)
 """
 
 from __future__ import annotations

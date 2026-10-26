@@ -60,6 +60,9 @@ class TrainingConfig:
     batch_size: int = 8
     grad_accum_steps: int = 1      # effective batch = batch_size * grad_accum_steps
     precision: str = "bf16"        # "fp32" | "bf16" (autocast; no GradScaler needed)
+    tensor_parallel_size: int = 1  # shard selected linears across GPUs (1 = off)
+    pipeline_parallel_size: int = 1  # pipeline stages (1 = off; experimental)
+    pipeline_microbatches: int = 1  # micro-batches per step when PP > 1
     seq_len: int = 256
     lr: float = 5e-4               # safer default with memory + error loss
     weight_decay: float = 0.01

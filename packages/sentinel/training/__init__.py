@@ -26,3 +26,9 @@ __all__ = [
     "cleanup",
     "unwrap_model",
 ]
+from .parallelism import (  # noqa: E402
+    ParallelState,
+    apply_tensor_parallel,
+    get_parallel_state,
+    init_parallel_groups,
+)

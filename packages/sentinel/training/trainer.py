@@ -120,6 +120,15 @@ class Trainer:
             )
             self.device = _acc.device
         self.model.to(self.device)
+        # Tensor / pipeline parallel groups (no-op when sizes == 1)
+        from sentinel.training.parallelism import apply_tensor_parallel, init_parallel_groups
+        self.parallel = init_parallel_groups(
+            tensor_parallel_size=int(getattr(tc, "tensor_parallel_size", 1) or 1),
+            pipeline_parallel_size=int(getattr(tc, "pipeline_parallel_size", 1) or 1),
+        )
+        if self.parallel.tp_size > 1:
+            apply_tensor_parallel(self.model, self.parallel)
+            self.model.to(self.device)
         # honour the config instead of the model's hardcoded default
         self.model._truncate_window = max(1, int(tc.truncate_write_window))
 

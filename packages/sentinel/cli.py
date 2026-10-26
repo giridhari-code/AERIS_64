@@ -40,6 +40,11 @@ def train_main(argv: list[str] | None = None) -> None:
     parser.add_argument("--grad-accum", type=int, default=None)
     parser.add_argument("--precision", type=str, choices=["fp32", "bf16"], default=None)
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--tensor-parallel-size", type=int, default=None,
+                        help="TP group size (must divide WORLD_SIZE; 1=off)")
+    parser.add_argument("--pipeline-parallel-size", type=int, default=None,
+                        help="PP stages (experimental; 1=off)")
+    parser.add_argument("--pipeline-microbatches", type=int, default=None)
     parser.add_argument("--resume", action="store_true", help="continue from <output-dir>/checkpoint_latest.pt")
     parser.add_argument("--tokenizer-json", type=str, default=None, help="copied into the exported checkpoint folders")
     parser.add_argument("--token-dtype", type=str, default="uint16",
@@ -90,6 +95,12 @@ def train_main(argv: list[str] | None = None) -> None:
         cfg.training.precision = args.precision
     if args.seed is not None:
         cfg.training.seed = args.seed
+    if getattr(args, "tensor_parallel_size", None) is not None:
+        cfg.training.tensor_parallel_size = int(args.tensor_parallel_size)
+    if getattr(args, "pipeline_parallel_size", None) is not None:
+        cfg.training.pipeline_parallel_size = int(args.pipeline_parallel_size)
+    if getattr(args, "pipeline_microbatches", None) is not None:
+        cfg.training.pipeline_microbatches = int(args.pipeline_microbatches)
 
     setup_logging(cfg.logging.level)
     try:
