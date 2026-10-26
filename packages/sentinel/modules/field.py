@@ -100,8 +100,8 @@ class NeuralField(nn.Module):
 
         cand = self.norm(self.alpha * h + self.beta * drive)
         z = self.zeta
-        if self.loop_residual_scale and total_k > 1:
-            # later loops refine more gently
+        if self.loop_residual_scale and total_k > 1 and loop_idx > 0:
+            # later loops refine more gently (skip damp on first step)
             damp = 1.0 / (1.0 + self.loop_damp.abs() * float(loop_idx))
             z = z * damp
         return (1.0 - z) * h + z * cand

@@ -90,11 +90,20 @@ class SkillRouter(nn.Module):
 
         w_ste = w + pi - pi.detach()
 
-        if self.n_skills > 16 and self.top_k < self.n_skills:
-            outs = h.new_zeros(h.size(0), self.n_skills, h.size(-1))
-            for s in topk_idx.reshape(-1).unique().tolist():
-                outs[:, s] = self.skills[s](h)
+        # Training needs all skills for STE gradients when top-k < n.
+        # Eval/inference: only run the selected top-k operators (big speedup).
+        if (not self.training) or (self.n_skills > 16 and self.top_k < self.n_skills):
+            if self.top_k >= self.n_skills:
+                outs = torch.stack([op(h) for op in self.skills], dim=1)
+                o = torch.einsum("bs,bsd->bd", w_ste, outs)
+            else:
+                # Gather unique skill ids across batch, run each once
+                uniq = topk_idx.reshape(-1).unique()
+                outs = h.new_zeros(h.size(0), self.n_skills, h.size(-1))
+                for s in uniq.tolist():
+                    outs[:, s] = self.skills[s](h)
+                o = torch.einsum("bs,bsd->bd", w_ste, outs)
         else:
             outs = torch.stack([op(h) for op in self.skills], dim=1)
-        o = torch.einsum("bs,bsd->bd", w_ste, outs)
+            o = torch.einsum("bs,bsd->bd", w_ste, outs)
         return o, pi, w

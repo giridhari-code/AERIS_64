@@ -45,11 +45,11 @@ class Dendrite(nn.Module):
                 f"dendrite.window_features: xp length {xp.size(1)} < W+T={need} "
                 f"(pass cat([x_hist, X], dim=1))"
             )
-        # Causal past window (no +1 shift). Previously this started at index 1,
-        # which skipped the oldest history token and incorrectly pulled in X_t.
-        acc = self.coeffs[0] * xp[:, 0:T]
-        for j in range(1, W):
-            acc = acc + self.coeffs[j] * xp[:, j : j + T]
+        # Causal past window (no +1 shift). Vectorized over W (typically 3–4).
+        # windows[b, t, j, d] = xp[b, t+j, d]
+        windows = xp.unfold(1, W, 1)[:, :T]  # (B, T, D, W)
+        # coeffs: (W, D) → (1, 1, D, W) for broadcast multiply
+        acc = (windows * self.coeffs.T.unsqueeze(0).unsqueeze(0)).sum(dim=-1)
         return torch.tanh(acc + self.bias)
 
     def with_error(self, base: Tensor, error: Tensor | None) -> Tensor:
