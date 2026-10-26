@@ -62,6 +62,16 @@ class SkillRouter(nn.Module):
             ws = workspace
             if ws.ndim == 1:
                 ws = ws.unsqueeze(0).expand(h.size(0), -1)
+            elif ws.ndim == 2 and ws.size(0) != h.size(0):
+                b_h, b_w = h.size(0), ws.size(0)
+                if b_w > 0 and b_h % b_w == 0:
+                    t_steps = b_h // b_w
+                    ws = ws.unsqueeze(1).expand(b_w, t_steps, -1).reshape(b_h, -1)
+                elif b_h < b_w:
+                    ws = ws[:b_h]
+                else:
+                    reps = (b_h + b_w - 1) // b_w
+                    ws = ws.repeat(reps, 1)[:b_h]
             if ws.size(-1) != self.jspace_dim:
                 if ws.size(-1) > self.jspace_dim:
                     ws = ws[..., : self.jspace_dim]

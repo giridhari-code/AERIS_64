@@ -269,28 +269,36 @@ class Metacognition:
 
         # When workspace is busy / high capacity, bias toward deeper processing
         if js_state.capacity_used > 0.55 and process_mode == "system1":
-            # light promotion to system2 if workspace is already holding content
-            process_mode, k = self.dual_process(rel_S, conflict, conf, force="system2")
+            process_mode = "system2"
+            self._last_process_mode = "system2"
             k = max(k, min(self.k_max, 2 + int(js_state.capacity_used * (self.k_max - 1))))
 
-        diag = {
-            "bar_S": float(new_bar.item()) if new_bar.ndim == 0 else float(new_bar.mean().item()),
-            "rel_S_mean": float(rel_S.mean().item()),
-            "confidence_mean": float(conf.mean().item()),
-            "arousal_mean": float(arousal.mean().item()),
-            "conflict_mean": float(conflict.mean().item()),
-            "k": float(k),
-            "want_replay": 1.0 if want_replay else 0.0,
-            "cum_surprise": self.cum_surprise,
-            "process_mode": 1.0 if process_mode == "system2" else 0.0,
-            "deliberate": 1.0 if process_mode == "system2" else 0.0,
-            # J-space diagnostics
-            "jspace_capacity": js_state.capacity_used,
-            "jspace_n_active": float(js_state.n_active),
-            "jspace_reportable": 1.0 if js_state.reportable else 0.0,
-        }
+        _full_diag = bool(getattr(self, "training", False)) or (self.tokens_seen % 8 == 0)
+        if _full_diag:
+            diag = {
+                "bar_S": float(new_bar.detach().mean().item()),
+                "rel_S_mean": float(rel_S.detach().mean().item()),
+                "confidence_mean": float(conf.detach().mean().item()),
+                "arousal_mean": float(arousal.detach().mean().item()),
+                "conflict_mean": float(conflict.detach().mean().item()),
+                "k": float(k),
+                "want_replay": 1.0 if want_replay else 0.0,
+                "cum_surprise": self.cum_surprise,
+                "process_mode": 1.0 if process_mode == "system2" else 0.0,
+                "deliberate": 1.0 if process_mode == "system2" else 0.0,
+                "jspace_capacity": js_state.capacity_used,
+                "jspace_n_active": float(js_state.n_active),
+                "jspace_reportable": 1.0 if js_state.reportable else 0.0,
+            }
+        else:
+            diag = {
+                "k": float(k),
+                "want_replay": 1.0 if want_replay else 0.0,
+                "process_mode": 1.0 if process_mode == "system2" else 0.0,
+                "jspace_capacity": js_state.capacity_used,
+                "jspace_n_active": float(js_state.n_active),
+            }
 
-        # --- Consciousness access layer (GWT ignition + φ-proxy) ---
         c_state = self.consciousness.step(
             jspace_capacity=js_state.capacity_used,
             jspace_n_active=js_state.n_active,
@@ -303,10 +311,11 @@ class Metacognition:
             rel_S=rel_S,
             h=h,
         )
-        diag["consciousness_level"] = c_state.level
-        diag["consciousness_ignition"] = 1.0 if c_state.ignition else 0.0
-        diag["consciousness_phi"] = c_state.phi_proxy
-        diag["consciousness_mode"] = {"unconscious": 0.0, "access": 0.5, "deliberate": 1.0}.get(c_state.mode, 0.0)
+        if _full_diag:
+            diag["consciousness_level"] = c_state.level
+            diag["consciousness_ignition"] = 1.0 if c_state.ignition else 0.0
+            diag["consciousness_phi"] = c_state.phi_proxy
+            diag["consciousness_mode"] = {"unconscious": 0.0, "access": 0.5, "deliberate": 1.0}.get(c_state.mode, 0.0)
 
         return ControlDecision(
             rel_S=rel_S,

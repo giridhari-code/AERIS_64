@@ -478,7 +478,7 @@ class SENTINEL(nn.Module):
 
             # Token-parallel router (positions independent given H)
             js_r = getattr(self, "_last_jspace_broadcast", None)
-        o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r)
+            o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r)
             O = o_flat.view(B, T, -1)
             pi = pi_flat.view(B, T, -1)
             ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
@@ -539,6 +539,9 @@ class SENTINEL(nn.Module):
             slow_slots = state.get("slow_slots")
             slow_filled = state.get("slow_filled")
             slow_ptr = int(state.get("slow_ptr") or 0)
+            _sk = state.get("slow_slot_keys")
+            if _sk is not None and (will_write_slow and snaps):
+                _sk = None
             # Causal slow read + ring writes (must match token-by-token decode).
             # U[t] only sees segment snapshots completed at positions < t.
             # No end-of-call flush when T>1 (that broke prefix ↔ decode parity).
@@ -556,7 +559,9 @@ class SENTINEL(nn.Module):
                     # read [t0, t1) with current ring (snap at t is visible only from t+1)
                     if t1 > t0:
                         U_parts.append(
-                            self.slow_mem.read_seq(D[:, t0:t1], slow_slots, slow_filled)
+                            self.slow_mem.read_seq(
+                                D[:, t0:t1], slow_slots, slow_filled, slot_keys=_sk
+                            )
                         )
                     # apply snaps that close at t1-1 (last position just read)
                     while snap_i < len(snaps) and snaps[snap_i][0] < t1:
@@ -570,7 +575,7 @@ class SENTINEL(nn.Module):
                 U = torch.cat(U_parts, dim=1) if U_parts else D.new_zeros(B, T, self.cfg.d_v)
                 seg_pos = seg_cnt
             else:
-                U = self.slow_mem.read_seq(D, slow_slots, slow_filled)
+                U = self.slow_mem.read_seq(D, slow_slots, slow_filled, slot_keys=_sk)
                 if will_write_slow and T > 0:
                     # no snaps this call; just carry segment counter
                     seg_pos = seg_cnt

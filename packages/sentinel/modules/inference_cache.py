@@ -71,23 +71,28 @@ class InferenceCache:
     def invalidate_slot_keys(self) -> None:
         self.slot_keys = None
         self.slot_keys_valid = False
+        if isinstance(self.state, dict):
+            self.state.pop("slow_slot_keys", None)
 
     def update_slot_keys(self, model: Any) -> None:
         """Cache content-address keys for current slow ring (speed up repeated reads)."""
-        slots = self.state.get("slow_slots")
+        slots = self.state.get("slow_slots") if isinstance(self.state, dict) else None
         if slots is None or not hasattr(model, "slow_mem"):
             self.invalidate_slot_keys()
             return
-        with torch.no_grad():
-            self.slot_keys = model.slow_mem._slot_keys(slots).detach()
+        with torch.inference_mode():
+            keys = model.slow_mem._slot_keys(slots).detach()
+        self.slot_keys = keys
         self.slot_keys_valid = True
+        if isinstance(self.state, dict):
+            self.state["slow_slot_keys"] = keys
 
     def heal(self, model: Any) -> None:
         if hasattr(model, "heal_session_state"):
             self.state = model.heal_session_state(self.state) or self.state
         self.invalidate_slot_keys()
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def prefill(self, model: Any, input_ids: Tensor) -> Tensor:
         """Process prompt in one parallel pass; state becomes the 'cache'."""
         model.eval()
@@ -102,7 +107,7 @@ class InferenceCache:
         self.update_slot_keys(model)
         return out.logits
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def decode_step(
         self,
         model: Any,
@@ -121,6 +126,9 @@ class InferenceCache:
         if heal_every > 0 and self.decode_steps > 0 and self.decode_steps % heal_every == 0:
             self.heal(model)
 
+        if self.slot_keys_valid and self.slot_keys is not None and isinstance(self.state, dict):
+            self.state["slow_slot_keys"] = self.slot_keys
+
         out = model(token_id, state=self.state)
         self.state = out.state or self.state
         self.decode_steps += 1
@@ -130,7 +138,7 @@ class InferenceCache:
             self.invalidate_slot_keys()
         return out.logits
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def generate(
         self,
         model: Any,

@@ -366,6 +366,7 @@ class SlowMemory(nn.Module):
         d_t: Tensor,
         slots: Tensor | None = None,
         filled: Tensor | None = None,
+        slot_keys: Tensor | None = None,
     ) -> Tensor:
         """Query all filled context slots + global prior (with self-heal)."""
         q = self.W_q(d_t)
@@ -377,10 +378,8 @@ class SlowMemory(nn.Module):
 
         slots, filled = heal_slots(slots, filled, max_norm=DEFAULT_MAX_MEMORY_NORM)
         B = d_t.size(0)
-        # Per-slot value read: (B, S, d_v)
         r = torch.einsum("bskd,bk->bsd", slots, q)
-        # Content address over slots
-        k_slot = self._slot_keys(slots)
+        k_slot = slot_keys if slot_keys is not None else self._slot_keys(slots)
         scores = torch.einsum("bk,bsk->bs", q, k_slot)
         temp = self.log_temp.exp().clamp(min=0.1, max=10.0)
         scores = scores / temp
@@ -401,21 +400,21 @@ class SlowMemory(nn.Module):
 
     def read_seq(
         self,
-        D: Tensor,  # (B, T, d_model)
-        slots: Tensor | None = None,  # (B, S, d_k, d_v)
-        filled: Tensor | None = None,  # (B, S)
+        D: Tensor,
+        slots: Tensor | None = None,
+        filled: Tensor | None = None,
+        slot_keys: Tensor | None = None,
     ) -> Tensor:
         """Token-parallel read: same ring for all t, no B*T slot expand."""
         B, T, _ = D.shape
-        q = F.normalize(self.W_q(D), dim=-1, eps=1e-8)  # (B, T, d_k)
+        q = F.normalize(self.W_q(D), dim=-1, eps=1e-8)
         u_prior = torch.einsum("btk,kd->btd", q, self.M_s)
 
         if slots is None or filled is None:
             return u_prior
 
-        # (B, T, S, d_v)
         r = torch.einsum("bskd,btk->btsd", slots, q)
-        k_slot = self._slot_keys(slots)  # (B, S, d_k)
+        k_slot = slot_keys if slot_keys is not None else self._slot_keys(slots)
         scores = torch.einsum("btk,bsk->bts", q, k_slot)
         temp = self.log_temp.exp().clamp(min=0.1, max=10.0)
         scores = scores / temp
