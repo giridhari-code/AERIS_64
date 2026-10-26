@@ -90,20 +90,22 @@ class SkillRouter(nn.Module):
 
         w_ste = w + pi - pi.detach()
 
-        # Training needs all skills for STE gradients when top-k < n.
-        # Eval/inference: only run the selected top-k operators (big speedup).
-        if (not self.training) or (self.n_skills > 16 and self.top_k < self.n_skills):
-            if self.top_k >= self.n_skills:
-                outs = torch.stack([op(h) for op in self.skills], dim=1)
-                o = torch.einsum("bs,bsd->bd", w_ste, outs)
+        # MoE-style: only execute top-k skill MLPs (train + eval).
+        # Router logits still get full softmax gradients via pi / w_ste.
+        if self.top_k >= self.n_skills:
+            outs = torch.stack([op(h) for op in self.skills], dim=1)
+            o = torch.einsum("bs,bsd->bd", w_ste, outs)
+        else:
+            uniq = topk_idx.reshape(-1).unique()
+            # Sparse combine without full (B, n_skills, D) tensor when few unique
+            if uniq.numel() <= max(4, self.top_k * 2):
+                o = h.new_zeros(h.size(0), h.size(-1))
+                for s in uniq.tolist():
+                    # w_ste[:, s] * skill_s(h)
+                    o = o + w_ste[:, s].unsqueeze(-1) * self.skills[s](h)
             else:
-                # Gather unique skill ids across batch, run each once
-                uniq = topk_idx.reshape(-1).unique()
                 outs = h.new_zeros(h.size(0), self.n_skills, h.size(-1))
                 for s in uniq.tolist():
                     outs[:, s] = self.skills[s](h)
                 o = torch.einsum("bs,bsd->bd", w_ste, outs)
-        else:
-            outs = torch.stack([op(h) for op in self.skills], dim=1)
-            o = torch.einsum("bs,bsd->bd", w_ste, outs)
         return o, pi, w

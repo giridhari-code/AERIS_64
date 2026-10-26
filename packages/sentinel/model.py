@@ -389,6 +389,7 @@ class SENTINEL(nn.Module):
         err_energy = X.new_zeros(())
         bal_loss = X.new_zeros(())
         gates_audit: list[Tensor] = []
+        ent_list: list = []
         write_norms: list[Tensor] = []
         mem_norms: list[Tensor] = []
         pi: Tensor | None = None
@@ -491,7 +492,8 @@ class SENTINEL(nn.Module):
             o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r)
             O = o_flat.view(B, T, -1)
             pi = pi_flat.view(B, T, -1)
-            ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
+            if collect:
+                ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
             bal_loss = bal_loss + (pi.mean(0) - 1.0 / max(1, self.cfg.n_skills)).pow(2).sum()
 
             if ab.use_fast_memory:
@@ -605,35 +607,40 @@ class SENTINEL(nn.Module):
         )
 
         loss = None
-        # Always report gate/mem so train logs are not stuck at gate=0.000
-        if gates_audit:
-            _gate_mean = float(
-                torch.stack([g.detach().float().reshape(()) for g in gates_audit]).mean().item()
-            )
-        else:
-            _gate_mean = float(G.detach().mean().item()) if T > 0 else 0.0
-        if mem_norms:
-            _mem_mean = float(
-                torch.stack([x.detach().float().reshape(()) for x in mem_norms]).mean().item()
-            )
-        else:
-            _mem_mean = float(M.detach().norm().item()) if isinstance(M, Tensor) else 0.0
+        # Host metrics only when collecting (log / audit) — avoid per-step GPU sync
         metrics: dict[str, float] = {
             "path": "parallel",
             "k_depth": float(k_depth),
-            "gate_mean": _gate_mean,
-            "mem_norm": _mem_mean,
-            "mean_S": float(S.detach().mean().item()) if T > 0 else 0.0,
             "want_replay": 1.0 if want_replay else 0.0,
-            "memory_healed": 1.0 if state.get("_memory_health") else 0.0,
-            "meta_active": 1.0 if (ab.use_metacognition and gate_bias_meta is not None) else 0.0,
-            "slow_filled": float(
-                slow_filled.detach().float().sum().item()
-            ) if isinstance(slow_filled, Tensor) else 0.0,
             "segment_len": float(self._segment_len),
         }
-        if gate_bias_meta is not None:
-            metrics["gate_bias_mean"] = float(gate_bias_meta.detach().float().mean().item())
+        if collect:
+            if gates_audit:
+                _gate_mean = float(
+                    torch.stack([g.detach().float().reshape(()) for g in gates_audit]).mean().item()
+                )
+            else:
+                _gate_mean = float(G.detach().mean().item()) if T > 0 else 0.0
+            if mem_norms:
+                _mem_mean = float(
+                    torch.stack([x.detach().float().reshape(()) for x in mem_norms]).mean().item()
+                )
+            else:
+                _mem_mean = float(M.detach().norm().item()) if isinstance(M, Tensor) else 0.0
+            metrics.update(
+                {
+                    "gate_mean": _gate_mean,
+                    "mem_norm": _mem_mean,
+                    "mean_S": float(S.detach().mean().item()) if T > 0 else 0.0,
+                    "memory_healed": 1.0 if state.get("_memory_health") else 0.0,
+                    "meta_active": 1.0 if (ab.use_metacognition and gate_bias_meta is not None) else 0.0,
+                    "slow_filled": float(
+                        slow_filled.detach().float().sum().item()
+                    ) if isinstance(slow_filled, Tensor) else 0.0,
+                }
+            )
+            if gate_bias_meta is not None:
+                metrics["gate_bias_mean"] = float(gate_bias_meta.detach().float().mean().item())
         if targets is not None:
             ce = F.cross_entropy(
                 logits.reshape(-1, self.cfg.vocab_size),
@@ -650,7 +657,7 @@ class SENTINEL(nn.Module):
             if isinstance(pi, Tensor):
                 ent = -(pi * pi.clamp_min(1e-12).log()).sum(-1).mean()
                 n_sk = max(2, int(self.cfg.n_skills))
-                ent_max = float(torch.log(torch.tensor(float(n_sk))))
+                ent_max = float(__import__("math").log(n_sk))
                 ent_reg = F.relu(0.2 * ent_max - ent)  # penalize very low entropy
             else:
                 ent_reg = g_mean.new_zeros(())
