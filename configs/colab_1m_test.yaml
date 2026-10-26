@@ -1,0 +1,67 @@
+# Colab smoke test: ~1M words corpus + small AERIS model
+# Goal: end-to-end pipeline test (data → train → checkpoint), not SOTA quality
+model:
+  d_model: 128
+  d_k: 32
+  d_v: 32
+  n_skills: 4
+  top_k: 2
+  k_max: 3
+  dendrite_window: 3
+  vocab_size: 8000
+  max_seq_len: 512
+  tie_embeddings: true
+  dropout: 0.05
+  hierarchical_predict: true
+  pred_mid_horizon: 4
+  pred_coarse_horizon: 16
+  lambda_err_mid: 0.05
+  lambda_err_coarse: 0.02
+  sparse_skill_exec: true
+
+training:
+  batch_size: 8
+  grad_accum_steps: 2
+  seq_len: 128
+  lr: 5.0e-4
+  weight_decay: 0.01
+  warmup_steps: 50
+  max_steps: 500          # short Colab test (~minutes on T4)
+  grad_clip: 1.0
+  lambda_err: 0.1
+  lambda_err_warmup_steps: 100
+  lambda_bal: 0.01
+  replay_every: 50
+  replay_eta: 0.02
+  truncate_write_window: 16
+  memory_lr_scale: 0.5
+  ema_decay: 0.999
+  device: cuda
+  seed: 42
+  log_every: 25
+  eval_every: 100
+  checkpoint_every: 250
+  output_dir: runs/colab_1m_test
+  precision: bf16
+
+data:
+  train_path: data/tokens_1m/train.bin
+  val_path: data/tokens_1m/val.bin
+  tokenizer: hf
+
+safety:
+  enable_audit: false
+  max_write_norm: 10.0
+  max_memory_norm: 50.0
+  gate_cap: 1.0
+  gate_floor: 0.05
+  gate_target: 0.35
+  lambda_gate: 0.01
+  lambda_ent: 0.005
+  freeze_on_anomaly: false
+  per_session_state: true
+  truncate_write_window: 16
+
+logging:
+  level: INFO
+  wandb: false
