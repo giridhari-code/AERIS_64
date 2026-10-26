@@ -17,6 +17,9 @@ class ModelConfig:
     d_v: int = 64
     n_skills: int = 8
     top_k: int = 2
+    # True = only run selected top-k skill MLPs (faster; still AERIS top-k router)
+    # False = run all skill MLPs every step (denser grads on every skill)
+    sparse_skill_exec: bool = True
     k_max: int = 5
     dendrite_window: int = 3
     vocab_size: int = 32000

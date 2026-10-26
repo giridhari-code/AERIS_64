@@ -125,7 +125,13 @@ class SENTINEL(nn.Module):
         else:
             self.predictor = Predictor(cfg.d_model)
         self.neuromod = Neuromodulator(cfg.d_model)
-        self.router = SkillRouter(cfg.d_model, cfg.n_skills, cfg.top_k, jspace_dim=int(cfg.jspace_dim))
+        self.router = SkillRouter(
+            cfg.d_model,
+            cfg.n_skills,
+            cfg.top_k,
+            jspace_dim=int(cfg.jspace_dim),
+            sparse_skill_exec=bool(getattr(cfg, "sparse_skill_exec", True)),
+        )
         self.fast_mem = FastMemory(cfg.d_model, cfg.d_k, cfg.d_v)
         # Context window ring: n_slots ≈ max_seq_len / segment_len
         segment = max(1, int(self.safety.truncate_write_window))

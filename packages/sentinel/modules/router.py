@@ -35,12 +35,25 @@ class SkillRouter(nn.Module):
     Optional ``workspace`` (J-space broadcast) biases skill selection toward
     whatever is currently "on mind" — more intelligent routing under access
     consciousness.
+
+    This is **not** a different model family (still AERIS / SENTINEL).
+    ``sparse_skill_exec`` is only an implementation switch for which skill
+    MLPs are executed; the top-k router equations are the original design.
     """
 
-    def __init__(self, d_model: int, n_skills: int, top_k: int, jspace_dim: int = 0):
+    def __init__(
+        self,
+        d_model: int,
+        n_skills: int,
+        top_k: int,
+        jspace_dim: int = 0,
+        sparse_skill_exec: bool = True,
+    ):
         super().__init__()
         self.n_skills = n_skills
         self.top_k = min(top_k, n_skills)
+        # Execution policy only — routing math (π, top-k w, STE) is unchanged AERIS design
+        self.sparse_skill_exec = bool(sparse_skill_exec)
         self.router = nn.Linear(d_model, n_skills, bias=False)
         self.skills = nn.ModuleList([SkillOperator(d_model) for _ in range(n_skills)])
 
@@ -90,18 +103,18 @@ class SkillRouter(nn.Module):
 
         w_ste = w + pi - pi.detach()
 
-        # MoE-style: only execute top-k skill MLPs (train + eval).
-        # Router logits still get full softmax gradients via pi / w_ste.
-        if self.top_k >= self.n_skills:
+        # AERIS router is already top-k gated (w = softmax over top-k logits).
+        # sparse_skill_exec only skips *running* non-selected skill MLPs (compute).
+        # Math stays: o = Σ w_STE_i * Op_i(h) with full π for the router.
+        use_sparse = self.sparse_skill_exec and self.top_k < self.n_skills
+        if not use_sparse:
             outs = torch.stack([op(h) for op in self.skills], dim=1)
             o = torch.einsum("bs,bsd->bd", w_ste, outs)
         else:
             uniq = topk_idx.reshape(-1).unique()
-            # Sparse combine without full (B, n_skills, D) tensor when few unique
             if uniq.numel() <= max(4, self.top_k * 2):
                 o = h.new_zeros(h.size(0), h.size(-1))
                 for s in uniq.tolist():
-                    # w_ste[:, s] * skill_s(h)
                     o = o + w_ste[:, s].unsqueeze(-1) * self.skills[s](h)
             else:
                 outs = h.new_zeros(h.size(0), self.n_skills, h.size(-1))
