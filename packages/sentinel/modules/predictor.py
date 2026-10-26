@@ -99,33 +99,39 @@ class HierarchicalPredictor(nn.Module):
         X: Tensor,
         *,
         X_hat_fine_shift: Optional[Tensor] = None,
+        need_fine: bool = False,
+        need_mid: bool = True,
+        need_coarse: bool = True,
     ) -> dict[str, Tensor]:
+        """Multi-level errors. Skip unused levels to save train compute."""
         B, T, D = X.shape
         X_det = X.detach()
         out: dict[str, Tensor] = {}
+        zero = H.new_zeros(())
 
-        if X_hat_fine_shift is not None:
-            E_fine = X_det - X_hat_fine_shift
+        if need_fine:
+            if X_hat_fine_shift is not None:
+                E_fine = X_det - X_hat_fine_shift
+            else:
+                pred = self.fine(H.reshape(B * T, -1)).view(B, T, -1)
+                pred_shift = torch.cat([pred[:, :1] * 0, pred[:, :-1]], dim=1)
+                E_fine = X_det - pred_shift
+            out["E_fine"] = E_fine
+            out["err_fine"] = E_fine.pow(2).mean()
         else:
-            pred = self.fine(H.reshape(B * T, -1)).view(B, T, -1)
-            pred_shift = torch.cat([pred[:, :1] * 0, pred[:, :-1]], dim=1)
-            E_fine = X_det - pred_shift
-        out["E_fine"] = E_fine
-        out["err_fine"] = E_fine.pow(2).mean()
+            out["err_fine"] = zero
 
-        flat = H.reshape(B * T, -1)
-        if self.mid is not None and T > 1:
+        flat = H.reshape(B * T, -1) if (need_mid or need_coarse) and T > 1 else None
+        if need_mid and self.mid is not None and T > 1 and flat is not None:
             tgt = self._future_mean(X_det, self.mid_horizon)
-            pred_m = self.mid(flat).view(B, T, -1)
-            out["err_mid"] = (tgt - pred_m).pow(2).mean()
+            out["err_mid"] = (tgt - self.mid(flat).view(B, T, -1)).pow(2).mean()
         else:
-            out["err_mid"] = H.new_zeros(())
+            out["err_mid"] = zero
 
-        if self.coarse is not None and T > 1:
+        if need_coarse and self.coarse is not None and T > 1 and flat is not None:
             tgt = self._future_mean(X_det, self.coarse_horizon)
-            pred_c = self.coarse(flat).view(B, T, -1)
-            out["err_coarse"] = (tgt - pred_c).pow(2).mean()
+            out["err_coarse"] = (tgt - self.coarse(flat).view(B, T, -1)).pow(2).mean()
         else:
-            out["err_coarse"] = H.new_zeros(())
+            out["err_coarse"] = zero
 
         return out

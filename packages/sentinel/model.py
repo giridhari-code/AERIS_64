@@ -266,6 +266,8 @@ class SENTINEL(nn.Module):
         state: Optional[dict] = None,
         return_audit: bool = False,
         lambda_err: float = 0.1,
+        lambda_err_mid: Optional[float] = None,
+        lambda_err_coarse: Optional[float] = None,
         lambda_bal: float = 0.01,
         write_slow: bool = True,
         k_depth: Optional[int] = None,
@@ -657,15 +659,25 @@ class SENTINEL(nn.Module):
             err_fine = err_energy / max(1, k_depth)
             err_mid = logits.new_zeros(())
             err_coarse = logits.new_zeros(())
-            lam_m = float(getattr(self.cfg, "lambda_err_mid", 0.05) or 0.0)
-            lam_c = float(getattr(self.cfg, "lambda_err_coarse", 0.02) or 0.0)
+            lam_m = float(
+                lambda_err_mid
+                if lambda_err_mid is not None
+                else (getattr(self.cfg, "lambda_err_mid", 0.05) or 0.0)
+            )
+            lam_c = float(
+                lambda_err_coarse
+                if lambda_err_coarse is not None
+                else (getattr(self.cfg, "lambda_err_coarse", 0.02) or 0.0)
+            )
             if (
                 self.training
                 and T > 1
                 and hasattr(self.predictor, "level_errors")
                 and (lam_m > 0.0 or lam_c > 0.0)
             ):
-                le = self.predictor.level_errors(H, X)
+                le = self.predictor.level_errors(
+                    H, X, need_fine=False, need_mid=lam_m > 0.0, need_coarse=lam_c > 0.0
+                )
                 err_mid = le["err_mid"]
                 err_coarse = le["err_coarse"]
             loss = (
@@ -677,16 +689,21 @@ class SENTINEL(nn.Module):
                 + lambda_gate * gate_reg
                 + lambda_ent * ent_reg
             )
-            metrics.update(
-                {
-                    "ce": float(ce.detach().item()),
-                    "err_energy": float((err_energy / max(1, k_depth)).detach().item()),
-                    "err_mid": float(err_mid.detach().item()) if torch.is_tensor(err_mid) else 0.0,
-                    "err_coarse": float(err_coarse.detach().item()) if torch.is_tensor(err_coarse) else 0.0,
-                    "gate_reg": float(gate_reg.detach().item()),
-                    "ent_reg": float(ent_reg.detach().item()) if torch.is_tensor(ent_reg) else 0.0,
-                }
-            )
+            # Host sync only when logging (collect_stats) — speeds up train step
+            if collect:
+                metrics.update(
+                    {
+                        "ce": float(ce.detach().item()),
+                        "err_energy": float(err_fine.detach().item()),
+                        "err_mid": float(err_mid.detach().item()) if torch.is_tensor(err_mid) else 0.0,
+                        "err_coarse": float(err_coarse.detach().item()) if torch.is_tensor(err_coarse) else 0.0,
+                        "gate_reg": float(gate_reg.detach().item()),
+                        "ent_reg": float(ent_reg.detach().item()) if torch.is_tensor(ent_reg) else 0.0,
+                        "lambda_err": float(lambda_err),
+                        "lambda_err_mid": float(lam_m),
+                        "lambda_err_coarse": float(lam_c),
+                    }
+                )
 
         audit = None
         if return_audit:

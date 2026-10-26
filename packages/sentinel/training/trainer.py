@@ -270,7 +270,12 @@ class Trainer:
             loss_acc, last_out, last_ids = 0.0, None, None
 
             warm = int(getattr(tc, "lambda_err_warmup_steps", 0) or 0)
-            lam_err = tc.lambda_err * (min(1.0, (self.global_step + 1) / warm) if warm > 0 else 1.0)
+            warm_scale = min(1.0, (self.global_step + 1) / warm) if warm > 0 else 1.0
+            lam_err = tc.lambda_err * warm_scale
+            # Hierarchical mid/coarse share the same warmup (avoids early loss shock)
+            lam_mid = float(getattr(self.cfg.model, "lambda_err_mid", 0.05) or 0.0) * warm_scale
+            lam_coarse = float(getattr(self.cfg.model, "lambda_err_coarse", 0.02) or 0.0) * warm_scale
+            do_log = (self.global_step + 1) % max(1, tc.log_every) == 0
 
             for micro in range(self.accum):
                 batch, data_iter = self._next_batch(data_iter)
@@ -287,8 +292,10 @@ class Trainer:
                             input_ids,
                             targets=targets,
                             lambda_err=lam_err,
+                            lambda_err_mid=lam_mid,
+                            lambda_err_coarse=lam_coarse,
                             lambda_bal=tc.lambda_bal,
-                            collect_stats=((self.global_step + 1) % max(1, tc.log_every) == 0),
+                            collect_stats=do_log,
                         )
                     (out.loss / self.accum).backward()
                 loss_acc += float(out.loss.detach()) / self.accum
@@ -303,7 +310,7 @@ class Trainer:
             else:
                 self.optimizer.step()
                 self._ema_update()
-            self.scheduler.step()
+                self.scheduler.step()
 
             self.global_step += 1
             pbar.update(1)
