@@ -11,6 +11,8 @@ model:
   max_seq_len: 1024
   tie_embeddings: true
   dropout: 0.05
+  hierarchical_predict: true
+  sparse_skill_exec: true
 
 training:
   batch_size: 4

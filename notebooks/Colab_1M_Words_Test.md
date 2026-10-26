@@ -1,8 +1,15 @@
-# AERIS_64 — Colab 1M words pipeline test
+# AERIS_64 — Colab 1M words test (existing pipeline only)
 
-**Runtime → GPU (T4)**
+Uses the **normal** train path only:
 
-## 1) Clone + install
+```text
+raw .txt  →  scripts/data/prepare_data.py  →  train.bin/val.bin
+          →  python -m sentinel.cli train --config configs/colab.yaml
+```
+
+No extra train scripts.
+
+## 1) Setup
 
 ```python
 !nvidia-smi -L || true
@@ -12,31 +19,64 @@ os.chdir('/content')
 !git clone --depth 1 https://github.com/giridhari-code/AERIS_64.git
 %cd AERIS_64
 !pip -q install -e ".[dev]" tokenizers
-```
-
-## 2) One-shot: 1M words → tokenize → train (500 steps)
-
-```python
 import os
 os.environ['PYTHONPATH'] = '/content/AERIS_64/packages'
-!python scripts/train/colab_1m_words_test.py --words 1000000 --max-steps 500
 ```
 
-### Faster smoke (optional)
+## 2) ~1M words corpus (your text or quick synthetic)
+
+**Option A — your data**
 
 ```python
-!python scripts/train/colab_1m_words_test.py --words 200000 --max-steps 50
+# put .txt files under data/raw/
+!mkdir -p data/raw
+# upload or download your corpus into data/raw/
 ```
 
-## 3) What success looks like
+**Option B — quick synthetic ~1M words for pipeline test**
 
-- `data/raw/colab_1m.txt` ≈ 1M words
-- `data/tokens_1m/train.bin` + `tokenizer.json`
-- `runs/colab_1m_test/` checkpoints
-- Train log: finite `loss`, `ce`, no NaN / skip-update spam
+```python
+from pathlib import Path
+p = Path('data/raw/colab_1m.txt')
+p.parent.mkdir(parents=True, exist_ok=True)
+words, n = 0, 0
+with p.open('w') as f:
+    while words < 1_000_000:
+        line = (
+            f"AERIS doc {n} memory field skills predict error. "
+            f"unique_id={n} hex={n:08x} value={n%97}.\n\n"
+        )
+        f.write(line)
+        words += len(line.split())
+        n += 1
+print('words', words)
+```
 
-## Notes
+## 3) Prepare tokens (official script)
 
-- Config: `configs/colab_1m_test.yaml` (small model, Colab-safe)
-- Corpus is **synthetic** (pipeline test, not quality pretrain)
-- For real text: put `.txt` under `data/raw/` and run `scripts/data/prepare_data.py` yourself
+```python
+!python scripts/data/prepare_data.py \
+  --input "data/raw/*.txt" \
+  --out-dir data/tokens \
+  --vocab-size 8000 \
+  --val-frac 0.01 \
+  --chunk-chars 2000
+```
+
+## 4) Train (official CLI + configs/colab.yaml)
+
+```python
+!python -m sentinel.cli train \
+  --config configs/colab.yaml \
+  --data-dir data/tokens \
+  --tokenizer-json data/tokens/tokenizer.json \
+  --max-steps 500
+```
+
+Checkpoints: `runs/colab/`
+
+## Success
+
+- Finite loss / ce in logs  
+- `runs/colab/checkpoint_*.pt` (or latest)  
+- No NaN skip spam  
