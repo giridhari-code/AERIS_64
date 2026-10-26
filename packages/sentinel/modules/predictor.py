@@ -1,6 +1,22 @@
-"""Next-input predictor used for surprise and error energy — stronger residual form."""
+"""Multi-level next-input predictors — brain-like hierarchical prediction error.
+
+Human cortex predicts at several timescales at once (fine features → short
+phrases → coarser structure). When a guess is wrong, that level's error
+drives learning.
+
+SENTINEL mirrors this with three residual predictors on the same field state:
+
+  fine   (Δ=1)  — next embedding x_{t+1}
+  mid    (Δ=4)  — short-horizon target (mean of next 4 embeds)
+  coarse (Δ=16) — longer-horizon target (mean of next 16 embeds)
+
+Surprise for gating still uses the **fine** error (fast, every token).
+Training adds mid/coarse MSE so weights learn multi-scale structure.
+"""
 
 from __future__ import annotations
+
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -8,13 +24,7 @@ from torch import Tensor
 
 
 class Predictor(nn.Module):
-    """
-    Predicts the next embedding from the current field state.
-
-    x̂_{t+1} = h + MLP(LN(h))     (residual — more stable, better gradients)
-    e_{t+1}  = x_{t+1} - x̂_{t+1}
-    S_{t+1}  = sg(mean |e_{t+1}|)
-    """
+    """Single-timescale residual predictor: x̂ = h + MLP(LN(h))."""
 
     def __init__(self, d_model: int):
         super().__init__()
@@ -24,7 +34,6 @@ class Predictor(nn.Module):
             nn.GELU(),
             nn.Linear(d_model * 2, d_model),
         )
-        # Start near identity residual so early training is stable
         nn.init.zeros_(self.net[-1].weight)
         nn.init.zeros_(self.net[-1].bias)
 
@@ -41,3 +50,82 @@ class Predictor(nn.Module):
         error = tgt - pred
         surprise = error.detach().abs().mean(dim=-1)
         return error, surprise
+
+
+class HierarchicalPredictor(nn.Module):
+    """Three-timescale predictors sharing field state h.
+
+    forward(h) → fine next-step pred (API-compatible with Predictor).
+    level_errors(H, X, ...) → fine/mid/coarse MSE for the train loss.
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        *,
+        mid_horizon: int = 4,
+        coarse_horizon: int = 16,
+        use_mid: bool = True,
+        use_coarse: bool = True,
+    ):
+        super().__init__()
+        self.mid_horizon = max(2, int(mid_horizon))
+        self.coarse_horizon = max(self.mid_horizon + 1, int(coarse_horizon))
+        self.use_mid = bool(use_mid)
+        self.use_coarse = bool(use_coarse)
+
+        self.fine = Predictor(d_model)
+        self.mid = Predictor(d_model) if self.use_mid else None
+        self.coarse = Predictor(d_model) if self.use_coarse else None
+
+    def forward(self, h: Tensor) -> Tensor:
+        return self.fine(h)
+
+    @staticmethod
+    def _future_mean(X: Tensor, horizon: int) -> Tensor:
+        """For each t, mean(X[t+1 : t+1+horizon]); pad with last token."""
+        B, T, D = X.shape
+        if T == 0:
+            return X
+        pad = X[:, -1:, :].expand(B, horizon, D)
+        xp = torch.cat([X, pad], dim=1)
+        fut = xp[:, 1 : T + horizon, :]
+        windows = fut.unfold(1, horizon, 1)[:, :T]  # (B, T, D, horizon)
+        return windows.mean(dim=-1)
+
+    def level_errors(
+        self,
+        H: Tensor,
+        X: Tensor,
+        *,
+        X_hat_fine_shift: Optional[Tensor] = None,
+    ) -> dict[str, Tensor]:
+        B, T, D = X.shape
+        X_det = X.detach()
+        out: dict[str, Tensor] = {}
+
+        if X_hat_fine_shift is not None:
+            E_fine = X_det - X_hat_fine_shift
+        else:
+            pred = self.fine(H.reshape(B * T, -1)).view(B, T, -1)
+            pred_shift = torch.cat([pred[:, :1] * 0, pred[:, :-1]], dim=1)
+            E_fine = X_det - pred_shift
+        out["E_fine"] = E_fine
+        out["err_fine"] = E_fine.pow(2).mean()
+
+        flat = H.reshape(B * T, -1)
+        if self.mid is not None and T > 1:
+            tgt = self._future_mean(X_det, self.mid_horizon)
+            pred_m = self.mid(flat).view(B, T, -1)
+            out["err_mid"] = (tgt - pred_m).pow(2).mean()
+        else:
+            out["err_mid"] = H.new_zeros(())
+
+        if self.coarse is not None and T > 1:
+            tgt = self._future_mean(X_det, self.coarse_horizon)
+            pred_c = self.coarse(flat).view(B, T, -1)
+            out["err_coarse"] = (tgt - pred_c).pow(2).mean()
+        else:
+            out["err_coarse"] = H.new_zeros(())
+
+        return out

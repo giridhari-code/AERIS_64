@@ -26,6 +26,7 @@ from sentinel.modules import (
     SkillRouter,
     FastMemory,
     SlowMemory,
+    HierarchicalPredictor,
     Predictor,
     Metacognition,
 )
@@ -115,7 +116,14 @@ class SENTINEL(nn.Module):
             loop_residual_scale=bool(cfg.field_loop_residual_scale),
             jspace_dim=int(cfg.jspace_dim),
         )
-        self.predictor = Predictor(cfg.d_model)
+        if getattr(cfg, "hierarchical_predict", True):
+            self.predictor = HierarchicalPredictor(
+                cfg.d_model,
+                mid_horizon=int(getattr(cfg, "pred_mid_horizon", 4) or 4),
+                coarse_horizon=int(getattr(cfg, "pred_coarse_horizon", 16) or 16),
+            )
+        else:
+            self.predictor = Predictor(cfg.d_model)
         self.neuromod = Neuromodulator(cfg.d_model)
         self.router = SkillRouter(cfg.d_model, cfg.n_skills, cfg.top_k, jspace_dim=int(cfg.jspace_dim))
         self.fast_mem = FastMemory(cfg.d_model, cfg.d_k, cfg.d_v)
@@ -645,9 +653,26 @@ class SENTINEL(nn.Module):
             else:
                 ent_reg = g_mean.new_zeros(())
             lambda_ent = float(getattr(self.safety, "lambda_ent", 0.005) or 0.005)
+            # Fine error from depth loop; mid/coarse = hierarchical levels
+            err_fine = err_energy / max(1, k_depth)
+            err_mid = logits.new_zeros(())
+            err_coarse = logits.new_zeros(())
+            lam_m = float(getattr(self.cfg, "lambda_err_mid", 0.05) or 0.0)
+            lam_c = float(getattr(self.cfg, "lambda_err_coarse", 0.02) or 0.0)
+            if (
+                self.training
+                and T > 1
+                and hasattr(self.predictor, "level_errors")
+                and (lam_m > 0.0 or lam_c > 0.0)
+            ):
+                le = self.predictor.level_errors(H, X)
+                err_mid = le["err_mid"]
+                err_coarse = le["err_coarse"]
             loss = (
                 ce
-                + lambda_err * (err_energy / max(1, k_depth))
+                + lambda_err * err_fine
+                + lam_m * err_mid
+                + lam_c * err_coarse
                 + lambda_bal * (bal_loss / max(1, T * k_depth))
                 + lambda_gate * gate_reg
                 + lambda_ent * ent_reg
@@ -656,6 +681,8 @@ class SENTINEL(nn.Module):
                 {
                     "ce": float(ce.detach().item()),
                     "err_energy": float((err_energy / max(1, k_depth)).detach().item()),
+                    "err_mid": float(err_mid.detach().item()) if torch.is_tensor(err_mid) else 0.0,
+                    "err_coarse": float(err_coarse.detach().item()) if torch.is_tensor(err_coarse) else 0.0,
                     "gate_reg": float(gate_reg.detach().item()),
                     "ent_reg": float(ent_reg.detach().item()) if torch.is_tensor(ent_reg) else 0.0,
                 }

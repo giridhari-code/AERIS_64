@@ -3,7 +3,7 @@ from .field import NeuralField
 from .neuromodulator import Neuromodulator
 from .router import SkillRouter
 from .memory import FastMemory, SlowMemory
-from .predictor import Predictor
+from .predictor import HierarchicalPredictor, Predictor
 from .metacognition import Metacognition, ControlDecision, JSpaceState
 from .consciousness import ConsciousnessSimulator, ConsciousnessState
 from .inference_cache import InferenceCache
@@ -17,7 +17,7 @@ __all__ = [
     "SkillRouter",
     "FastMemory",
     "SlowMemory",
-    "Predictor",
+    "HierarchicalPredictor", "Predictor",
     "Metacognition",
     "ControlDecision",
     "JSpaceState",

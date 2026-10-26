@@ -44,6 +44,12 @@ class ModelConfig:
     gk_cache_min_score: float = 0.25
     heal_every_tokens: int = 64
     consciousness_gate_boost: float = 0.2
+    # --- Hierarchical predictors (multi-timescale error) ---
+    hierarchical_predict: bool = True
+    pred_mid_horizon: int = 4
+    pred_coarse_horizon: int = 16
+    lambda_err_mid: float = 0.05
+    lambda_err_coarse: float = 0.02
 
 
 @dataclass
