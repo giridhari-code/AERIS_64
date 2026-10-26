@@ -22,6 +22,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Copy)]
 struct Species {
+    #[allow(dead_code)]
     id: &'static str,
     name: &'static str,
     lines: &'static [&'static str],
