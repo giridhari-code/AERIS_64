@@ -250,8 +250,19 @@ class Trainer:
         return float(self.model.embed.weight.detach().float().norm(dim=-1).mean())
 
     def _prep(self, batch):
-        input_ids = batch["input_ids"].to(self.device, non_blocking=True)
-        targets = batch.get("targets", input_ids[:, 1:]).to(self.device, non_blocking=True)
+        input_ids = batch["input_ids"]
+        if not isinstance(input_ids, torch.Tensor):
+            input_ids = torch.as_tensor(input_ids)
+        input_ids = input_ids.to(self.device, non_blocking=True)
+        if "targets" in batch and batch["targets"] is not None:
+            targets = batch["targets"]
+            if not isinstance(targets, torch.Tensor):
+                targets = torch.as_tensor(targets)
+            targets = targets.to(self.device, non_blocking=True)
+        else:
+            targets = input_ids[:, 1:]
+            input_ids = input_ids[:, :-1]
+            return input_ids, targets
         if targets.shape[1] != input_ids.shape[1]:
             input_ids = input_ids[:, :-1]
         return input_ids, targets
@@ -265,22 +276,29 @@ class Trainer:
         tokens_seen = 0
         embed0 = self._embed_norm()  # Appendix B item 14: watch for collapse caused by the error loss
 
+        # cache hierarchical base λ (model config) once
+        base_mid = float(getattr(self.cfg.model, "lambda_err_mid", 0.05) or 0.0)
+        base_coarse = float(getattr(self.cfg.model, "lambda_err_coarse", 0.02) or 0.0)
+        warm_steps = int(getattr(tc, "lambda_err_warmup_steps", 0) or 0)
+        log_every = max(1, int(tc.log_every))
+
         while self.global_step < tc.max_steps:
             self.optimizer.zero_grad(set_to_none=True)
-            loss_acc, last_out, last_ids = 0.0, None, None
+            last_out, last_ids = None, None
+            # accumulate loss on device — one .item() only when logging
+            loss_acc_t = torch.zeros((), device=self.device)
 
-            warm = int(getattr(tc, "lambda_err_warmup_steps", 0) or 0)
-            warm_scale = min(1.0, (self.global_step + 1) / warm) if warm > 0 else 1.0
+            warm_scale = (
+                min(1.0, (self.global_step + 1) / warm_steps) if warm_steps > 0 else 1.0
+            )
             lam_err = tc.lambda_err * warm_scale
-            # Hierarchical mid/coarse share the same warmup (avoids early loss shock)
-            lam_mid = float(getattr(self.cfg.model, "lambda_err_mid", 0.05) or 0.0) * warm_scale
-            lam_coarse = float(getattr(self.cfg.model, "lambda_err_coarse", 0.02) or 0.0) * warm_scale
-            do_log = (self.global_step + 1) % max(1, tc.log_every) == 0
+            lam_mid = base_mid * warm_scale
+            lam_coarse = base_coarse * warm_scale
+            do_log = (self.global_step + 1) % log_every == 0
 
             for micro in range(self.accum):
                 batch, data_iter = self._next_batch(data_iter)
                 input_ids, targets = self._prep(batch)
-                # DDP: only the last micro-batch all-reduces gradients
                 sync_ctx = (
                     self._fwd.no_sync()
                     if (self.dist and micro < self.accum - 1)
@@ -298,13 +316,12 @@ class Trainer:
                             collect_stats=do_log,
                         )
                     (out.loss / self.accum).backward()
-                loss_acc += float(out.loss.detach()) / self.accum
+                loss_acc_t = loss_acc_t + out.loss.detach() / self.accum
                 tokens_seen += input_ids.numel()
                 last_out, last_ids = out, input_ids
 
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), tc.grad_clip)
             if not torch.isfinite(grad_norm):
-                # skip a poisoned step instead of corrupting the weights
                 logger.warning("non-finite grad norm at step %d; skipping update", self.global_step)
                 self.optimizer.zero_grad(set_to_none=True)
             else:
@@ -314,10 +331,16 @@ class Trainer:
 
             self.global_step += 1
             pbar.update(1)
-            m = last_out.metrics
-            pbar.set_postfix(
-                loss=f"{loss_acc:.4f}", ce=f"{m.get('ce', 0):.3f}", gate=f"{m.get('gate_mean', 0):.3f}"
-            )
+            m = last_out.metrics if last_out is not None else {}
+            if do_log:
+                loss_acc = float(loss_acc_t.item())
+                pbar.set_postfix(
+                    loss=f"{loss_acc:.4f}",
+                    ce=f"{m.get('ce', 0):.3f}",
+                    gate=f"{m.get('gate_mean', 0):.3f}",
+                )
+            else:
+                loss_acc = 0.0  # filled below only for log branch
 
             # Slow-memory replay (paper: surprise-weighted, per-sequence).
             # Data-parallel: the decision must be identical on every rank (replay all-reduces), so use the
@@ -340,7 +363,8 @@ class Trainer:
                     # after the first threshold crossing.
                     self.model.meta.acknowledge_replay()
 
-            if self.is_main and self.global_step % tc.log_every == 0:
+            if self.is_main and do_log:
+                loss_acc = float(loss_acc_t.item())
                 dt = max(1e-9, time.time() - t0)
                 en = self._embed_norm()
                 logger.info(
@@ -381,10 +405,18 @@ class Trainer:
         if not self._ema:
             return
         d = self.ema_decay
+        # Cached (name, param, ema_tensor) list — avoids named_parameters() scan every step
+        pairs = getattr(self, "_ema_pairs", None)
+        if pairs is None:
+            pairs = [
+                (n, p, self._ema[n])
+                for n, p in self.model.named_parameters()
+                if n in self._ema and p.requires_grad
+            ]
+            self._ema_pairs = pairs
         with torch.no_grad():
-            for n, p in self.model.named_parameters():
-                if n in self._ema and p.requires_grad:
-                    self._ema[n].mul_(d).add_(p.detach().float(), alpha=1.0 - d)
+            for _n, p, buf in pairs:
+                buf.mul_(d).add_(p.detach().float(), alpha=1.0 - d)
 
     @contextlib.contextmanager
     def _ema_weights(self):
@@ -416,8 +448,11 @@ class Trainer:
                     break
                 input_ids, targets = self._prep(batch)
                 with self._amp():
-                    out = self.model(input_ids, targets=targets)
-                total += float(out.metrics["ce"])  # pure cross-entropy => ppl is meaningful
+                    out = self.model(input_ids, targets=targets, collect_stats=True)
+                ce = out.metrics.get("ce")
+                if ce is None:
+                    ce = float(out.loss.detach()) if out.loss is not None else 0.0
+                total += float(ce)
                 n += 1
         avg = total / max(1, n)
         logger.info("Validation CE: %.4f (ppl %.2f) on %d batches", avg, math.exp(min(avg, 20)), n)
