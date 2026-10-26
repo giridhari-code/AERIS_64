@@ -29,6 +29,69 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+# Aligns with SafetyConfig.max_memory_norm (model layer passes explicit value).
+DEFAULT_MAX_MEMORY_NORM = 50.0
+
+# ---------------------------------------------------------------------------
+# Self-healing utilities (NaN/Inf, dead slots, norm explosion)
+# ---------------------------------------------------------------------------
+
+def _finite(x: Tensor) -> Tensor:
+    """Replace NaN/Inf with 0 (or finite values)."""
+    return torch.where(torch.isfinite(x), x, torch.zeros_like(x))
+
+
+def heal_matrix(M: Tensor, max_norm: float = DEFAULT_MAX_MEMORY_NORM, min_energy: float = 1e-8) -> Tensor:
+    """Sanitize a fast-memory matrix: finite + soft norm clamp (fast-path if clean)."""
+    if M is None:
+        return M
+    if not torch.isfinite(M).all():
+        M = _finite(M)
+    if max_norm > 0:
+        n = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
+        M = M * (max_norm / n).clamp(max=1.0)
+    return M
+
+
+def heal_slots(
+    slots: Tensor,
+    filled: Tensor,
+    max_norm: float = DEFAULT_MAX_MEMORY_NORM,
+) -> tuple[Tensor, Tensor]:
+    """Sanitize slow-memory ring: finite, clamp norms, zero dead/corrupt slots."""
+    if slots is None:
+        return slots, filled
+    need_finite = not torch.isfinite(slots).all()
+    if need_finite:
+        slots = _finite(slots)
+    filled = filled.clamp(min=0.0)
+    if not torch.isfinite(filled).all():
+        filled = _finite(filled).clamp(min=0.0)
+    energy = slots.norm(dim=(-2, -1))  # (B, S)
+    bad = ~torch.isfinite(energy) | (energy < 1e-10)
+    filled = filled.masked_fill(bad, 0.0)
+    if max_norm > 0:
+        n = energy.clamp(min=1e-8).unsqueeze(-1).unsqueeze(-1)
+        slots = slots * (max_norm / n).clamp(max=1.0)
+    slots = slots * (filled > 0).to(dtype=slots.dtype).unsqueeze(-1).unsqueeze(-1)
+    return slots, filled
+
+
+def memory_health_report(M: Tensor | None, slots: Tensor | None, filled: Tensor | None) -> dict:
+    """Diagnostics for logging / self-healing decisions."""
+    report = {}
+    if M is not None:
+        report["fast_norm"] = float(M.detach().float().norm().item())
+        report["fast_finite"] = float(torch.isfinite(M).float().mean().item())
+    if slots is not None and filled is not None:
+        energy = slots.detach().float().norm(dim=(-2, -1))
+        report["slow_slots_filled"] = float((filled > 0).float().sum().item())
+        report["slow_mean_energy"] = float(energy.mean().item())
+        report["slow_finite"] = float(torch.isfinite(slots).float().mean().item())
+        report["slow_dead_slots"] = float(((filled > 0) & (energy < 1e-8)).float().sum().item())
+    return report
+
+
 
 class FastMemory(nn.Module):
     """
@@ -91,12 +154,16 @@ class FastMemory(nn.Module):
         pred = torch.einsum("bkd,bk->bd", M_decay, k)
         delta = v - pred
         update = g_eff.unsqueeze(-1) * torch.einsum("bk,bd->bkd", k, delta)
-        return M_decay + update
+        M_new = M_decay + update
+        # Self-heal: kill NaN/Inf and soft-clamp norm after every write
+        return heal_matrix(M_new, max_norm=DEFAULT_MAX_MEMORY_NORM)
 
     def read(self, M: Tensor, d_t: Tensor) -> Tensor:
+        M = heal_matrix(M, max_norm=DEFAULT_MAX_MEMORY_NORM)
         q = self.W_q(d_t)
         q = q / (q.norm(dim=-1, keepdim=True) + 1e-8)
-        return torch.einsum("bkd,bk->bd", M, q)
+        r = torch.einsum("bkd,bk->bd", M, q)
+        return _finite(r)
 
 
 
@@ -179,6 +246,8 @@ class FastMemory(nn.Module):
             if t < T:
                 M = M.detach()
         R = torch.cat(reads_t, dim=1) if reads_t else M.new_zeros(B, 0, self.d_v)
+        M = heal_matrix(M, max_norm=DEFAULT_MAX_MEMORY_NORM)
+        R = _finite(R)
         return M, R, snaps, seg_cnt, w_norms, m_norms
 
 
@@ -235,39 +304,55 @@ class SlowMemory(nn.Module):
         ptr: int,
         filled: Tensor,      # (B, S)
         M: Tensor,           # (B, d_k, d_v) fast memory snapshot
-        weight: Tensor | None = None,  # (B,) optional strength
+        weight: Tensor | None = None,  # (B,) optional strength / importance
     ) -> tuple[Tensor, int, Tensor]:
-        """Ring write: one segment of context into the next slot."""
+        """Ring write with self-heal + importance-aware compact.
+
+        - Sanitizes incoming snapshot and existing ring (NaN/Inf/norm).
+        - Optional ``weight`` scales write strength (consciousness / surprise).
+        - On overflow, folds the *weaker* of (ptr, next) into the other when
+          energies differ a lot — keeps high-value context longer.
+        """
         B, S, _, _ = slots.shape
         if M.dim() != 3 or M.size(0) != B:
             return slots, ptr, filled
+
+        # Self-heal existing ring + incoming snapshot
+        slots, filled = heal_slots(slots, filled, max_norm=DEFAULT_MAX_MEMORY_NORM)
+        M = heal_matrix(M, max_norm=DEFAULT_MAX_MEMORY_NORM)
+
         if weight is not None:
-            # per-sequence strength; NOT normalised by the batch mean (that made B=1
-            # serving always weight 1.0 while B>1 training did not)
-            w = weight.detach().reshape(B, 1, 1).clamp(min=0.0)
+            w = weight.detach().reshape(B, 1, 1).clamp(min=0.0, max=3.0)
             snap = M.detach() * w
         else:
             snap = M.detach()
+        snap = heal_matrix(snap, max_norm=DEFAULT_MAX_MEMORY_NORM)
+
         new_slots = slots.clone()
         new_filled = filled.clone()
         if self.compact_overflow and S > 1:
-            # Tensor-only path (no bool(...any()) — avoids torch.compile graph breaks)
             full = filled[:, ptr] > 0  # (B,)
             nxt = (ptr + 1) % S
             c_old, c_nxt = filled[:, ptr], filled[:, nxt]
-            tot = (c_old + c_nxt).clamp(min=1e-8)
+            e_old = slots[:, ptr].norm(dim=(-2, -1)).clamp(min=1e-8)  # (B,)
+            e_nxt = slots[:, nxt].norm(dim=(-2, -1)).clamp(min=1e-8)
+            # Importance-ish: higher energy + higher fill count → keep more of that slot
+            score_old = e_old * c_old.clamp(min=1.0)
+            score_nxt = e_nxt * c_nxt.clamp(min=1.0)
+            tot_score = (score_old + score_nxt).clamp(min=1e-8)
             merged = (
-                c_old.view(B, 1, 1) * slots[:, ptr] + c_nxt.view(B, 1, 1) * slots[:, nxt]
-            ) / tot.view(B, 1, 1)
-            # Trade-off soften: keep a small global-prior anchor so fold does not
-            # wash long-term structure entirely (hippocampus→cortex-ish residual).
+                score_old.view(B, 1, 1) * slots[:, ptr]
+                + score_nxt.view(B, 1, 1) * slots[:, nxt]
+            ) / tot_score.view(B, 1, 1)
             prior = self.M_s.detach().unsqueeze(0).expand(B, -1, -1)
-            merged = 0.92 * merged + 0.08 * prior
+            merged = 0.90 * merged + 0.10 * prior
+            merged = heal_matrix(merged, max_norm=DEFAULT_MAX_MEMORY_NORM)
             new_slots[:, nxt] = torch.where(full.view(B, 1, 1), merged, slots[:, nxt])
             new_filled[:, nxt] = torch.where(full, c_old + c_nxt, c_nxt)
         new_slots[:, ptr] = snap
         new_filled[:, ptr] = 1.0
         new_ptr = (ptr + 1) % S
+        new_slots, new_filled = heal_slots(new_slots, new_filled, max_norm=DEFAULT_MAX_MEMORY_NORM)
         return new_slots, new_ptr, new_filled
 
     def _slot_keys(self, slots: Tensor) -> Tensor:
@@ -282,14 +367,15 @@ class SlowMemory(nn.Module):
         slots: Tensor | None = None,
         filled: Tensor | None = None,
     ) -> Tensor:
-        """Query all filled context slots + global prior."""
+        """Query all filled context slots + global prior (with self-heal)."""
         q = self.W_q(d_t)
         q = F.normalize(q, dim=-1, eps=1e-8)
-        u_prior = torch.einsum("kd,bk->bd", self.M_s, q)
+        u_prior = torch.einsum("kd,bk->bd", _finite(self.M_s), q)
 
         if slots is None or filled is None:
-            return u_prior
+            return _finite(u_prior)
 
+        slots, filled = heal_slots(slots, filled, max_norm=DEFAULT_MAX_MEMORY_NORM)
         B = d_t.size(0)
         # Per-slot value read: (B, S, d_v)
         r = torch.einsum("bskd,bk->bsd", slots, q)
@@ -310,7 +396,8 @@ class SlowMemory(nn.Module):
         ctx_w = 0.88 + 0.10 * fill_frac   # 0.88 .. 0.98
         prior_w = 0.12 - 0.08 * fill_frac  # 0.12 .. 0.04
         mixed = ctx_w * u_ctx + prior_w * u_prior
-        return any_fill * mixed + (1.0 - any_fill) * u_prior
+        out = any_fill * mixed + (1.0 - any_fill) * u_prior
+        return _finite(out)
 
     def read_seq(
         self,
@@ -368,3 +455,16 @@ class SlowMemory(nn.Module):
         """Align slow query basis with fast key basis (context retrieval match)."""
         with torch.no_grad():
             self.W_q.weight.copy_(W_k.weight)
+
+    def heal_state(
+        self,
+        slots: Tensor | None,
+        filled: Tensor | None,
+        M: Tensor | None = None,
+    ) -> tuple[Tensor | None, Tensor | None, Tensor | None]:
+        """Public self-heal entry for session state (call on load / periodic)."""
+        if slots is not None and filled is not None:
+            slots, filled = heal_slots(slots, filled, max_norm=DEFAULT_MAX_MEMORY_NORM)
+        if M is not None:
+            M = heal_matrix(M, max_norm=DEFAULT_MAX_MEMORY_NORM)
+        return slots, filled, M

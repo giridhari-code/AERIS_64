@@ -55,7 +55,7 @@ def _mean_t(xs: list[Tensor]) -> float:
 
 class SENTINEL(nn.Module):
     """
-    SENTINEL — two-speed memory language model.
+    SENTINEL — two-speed memory + Astra-style looped recurrent depth language model.
 
     =====================================================================
     PER-TOKEN LOOP (every word / token t = 0 .. T-1)
@@ -63,7 +63,7 @@ class SENTINEL(nn.Module):
 
         x_t  →  Embedding
              →  Dendrite(x_hist, error)     →  d_t   (past-W window only; no x_t)
-             →  Metacognition               →  k, gate_bias
+             →  Metacognition (+ J-space)   →  k, gate_bias, workspace
              →  Neural Field(h, d_t, r, k)  →  h     (k recurrent steps)
              →  Predictor(h)                →  pending pred for x_{t+1}
              →  Router / Skills(h)          →  o_t
@@ -108,19 +108,25 @@ class SENTINEL(nn.Module):
 
         self.embed = nn.Embedding(cfg.vocab_size, cfg.d_model)
         self.dendrite = Dendrite(cfg.d_model, window=cfg.dendrite_window)
-        self.field = NeuralField(cfg.d_model, d_mem=cfg.d_v)
+        self.field = NeuralField(
+            cfg.d_model,
+            d_mem=cfg.d_v,
+            reinject_input=bool(cfg.field_reinject_input),
+            loop_residual_scale=bool(cfg.field_loop_residual_scale),
+            jspace_dim=int(cfg.jspace_dim),
+        )
         self.predictor = Predictor(cfg.d_model)
         self.neuromod = Neuromodulator(cfg.d_model)
-        self.router = SkillRouter(cfg.d_model, cfg.n_skills, cfg.top_k)
+        self.router = SkillRouter(cfg.d_model, cfg.n_skills, cfg.top_k, jspace_dim=int(cfg.jspace_dim))
         self.fast_mem = FastMemory(cfg.d_model, cfg.d_k, cfg.d_v)
         # Context window ring: n_slots ≈ max_seq_len / segment_len
         segment = max(1, int(self.safety.truncate_write_window))
-        n_slots = int(getattr(cfg, "context_slots", 0) or 0)
+        n_slots = int(cfg.context_slots or 0)
         if n_slots <= 0:
             n_slots = max(4, (cfg.max_seq_len + segment - 1) // segment)
         self.slow_mem = SlowMemory(
             cfg.d_model, cfg.d_k, cfg.d_v, n_slots=n_slots,
-            compact_overflow=bool(getattr(cfg, "slow_compact", True)),
+            compact_overflow=bool(cfg.slow_compact),
         )
         self._segment_len = segment
         # Token-parallel ops: embed/windows always; router+field+slow-read batched over T
@@ -145,7 +151,22 @@ class SENTINEL(nn.Module):
             self.mem_scale.fill_(2.0)
             self.slow_scale.fill_(1.5)
 
-        self.meta = Metacognition(k_max=cfg.k_max)
+        self.meta = Metacognition(
+            k_max=cfg.k_max,
+            jspace_slots=int(cfg.jspace_slots),
+            jspace_dim=int(cfg.jspace_dim),
+            jspace_decay=float(cfg.jspace_decay),
+            jspace_write_threshold=float(cfg.jspace_write_threshold),
+            jspace_sparsity=float(cfg.jspace_sparsity),
+        )
+        # Consciousness thresholds from config (if simulator present)
+        if hasattr(self.meta, "consciousness") and self.meta.consciousness is not None:
+            c = self.meta.consciousness
+            c.ignition_threshold = float(cfg.consciousness_ignition_threshold)
+            c.access_threshold = float(cfg.consciousness_access_threshold)
+            c.deliberate_threshold = float(cfg.consciousness_deliberate_threshold)
+        self._last_jspace_broadcast = None
+        self._last_consciousness = None
         self.drop = nn.Dropout(cfg.dropout)
         # BPTT truncate for fast-M scan (can be long). Slow ring writes MORE often
         # so the context path actually fills during typical train seq lengths.
@@ -166,9 +187,13 @@ class SENTINEL(nn.Module):
     # Per-user slow memory (the part of the state that may outlive a session)
     # ------------------------------------------------------------------
     def export_slow_state(self, state: Optional[dict]) -> Optional[dict[str, Tensor]]:
-        """Slow ring of batch element 0 as plain CPU tensors (fast M / h / history are NOT included)."""
+        """Slow ring of batch element 0 as plain CPU tensors (fast M / h / history are NOT included).
+
+        Self-heals before export so corrupt long-session state is not persisted.
+        """
         if not state or state.get("slow_slots") is None:
             return None
+        state = self.heal_session_state(state) or state
         return {
             "slow_slots": state["slow_slots"][0].detach().float().cpu().contiguous(),
             "slow_filled": state["slow_filled"][0].detach().float().cpu().contiguous(),
@@ -188,8 +213,12 @@ class SENTINEL(nn.Module):
             S, dk, dv = self.slow_mem.n_slots, self.cfg.d_k, self.cfg.d_v
             if tuple(slots.shape) != (S, dk, dv) or tuple(filled.shape) != (S,):
                 return st
-            st["slow_slots"] = slots.to(device).unsqueeze(0).repeat(batch, 1, 1, 1)
-            st["slow_filled"] = filled.to(device).unsqueeze(0).repeat(batch, 1)
+            slots_b = slots.to(device).unsqueeze(0).repeat(batch, 1, 1, 1)
+            filled_b = filled.to(device).unsqueeze(0).repeat(batch, 1)
+            # Self-heal on load (corrupt checkpoints / long sessions)
+            slots_b, filled_b, _ = self.slow_mem.heal_state(slots_b, filled_b, None)
+            st["slow_slots"] = slots_b
+            st["slow_filled"] = filled_b
             st["slow_ptr"] = int(slow["slow_ptr"].reshape(-1)[0].item()) % S
         except (KeyError, RuntimeError, ValueError):
             return self._init_state(batch, device)
@@ -269,6 +298,15 @@ class SENTINEL(nn.Module):
         self.meta.training = bool(self.training)
         gate_bias_meta = None  # (B,) or None
         want_replay = bool(state.get("want_replay") or False)
+
+        # Long-session resilience: periodic / opportunistic self-heal
+        # - always heal if prior health flagged bad
+        # - or every ~64 tokens of segment progress
+        _seg = int(state.get("seg_pos") or 0)
+        _heal_every = int(self.cfg.heal_every_tokens)
+        _need_heal = bool(state.get("_force_heal")) or (_heal_every > 0 and _seg > 0 and _seg % _heal_every == 0)
+        if _need_heal or state.get("_memory_health", {}).get("fast_finite", 1.0) < 0.99:
+            state = self.heal_session_state(state) or state
         bar_S_state = state.get("bar_S")
         # Always run meta for encoding bias δ when enabled; adaptive *k* only on
         # decode steps (T==1). Multi-token train/prefill keeps k_max so one
@@ -287,13 +325,31 @@ class SENTINEL(nn.Module):
             ent_prev = state.get("last_router_ent")
             mem_n = state.get("M")
             mem_norm = mem_n.detach().norm(dim=(-2, -1)) if isinstance(mem_n, Tensor) else None
+            # Previous field state (if any) enriches J-space + consciousness
+            h_prev = state.get("H")
+            if h_prev is not None and torch.is_tensor(h_prev):
+                h_for_meta = h_prev.reshape(-1, h_prev.size(-1))[:B] if h_prev.ndim >= 2 else h_prev
+            else:
+                h_for_meta = None
             decision = self.meta.step(
                 last_S,
                 bar_S=bar_S_state if torch.is_tensor(bar_S_state) else None,
                 router_entropy=ent_prev if torch.is_tensor(ent_prev) else None,
                 mem_norm=mem_norm,
                 n_tokens=T,
+                h=h_for_meta,
             )
+            # Keep workspace for field / router injection this step
+            self._last_jspace_broadcast = getattr(decision, "jspace_broadcast", None)
+            self._last_consciousness = getattr(decision, "consciousness", None)
+            # Consciousness ignition → slightly stronger memory encoding
+            if self._last_consciousness is not None and self._last_consciousness.ignition:
+                gate_boost = float(self.cfg.consciousness_gate_boost)
+                decision.gate_bias = (decision.gate_bias + gate_boost).clamp(-1.0, 1.0)
+            # Deliberate mode can request extra depth
+            if self._last_consciousness is not None and self._last_consciousness.mode == "deliberate":
+                k_from_c = max(int(decision.k), min(int(self.cfg.k_max), int(decision.k) + 1))
+                decision.k = k_from_c
             gate_bias_meta = decision.gate_bias  # (B,)
             bar_S_state = decision.bar_S
             want_replay = bool(decision.want_replay)
@@ -358,6 +414,21 @@ class SENTINEL(nn.Module):
             write_slow and ab.use_slow_memory and ab.use_fast_memory and not frozen
         )
 
+        # Workspace projection once per forward (reused across all field loops)
+        _js = getattr(self, "_last_jspace_broadcast", None)
+        if _js is not None and torch.is_tensor(_js) and getattr(self.field, "W_js", None) is not None:
+            if _js.ndim == 1:
+                _js_bt = _js.unsqueeze(0).expand(B * T, -1)
+            elif _js.ndim == 2 and _js.size(0) == B:
+                _js_bt = _js.unsqueeze(1).expand(B, T, -1).reshape(B * T, -1)
+            else:
+                _js_bt = _js.reshape(-1, _js.size(-1))[: B * T]
+                if _js_bt.size(0) < B * T:
+                    _js_bt = _js_bt[0:1].expand(B * T, -1)
+            _js_proj = self.field.project_js(_js_bt, B * T)
+        else:
+            _js_proj = None
+
         for _j in range(k_depth):
             Hin_new.append(H[:, -1].detach())
             X_hat = self.predictor(H.reshape(B * T, -1)).view(B, T, -1)
@@ -406,7 +477,8 @@ class SENTINEL(nn.Module):
             D = D_win + self.dendrite.gamma * E
 
             # Token-parallel router (positions independent given H)
-            o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1))
+            js_r = getattr(self, "_last_jspace_broadcast", None)
+        o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r)
             O = o_flat.view(B, T, -1)
             pi = pi_flat.view(B, T, -1)
             ent_list = list((-(pi * pi.clamp_min(1e-12).log()).sum(-1).mean(0)).detach())
@@ -450,11 +522,16 @@ class SENTINEL(nn.Module):
                 H.reshape(B * T, -1),
                 D.reshape(B * T, -1),
                 R_shift.reshape(B * T, -1),
+                js=None,
+                loop_idx=_j,
+                total_k=k_depth,
+                js_proj=_js_proj,
             ).view(B, T, -1)
 
         # Final router on refined H — this O feeds logits; keep its π for
         # entropy regularisation / metacognition (was using last depth-pass π).
-        o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1))
+        js_r = getattr(self, "_last_jspace_broadcast", None)
+        o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r)
         O = o_flat.view(B, T, -1)
         pi = pi_flat.view(B, T, -1)
 
@@ -533,6 +610,7 @@ class SENTINEL(nn.Module):
             "mem_norm": _mem_mean,
             "mean_S": float(S.detach().mean().item()) if T > 0 else 0.0,
             "want_replay": 1.0 if want_replay else 0.0,
+            "memory_healed": 1.0 if state.get("_memory_health") else 0.0,
             "meta_active": 1.0 if (ab.use_metacognition and gate_bias_meta is not None) else 0.0,
             "slow_filled": float(
                 slow_filled.detach().float().sum().item()
@@ -634,6 +712,90 @@ class SENTINEL(nn.Module):
             logits=logits, loss=loss, metrics=metrics, audit=audit, state=new_state
         )
 
+
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids: Tensor,
+        max_new_tokens: int = 32,
+        temperature: float = 1.0,
+        top_k: int = 0,
+        eos_id: Optional[int] = None,
+        state: Optional[dict] = None,
+        heal_every: Optional[int] = None,
+    ) -> Tensor:
+        """Autoregressive generate with SENTINEL InferenceCache (KV-cache analogue).
+
+        Prefill runs once on the prompt; each new token is T=1 decode with
+        carried fixed-size memory — no growing attention KV.
+        """
+        from sentinel.modules.inference_cache import InferenceCache
+        self.eval()
+        if heal_every is None:
+            heal_every = int(self.cfg.heal_every_tokens)
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(0)
+        B = input_ids.size(0)
+        device = input_ids.device
+        cache = InferenceCache.from_model(self, batch=B, device=device)
+        if state is not None:
+            cache.state = state
+        return cache.generate(
+            self,
+            input_ids,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            eos_id=eos_id,
+            heal_every=heal_every,
+        )
+
+    def heal_session_state(self, state: Optional[dict]) -> Optional[dict]:
+        """Long-session + corrupt-checkpoint resilience.
+
+        Sanitizes fast M and slow ring in-place (returns new dict).
+        Safe to call every turn or periodically during long inference.
+        """
+        if not state:
+            return state
+        try:
+            from sentinel.modules.memory import heal_matrix, heal_slots, memory_health_report
+        except ImportError:
+            from .modules.memory import heal_matrix, heal_slots, memory_health_report
+
+        M = state.get("M")
+        slots = state.get("slow_slots")
+        filled = state.get("slow_filled")
+        h = state.get("h")
+        r = state.get("r")
+        error = state.get("error")
+
+        if M is not None and torch.is_tensor(M):
+            M = heal_matrix(M, max_norm=float(self.safety.max_memory_norm))
+        if slots is not None and filled is not None:
+            slots, filled = heal_slots(slots, filled, max_norm=float(self.safety.max_memory_norm))
+        if h is not None and torch.is_tensor(h):
+            h = torch.where(torch.isfinite(h), h, torch.zeros_like(h))
+            hn = h.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+            h = h * (50.0 / hn).clamp(max=1.0)
+        if r is not None and torch.is_tensor(r):
+            r = torch.where(torch.isfinite(r), r, torch.zeros_like(r))
+        if error is not None and torch.is_tensor(error):
+            error = torch.where(torch.isfinite(error), error, torch.zeros_like(error))
+
+        out = {
+            **state,
+            "M": M if M is not None else state.get("M"),
+            "slow_slots": slots if slots is not None else state.get("slow_slots"),
+            "slow_filled": filled if filled is not None else state.get("slow_filled"),
+            "h": h if h is not None else state.get("h"),
+            "r": r if r is not None else state.get("r"),
+            "error": error if error is not None else state.get("error"),
+        }
+        out["_memory_health"] = memory_health_report(M, slots, filled)
+        return out
+
     def consolidate_turn(self, state: Optional[dict], weight: float = 1.0) -> Optional[dict]:
         """End-of-turn consolidation (paper v3, Section 11): snapshot the final fast memory M into the slow ring.
 
@@ -651,7 +813,8 @@ class SENTINEL(nn.Module):
         slots, ptr, filled = self.slow_mem.write_slot(
             state["slow_slots"], int(state.get("slow_ptr") or 0), state["slow_filled"], M, weight=w
         )
-        return {**state, "slow_slots": slots, "slow_ptr": ptr, "slow_filled": filled}
+        out = {**state, "slow_slots": slots, "slow_ptr": ptr, "slow_filled": filled}
+        return self.heal_session_state(out) or out
 
     def replay_slow(self, M: Tensor, surprises: Tensor, eta: float) -> None:
         self.slow_mem.replay(M, surprises, eta)

@@ -17,14 +17,33 @@ class ModelConfig:
     d_v: int = 64
     n_skills: int = 8
     top_k: int = 2
-    k_max: int = 5  # accuracy bias (was 4; speed cost)
+    k_max: int = 5
     dendrite_window: int = 3
     vocab_size: int = 32000
-    max_seq_len: int = 3072  # Long-context ceiling (was 2048); more yaad, more compute
-    context_slots: int = 0  # 0 => auto max_seq_len // truncate_window; slow mem ring size
-    slow_compact: bool = True  # ring full => fold the OLDEST slot into its neighbour instead of erasing it
+    max_seq_len: int = 3072
+    context_slots: int = 0  # 0 => auto max_seq_len // truncate_window
+    slow_compact: bool = True
     tie_embeddings: bool = True
     dropout: float = 0.0
+    # --- Global Workspace (J-space) ---
+    jspace_dim: int = 64
+    jspace_slots: int = 16
+    jspace_decay: float = 0.85
+    jspace_write_threshold: float = 0.35
+    jspace_sparsity: float = 0.25
+    # --- Looped NeuralField ---
+    field_reinject_input: bool = True
+    field_loop_residual_scale: bool = True
+    # --- Consciousness access layer ---
+    consciousness_ignition_threshold: float = 0.55
+    consciousness_access_threshold: float = 0.35
+    consciousness_deliberate_threshold: float = 0.70
+    # --- Inference / knowledge ---
+    gk_cache_capacity: int = 128
+    gk_cache_dim: int = 256
+    gk_cache_min_score: float = 0.25
+    heal_every_tokens: int = 64
+    consciousness_gate_boost: float = 0.2
 
 
 @dataclass
@@ -66,7 +85,7 @@ class DataConfig:
 class SafetyConfig:
     enable_audit: bool = True
     max_write_norm: float = 10.0
-    max_memory_norm: float = 50.0
+    max_memory_norm: float = 50.0  # fast/slow heal clamp (single source of truth)
     gate_cap: float = 1.0
     gate_floor: float = 0.05      # train-time minimum write gate (anti-collapse)
     gate_target: float = 0.35     # soft target for gate_mean regularizer

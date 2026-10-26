@@ -1,6 +1,8 @@
-"""Top-k skill router with straight-through estimator."""
+"""Top-k skill router with straight-through estimator + optional workspace bias."""
 
 from __future__ import annotations
+
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -25,36 +27,59 @@ class SkillOperator(nn.Module):
 
 class SkillRouter(nn.Module):
     """
-    π = softmax(W_r h)
+    π = softmax(W_r h + workspace_bias)
     w = softmax(top-k logits)
-    w_STE = w + π - sg(π)          # forward = w, backward = ∇π
+    w_STE = w + π - sg(π)
     o = Σ w_STE_i * Op_i(h)
+
+    Optional ``workspace`` (J-space broadcast) biases skill selection toward
+    whatever is currently "on mind" — more intelligent routing under access
+    consciousness.
     """
 
-    def __init__(self, d_model: int, n_skills: int, top_k: int):
+    def __init__(self, d_model: int, n_skills: int, top_k: int, jspace_dim: int = 0):
         super().__init__()
         self.n_skills = n_skills
         self.top_k = min(top_k, n_skills)
         self.router = nn.Linear(d_model, n_skills, bias=False)
         self.skills = nn.ModuleList([SkillOperator(d_model) for _ in range(n_skills)])
 
-    def forward(self, h: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        self.jspace_dim = int(jspace_dim)
+        if self.jspace_dim > 0:
+            self.ws_bias = nn.Linear(self.jspace_dim, n_skills, bias=False)
+            nn.init.zeros_(self.ws_bias.weight)  # start neutral
+        else:
+            self.ws_bias = None
+
+    def forward(
+        self,
+        h: Tensor,
+        workspace: Optional[Tensor] = None,
+    ) -> tuple[Tensor, Tensor, Tensor]:
         logits = self.router(h)  # (B, n_skills)
+
+        if workspace is not None and self.ws_bias is not None:
+            ws = workspace
+            if ws.ndim == 1:
+                ws = ws.unsqueeze(0).expand(h.size(0), -1)
+            if ws.size(-1) != self.jspace_dim:
+                if ws.size(-1) > self.jspace_dim:
+                    ws = ws[..., : self.jspace_dim]
+                else:
+                    pad = ws.new_zeros(*ws.shape[:-1], self.jspace_dim)
+                    pad[..., : ws.size(-1)] = ws
+                    ws = pad
+            logits = logits + 0.5 * self.ws_bias(ws)
+
         pi = F.softmax(logits, dim=-1)
 
         topk_vals, topk_idx = torch.topk(logits, self.top_k, dim=-1)
-        # zeros_like under autocast can be fp32 while softmax(topk) is bf16 —
-        # scatter requires matching dtypes.
         w = torch.zeros_like(logits)
         src = F.softmax(topk_vals, dim=-1).to(dtype=w.dtype)
         w.scatter_(-1, topk_idx, src)
 
-        # STE: forward = sparse top-k weights, backward flows through dense π
-        # for the router. Skill-op grads only reach selected experts (w≈0 else).
         w_ste = w + pi - pi.detach()
 
-        # For small n_skills the Python loop overhead dominates; only skip
-        # non-selected experts when there are many skills.
         if self.n_skills > 16 and self.top_k < self.n_skills:
             outs = h.new_zeros(h.size(0), self.n_skills, h.size(-1))
             for s in topk_idx.reshape(-1).unique().tolist():

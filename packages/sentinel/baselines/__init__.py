@@ -1,3 +1,6 @@
-from .transformer_lm import TinyTransformerLM
+"""Optional baseline models for comparison.
 
-__all__ = ["TinyTransformerLM"]
+Transformer baseline removed — SENTINEL is recurrent (InferenceCache), not Transformer.
+"""
+
+__all__: list[str] = []
