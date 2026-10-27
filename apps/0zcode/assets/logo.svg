@@ -1,18 +1,54 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="0zcode">
-  <!-- Company-standard mark: Claude-inspired orange robot, distinct 0z identity -->
-  <rect width="512" height="512" rx="96" fill="#0c0c0e"/>
-  <!-- head -->
-  <rect x="128" y="110" width="256" height="210" rx="48" fill="#e86a17"/>
-  <!-- eyes -->
-  <circle cx="200" cy="195" r="26" fill="#0c0c0e"/>
-  <circle cx="312" cy="195" r="26" fill="#0c0c0e"/>
-  <circle cx="200" cy="195" r="10" fill="#f5e6d3"/>
-  <circle cx="312" cy="195" r="10" fill="#f5e6d3"/>
-  <!-- mouth -->
-  <path d="M220 255 Q256 285 292 255" stroke="#0c0c0e" stroke-width="14" fill="none" stroke-linecap="round"/>
-  <!-- neck -->
-  <rect x="236" y="320" width="40" height="44" rx="8" fill="#e86a17"/>
-  <!-- wordmark -->
-  <text x="256" y="430" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="58" font-weight="700" fill="#eceae6">0z</text>
+  <!-- 0zcode mark — geometric zero + robot core (brand refresh) -->
+  <rect width="512" height="512" fill="#0a0a0a"/>
+
+  <!-- Outer zero ring (open bottom-right, matching brand glyph) -->
+  <path
+    fill="none"
+    stroke="#ff6b3d"
+    stroke-width="52"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    d="M 256 78
+       C 370 78 430 150 430 256
+       C 430 330 400 385 340 410
+       M 172 410
+       C 112 385 82 330 82 256
+       C 82 150 142 78 256 78"
+  />
+  <!-- Diagonal cut / slash through the zero -->
+  <path
+    fill="none"
+    stroke="#ff6b3d"
+    stroke-width="52"
+    stroke-linecap="round"
+    d="M 340 410 L 430 470"
+  />
+
+  <!-- Robot core -->
+  <g transform="translate(256 250)">
+    <!-- Head / body capsule -->
+    <path
+      fill="#9a9a9a"
+      d="M -48 -42
+         C -48 -70 -28 -88 0 -88
+         C 28 -88 48 -70 48 -42
+         L 48 38
+         C 48 62 28 78 0 78
+         C -28 78 -48 62 -48 38 Z"
+    />
+    <!-- Side antennae -->
+    <path fill="none" stroke="#9a9a9a" stroke-width="10" stroke-linecap="round"
+          d="M -48 -28 L -72 -52 M 48 -28 L 72 -52"/>
+    <circle cx="-72" cy="-52" r="7" fill="#9a9a9a"/>
+    <circle cx="72" cy="-52" r="7" fill="#9a9a9a"/>
+    <!-- Eyes -->
+    <circle cx="-18" cy="-18" r="9" fill="#0a0a0a"/>
+    <circle cx="18" cy="-18" r="9" fill="#0a0a0a"/>
+    <!-- Core lens -->
+    <circle cx="0" cy="22" r="22" fill="#0a0a0a"/>
+    <circle cx="0" cy="22" r="12" fill="#e63b2e"/>
+    <circle cx="0" cy="22" r="5" fill="#ff6b3d"/>
+  </g>
 </svg>
