@@ -1115,6 +1115,7 @@ def create_app(
         })
 
     def _megha_gate(raw: str, sid: str = "") -> Optional[tuple[str, str, dict]]:
+        return None  # model-only: policy gate disabled
         """Metacognition + Megha policy gate for chat text.
 
         Returns ``(reply_text, model, meta_rag)`` when the message is refused or
