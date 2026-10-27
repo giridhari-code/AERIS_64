@@ -1073,44 +1073,10 @@ def create_app(
                 restore_turns(sid, _memory.recent_turns(owner, uid, sid, n=12))
             slow_seed = _memory.load_slow(owner, uid)
 
-        # --- Auto RAG (metacognition-controlled, mode=auto by default) ---
-        # Retrieves for informational prompts; skips pure chit-chat.
-        # Live surprise from prior tokens feeds confidence when available.
+        # Pure model path — no tools / RAG / agent inject
         meta_rag_info: Optional[dict] = None
-        rag_prompt = prompt
-        _auto_rag_env = _env("AUTO_RAG", "0") in ("1", "true", "yes")
-        if req.force_rag is True or (req.force_rag is not False and (req.use_meta_rag or _auto_rag_env)):
-            try:
-                from sentinel.rag.meta_rag import auto_rag
-
-                conf = arou = confict = None
-                with _lock:
-                    sess = _sessions.get(sid) or {}
-                    state = sess.get("state") or {}
-                    last_S = state.get("last_S")
-                    if last_S is not None:
-                        try:
-                            s_val = float(last_S.mean().item()) if hasattr(last_S, "mean") else float(last_S)
-                            conf = max(0.05, min(0.95, 1.0 / (1.0 + s_val)))
-                            arou = max(0.0, s_val)
-                        except Exception:
-                            pass
-                rag_prompt, meta_rag_info = auto_rag(
-                    prompt,
-                    confidence=conf,
-                    arousal=arou,
-                    conflict=confict,
-                    force=req.force_rag,
-                    session_key=sid or "default",
-                )
-            except Exception as e:
-                logger.warning("auto_rag failed, continuing without retrieval: %s", e)
-                rag_prompt = prompt
-
-        # Real-world facts (weather / web) injected when tools enabled
-        enriched, _tool_note = enrich_prompt_with_tools(rag_prompt)
-        input_ids = _encode(build_prompt(sid, enriched)) or _encode(enriched) or [0]
-        n_user = len(_encode(build_user_part(enriched)) or [])
+        input_ids = _encode(build_prompt(sid, prompt)) or _encode(prompt) or [0]
+        n_user = len(_encode(build_user_part(prompt)) or [])
         replay_len = max(0, len(input_ids) - n_user) if slow_seed is not None else 0
         max_new, temperature = adaptive_sampling(
             prompt,
@@ -1203,116 +1169,7 @@ def create_app(
         _bump("requests")
         sid = _valid_session_id(req.session_id)
         try:
-            # Buddy companion commands (decorative only — no tools/model)
-            _raw0 = normalize_prompt(req.prompt)
-            try:
-                from sentinel.buddy import is_buddy_command, handle_buddy_command, resolve_buddy_reply
-                if is_buddy_command(_raw0):
-                    uid_hint = str(getattr(req, "user_id", "") or "").strip()
-                    owner = str(_owner(api_key) or uid_hint or (api_key or sid))
-                    egg = _egg_snapshot(owner)
-                    text = handle_buddy_command(
-                        _raw0,
-                        owner,
-                        egg=egg,
-                        last_text=last_user_message(sid),
-                        hatch_id=_buddy_key(owner),
-                    )
-                    if text:
-                        # Control tokens for UI; short human message for the transcript
-                        msg, meta = resolve_buddy_reply(text)
-                        append_turn(sid, "user", _raw0)
-                        append_turn(sid, "assistant", msg)
-                        return ChatResponse(
-                            text=msg,
-                            session_id=sid,
-                            latency_ms=0.0,
-                            model="buddy",
-                            meta_rag=meta,
-                        )
-            except Exception as e:
-                logger.warning("buddy command: %s", e)
-
-            # Bhutu (Metacognition manager) + Megha policy — full tool/agent control gate
-            try:
-                from sentinel.modules.bhutu import bhutu_decide
-                _b0 = bhutu_decide(_raw0)
-                if not _b0.allow:
-                    msg = _b0.user_message or "Request blocked by Bhutu."
-                    append_turn(sid, "user", _raw0)
-                    append_turn(sid, "assistant", msg)
-                    return ChatResponse(
-                        text=msg,
-                        session_id=sid,
-                        latency_ms=0.0,
-                        model="bhutu-policy",
-                        meta_rag={"bhutu": _b0.to_dict()},
-                    )
-                # stash for SI_v1 path (same process)
-                request.state.bhutu = _b0
-            except Exception as e:
-                logger.warning("bhutu precheck: %s", e)
-
-            # --- Tool-first path (Grok-style live facts) ---
-            # Time / calc / weather / search / wiki answer from tools, not weak LM decode.
-            # Disable: NEUROFIELD_CHAT_TOOLS_DIRECT=0
-            direct = (_env("CHAT_TOOLS_DIRECT", "1") or "1").strip().lower() not in {
-                "0", "false", "no", "off",
-            }
-            if direct:
-                t0 = time.perf_counter()
-                raw = normalize_prompt(req.prompt)
-                # Metacognition + Megha policy monitor: refuse illegal/unauthorized cyber activity
-                gate = _megha_gate(raw, sid)
-                if gate is not None:
-                    gtext, gmodel, gmeta = gate
-                    lat = (time.perf_counter() - t0) * 1000.0
-                    append_turn(sid, "user", raw)
-                    append_turn(sid, "assistant", gtext)
-                    return ChatResponse(
-                        text=gtext,
-                        session_id=sid,
-                        latency_ms=lat,
-                        model=gmodel,
-                        meta_rag=gmeta,
-                    )
-                # Tools / SI_v1 only when explicitly enabled (NEUROFIELD_WEB_TOOLS=1)
-                text = None
-                from sentinel.tools.orchestrate import tools_enabled as _tools_on
-                if _tools_on():
-                    try:
-                        from sentinel.agent.si_v1 import run_si_v1, SI_v1Config, build_plan
-                        plan = build_plan(raw)
-                        uses_tool = any(
-                            s.get("action") not in ("compose_answer", "verify_nonempty", "")
-                            for s in plan
-                        )
-                        if uses_tool:
-                            result = run_si_v1(raw, config=SI_v1Config(max_steps=6))
-                            if result.answer and result.stopped_reason not in (
-                                "empty_input",
-                                "no_tools",
-                            ):
-                                text = result.answer.strip()
-                    except Exception as e:
-                        logger.warning("SI_v1 chat path failed, falling back to enrich: %s", e)
-                    if not text:
-                        _enriched, tool_note = enrich_prompt_with_tools(raw)
-                        if tool_note and str(tool_note).strip():
-                            text = str(tool_note).strip()
-                    if text:
-                        lat = (time.perf_counter() - t0) * 1000.0
-                        append_turn(sid, "user", raw)
-                        append_turn(sid, "assistant", text)
-                        _persist(sid, _owner(api_key), req, raw, text)
-                        return ChatResponse(
-                            text=text,
-                            session_id=sid,
-                            latency_ms=lat,
-                            model="tools+si_v1",
-                            meta_rag=None,
-                        )
-
+            # MODEL ONLY — no buddy / bhutu / megha / tools / SI_v1 short-circuit
             _need_model()
             prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = _prepare_chat(
                 req, sid, _owner(api_key)
@@ -1325,20 +1182,6 @@ def create_app(
                 slow_seed=slow_seed, replay_len=replay_len,
             )
             text = _postprocess(prompt, _decode(new_ids), req.postprocess)
-            # Optional: model emitted JSON tool call → execute (Grok-style)
-            _mtc = (_env("MODEL_TOOL_CALLS", "1") or "1").strip().lower() not in {
-                "0", "false", "no", "off",
-            }
-            if _mtc and text:
-                try:
-                    from sentinel.serving.tool_calls import extract_tool_call, run_tool_call
-                    call = extract_tool_call(text)
-                    if call:
-                        tool_out = run_tool_call(call)
-                        text = tool_out.strip() or text
-                        logger.info("model tool call executed: %s", call.get("tool"))
-                except Exception as e:
-                    logger.warning("model tool call failed: %s", e)
             append_turn(sid, "user", prompt)
             append_turn(sid, "assistant", text)
             _persist(sid, _owner(api_key), req, prompt, text)
