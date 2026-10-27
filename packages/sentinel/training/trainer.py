@@ -502,20 +502,42 @@ class Trainer:
 
     @torch.no_grad()
     def evaluate(self, max_batches: int = 50) -> float:
+        """Held-out CE in float32 (amp/EMA do not distort the metric)."""
         self.model.eval()
         total, n = 0.0, 0
-        with self._ema_weights():
+        # EMA often lags / hurts mid-train CE; only use when explicitly enabled
+        use_ema = bool(getattr(self.cfg.training, "eval_ema", False))
+        ctx = self._ema_weights() if use_ema else contextlib.nullcontext()
+        vocab = int(getattr(getattr(self.model, "cfg", None), "vocab_size", 0) or 0)
+        with ctx:
             for i, batch in enumerate(self.val_loader):
                 if i >= max_batches:
                     break
                 input_ids, targets = self._prep(batch)
+                # Forward in bf16/fp32 as trained, but CE always from float32 logits
                 with self._amp():
-                    out = self.model(input_ids, targets=targets, collect_stats=True)
-                ce = out.metrics.get("ce")
-                if ce is None:
-                    ce = float(out.loss.detach()) if out.loss is not None else 0.0
-                total += float(ce)
+                    out = self.model(
+                        input_ids,
+                        targets=targets,
+                        collect_stats=False,
+                        write_slow=False,
+                    )
+                logits = out.logits.float()
+                ce_t = torch.nn.functional.cross_entropy(
+                    logits.reshape(-1, logits.size(-1)),
+                    targets.reshape(-1),
+                    ignore_index=-100,
+                )
+                total += float(ce_t.item())
                 n += 1
         avg = total / max(1, n)
-        logger.info("Validation CE: %.4f (ppl %.2f) on %d batches", avg, math.exp(min(avg, 20)), n)
+        ppl = math.exp(min(avg, 20.0))
+        logger.info("Validation CE: %.4f (ppl %.2f) on %d batches", avg, ppl, n)
+        if vocab > 0 and avg > math.log(vocab) + 1.0:
+            logger.warning(
+                "Val CE %.2f is worse than random (log vocab≈%.2f). "
+                "Check val.bin / tokenizer match, or train longer with more data.",
+                avg,
+                math.log(vocab),
+            )
         return avg
