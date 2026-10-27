@@ -83,15 +83,6 @@ from sentinel.serving.chat_history import (
 )
 
 from sentinel.serving.user_memory import UserMemoryStore, cap_slow_norm
-from sentinel.tools.orchestrate import enrich_prompt_with_tools
-from sentinel.tools.catalog import list_mcp_tools, tool_schemas
-from sentinel.tools.dispatch import run_tool, known_tool_names
-from sentinel.tools.weather import weather_report
-from sentinel.tools.web_search import web_search_report
-from sentinel.tools.timeutil import now_report
-from sentinel.tools.calculator import calculate
-from sentinel.tools.wikipedia import wikipedia_summary
-from sentinel.tools.currency import convert_currency
 from sentinel.serving.reply_polish import polish_reply
 from sentinel.utils.logging import setup_production_logging
 from sentinel.serving.production import load_profile, security_headers, is_production
@@ -905,6 +896,36 @@ def create_app(
             return
         await require_api_key(request.headers.get("x-api-key"))
 
+    # ------------------------------------------------------------------
+    # MODEL-ONLY API: block tools / agent / RAG / MCP / buddy / megha / SI
+    # ------------------------------------------------------------------
+    _BLOCKED = (
+        "/v1/tools",
+        "/v1/agent",
+        "/v1/rag",
+        "/v1/si",
+        "/v1/buddy",
+        "/v1/megha",
+        "/v1/kalofacts",
+        "/v1/ajeebwork",
+        "/ag-ui",
+        "/v1/ag-ui",
+    )
+
+    @app.middleware("http")
+    async def _model_only_surface(request: Request, call_next):
+        path = request.url.path.rstrip("/") or "/"
+        if any(path == b or path.startswith(b + "/") for b in _BLOCKED):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=410,
+                content={
+                    "detail": "removed — this server is model-only (chat/completions)",
+                    "path": path,
+                },
+            )
+        return await call_next(request)
+
     @app.get("/")
     async def root():
         if serve_ui:
@@ -969,8 +990,8 @@ def create_app(
             "has_tokenizer": _encode is not None,
             "params": _model.param_report()["total"],
             "production": prof.production,
-            "bhutu": True,
-            "megha_policy": True,
+            "bhutu": False,
+            "megha_policy": False,
         }
 
     @app.get("/metrics", dependencies=[Depends(_metrics_guard)])
@@ -1219,22 +1240,7 @@ def create_app(
             if meta_rag_info is not None:
                 start_payload["meta_rag"] = meta_rag_info
             yield f"data: {json.dumps(start_payload)}\n\n"
-            # Same control gate as /v1/chat: streaming must not bypass Megha policy.
-            gate = _megha_gate(prompt, sid)
-            if gate is not None:
-                gtext, gmodel, gmeta = gate
-                append_turn(sid, "user", prompt)
-                append_turn(sid, "assistant", gtext)
-                gdone = {
-                    "event": "done",
-                    "latency_ms": (time.perf_counter() - start) * 1000.0,
-                    "text": gtext,
-                    "model": gmodel,
-                    "meta_rag": gmeta,
-                }
-                yield f"data: {json.dumps(gdone)}\n\n"
-                yield "data: [DONE]\n\n"
-                return
+            # pure model stream
             # Generation runs on a pump thread: a client disconnect can cancel
             # this generator at any await, but the model lock is always
             # released by the pump (see _TokenPump).
