@@ -6,7 +6,7 @@ metrics (RAG → context precision / faithfulness; Agents → function-call vali
 
 This suite focuses on the core LM (held-out NLL + generation smoke). Agent-level
 metrics (function_call_validity_rate, pipeline completion, step consistency)
-live in ``sentinel.agent.loop.AgentResult.metrics``.
+were removed with the agent package (model-only).
 
 Changes vs the original:
   * Validation loss is computed ONLY on text passed as ``val_text`` (data the
