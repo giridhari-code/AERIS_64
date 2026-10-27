@@ -29,6 +29,7 @@ pub mod notes;
 pub mod permissions;
 pub mod plugins;
 pub mod policy;
+pub mod sandbox;
 pub mod receipts;
 pub mod registry;
 pub mod repl;

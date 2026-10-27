@@ -1,25 +1,28 @@
-//! Workspace tools — company-standard sandboxed FS ops (read/list/grep).
-//! Root: `ZEROZ_WORKSPACE` or current directory. Never escapes root.
+//! Workspace tools — company-standard sandboxed FS ops (read/list/grep/write).
+//! Root: `ZEROZ_WORKSPACE` or `~/.local/share/0zcode/workspace` (not cwd).
+//! Never escapes root. Shell is allowlist-only behind `Cap::Shell`.
 
 use crate::error::{Error, Result};
+use crate::permissions::{self, Cap};
+use crate::sandbox;
 use crate::tools::ToolOutput;
 use std::env;
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 const MAX_READ_BYTES: u64 = 64 * 1024;
 const MAX_GREP_HITS: usize = 40;
 const MAX_LIST: usize = 80;
 
 pub fn root() -> PathBuf {
-    if let Ok(p) = env::var("ZEROZ_WORKSPACE") {
-        let pb = PathBuf::from(p);
-        if pb.is_dir() {
-            return pb;
-        }
+    let pb = sandbox::default_workspace_root();
+    let _ = sandbox::ensure_layout(&pb);
+    if pb.is_dir() {
+        return pb;
     }
+    // Fallback only if home/XDG unavailable
     env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
@@ -182,24 +185,32 @@ fn walk_grep(path: &Path, pat: &str, hits: &mut Vec<String>, depth: usize) -> Re
     Ok(())
 }
 
-/// Opt-in allowlisted commands. Set ZEROZ_SHELL=1.
+/// Opt-in allowlisted commands. Requires Cap::Shell (`ZEROZ_SHELL=1`) + approval.
+/// No shell metacharacters; argv array only (never `sh -c`); cleared env + cwd = workspace.
 pub fn shell_allowlisted(cmd_line: &str) -> Result<ToolOutput> {
-    if env::var("ZEROZ_SHELL").ok().as_deref() != Some("1") {
+    if !permissions::allowed(Cap::Shell) {
         return Err(Error::Tool(
-            "shell disabled — export ZEROZ_SHELL=1 for allowlisted commands only".into(),
+            "shell disabled — export ZEROZ_SHELL=1 (allowlist only; /perms deny shell blocks session)"
+                .into(),
         ));
     }
+    sandbox::shell_line_safe(cmd_line).map_err(Error::Tool)?;
     crate::approval::require(
         crate::approval::ActionClass::Shell,
         &format!("shell `{cmd_line}`"),
     )
     .map_err(Error::Tool)?;
     let line = cmd_line.trim();
+    // Exact-line allowlist — no open-ended argv. Prefer read-only / status ops.
     let allowed = [
         "pwd",
         "ls",
         "ls -la",
         "ls -l",
+        "date",
+        "whoami",
+        "df -h",
+        "uname -a",
         "git status",
         "git status -sb",
         "git log -5",
@@ -207,11 +218,10 @@ pub fn shell_allowlisted(cmd_line: &str) -> Result<ToolOutput> {
         "git branch",
         "cargo --version",
         "rustc --version",
+        "cargo check",
+        "cargo clippy",
         "cargo test",
         "cargo test -- --nocapture",
-        "cargo check",
-        "cargo build",
-        "cargo clippy",
     ];
     if !allowed.iter().any(|a| line == *a) {
         return Err(Error::Tool(format!(
@@ -220,10 +230,26 @@ pub fn shell_allowlisted(cmd_line: &str) -> Result<ToolOutput> {
         )));
     }
     let root = root();
-    let output = if line == "pwd" {
+    let mut cmd = if line == "pwd" {
         Command::new("pwd")
     } else if line.starts_with("ls") {
         let mut c = Command::new("ls");
+        for arg in line.split_whitespace().skip(1) {
+            c.arg(arg);
+        }
+        c
+    } else if line == "date" {
+        Command::new("date")
+    } else if line == "whoami" {
+        Command::new("whoami")
+    } else if line.starts_with("df") {
+        let mut c = Command::new("df");
+        for arg in line.split_whitespace().skip(1) {
+            c.arg(arg);
+        }
+        c
+    } else if line.starts_with("uname") {
+        let mut c = Command::new("uname");
         for arg in line.split_whitespace().skip(1) {
             c.arg(arg);
         }
@@ -248,21 +274,26 @@ pub fn shell_allowlisted(cmd_line: &str) -> Result<ToolOutput> {
         c
     } else {
         Command::new("true")
-    }
-    .current_dir(&root)
-    .output()
-    .map_err(|e| Error::Tool(e.to_string()))?;
+    };
+    cmd.current_dir(&root)
+        .env_clear()
+        .env("PATH", "/bin:/usr/bin:/usr/local/bin")
+        .env("LANG", "C")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = cmd.output().map_err(|e| Error::Tool(e.to_string()))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let mut body = format!("│ $ {line}\n│ cwd {}\n", root.display());
-    for line in stdout.lines().take(60) {
-        body.push_str(&format!("│ {line}\n"));
+    for l in stdout.lines().take(60) {
+        body.push_str(&format!("│ {l}\n"));
     }
     if !stderr.trim().is_empty() {
         body.push_str("│ stderr:\n");
-        for line in stderr.lines().take(20) {
-            body.push_str(&format!("│ {line}\n"));
+        for l in stderr.lines().take(20) {
+            body.push_str(&format!("│ {l}\n"));
         }
     }
     Ok(ToolOutput {
@@ -275,15 +306,19 @@ pub fn status() -> ToolOutput {
     ToolOutput {
         name: "ws.status",
         body: format!(
-            "│ workspace {}\n│ read/list/grep: on\n│ write/mkdir: {}\n│ shell allowlist: {}\n│ agent loop: {}\n│ set ZEROZ_WORKSPACE to pin root",
+            "│ workspace {}\n│ read/list/grep: on\n│ write/mkdir: {}\n│ shell allowlist: {}\n│ agent loop: {}\n│ /sandbox for full security status\n│ set ZEROZ_WORKSPACE to pin root",
             root_display(),
-            if write_enabled() { "ZEROZ_WRITE=1 (on)" } else { "off (export ZEROZ_WRITE=1)" },
-            if env::var("ZEROZ_SHELL").ok().as_deref() == Some("1") {
-                "ZEROZ_SHELL=1 (on)"
+            if write_enabled() {
+                "ZEROZ_WRITE=1 (on)"
+            } else {
+                "off (export ZEROZ_WRITE=1)"
+            },
+            if permissions::allowed(Cap::Shell) {
+                "ZEROZ_SHELL=1 (on · no metacharacters)"
             } else {
                 "off (export ZEROZ_SHELL=1)"
             },
-            if env::var("ZEROZ_AGENT").ok().as_deref() == Some("1") {
+            if permissions::allowed(Cap::Agent) {
                 "ZEROZ_AGENT=1 (on)"
             } else {
                 "off (export ZEROZ_AGENT=1)"
@@ -308,15 +343,28 @@ mod tests {
     #[test]
     fn escapes_refused() {
         let _g = LOCK.lock().unwrap();
-        let r = resolve_under_root("/etc/passwd");
-        // absolute /etc may canonicalize outside workspace
-        assert!(r.is_err() || !r.unwrap().starts_with("/etc") || true);
-        // relative escape
         let root = root();
         env::set_var("ZEROZ_WORKSPACE", &root);
-        // if path escapes, error
-        let _ = resolve_under_root("../../../../../../etc/passwd");
+        let r = resolve_under_root("/etc/passwd");
+        assert!(
+            r.is_err(),
+            "absolute path outside workspace must be refused"
+        );
+        let r2 = resolve_under_root("../../../../../../etc/passwd");
+        assert!(
+            r2.is_err(),
+            "relative escape outside workspace must be refused"
+        );
         env::remove_var("ZEROZ_WORKSPACE");
+    }
+
+    #[test]
+    fn shell_meta_refused_before_exec() {
+        let _g = LOCK.lock().unwrap();
+        env::set_var("ZEROZ_SHELL", "1");
+        let err = shell_allowlisted("ls | cat").unwrap_err().to_string();
+        assert!(err.contains("metacharacter") || err.contains("refused"), "{err}");
+        env::remove_var("ZEROZ_SHELL");
     }
 }
 
@@ -378,7 +426,7 @@ pub fn resolve_for_write(rel: &str) -> Result<PathBuf> {
 }
 
 pub fn write_enabled() -> bool {
-    env::var("ZEROZ_WRITE").ok().as_deref() == Some("1")
+    permissions::allowed(Cap::Write)
 }
 
 pub fn write_file(path: &str, content: &str) -> Result<ToolOutput> {

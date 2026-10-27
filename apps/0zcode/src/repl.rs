@@ -591,22 +591,22 @@ impl<'a> Tui<'a> {
         // Claude Code parity: left shortcuts hint · right model / status
         // Claude Code-style footer: model label · live status (left = shortcuts)
         let right = if cfg.offline {
-            format!("{} · offline", cfg.model_label)
+            format!("○ {} · offline", cfg.model_label)
         } else if let Some(url) = cfg.aeris_url.as_deref() {
             match self.status.get(url) {
                 Some(crate::aeris_boot::AerisStatus::Ready) => {
-                    format!("{} · ✓ online", cfg.model_label)
+                    format!("● {} · online", cfg.model_label)
                 }
                 Some(crate::aeris_boot::AerisStatus::ServerOnly) => {
-                    format!("{} · model not loaded", cfg.model_label)
+                    format!("○ {} · model not loaded", cfg.model_label)
                 }
                 Some(crate::aeris_boot::AerisStatus::Down) => {
-                    format!("{} · connecting…", cfg.model_label)
+                    format!("◌ {} · connecting…", cfg.model_label)
                 }
-                None => format!("{} · connecting…", cfg.model_label),
+                None => format!("◌ {} · connecting…", cfg.model_label),
             }
         } else {
-            format!("{} · not linked", cfg.model_label)
+            format!("○ {} · not linked", cfg.model_label)
         };
         if self.armed.is_some() {
             Footer {
@@ -619,7 +619,7 @@ impl<'a> Tui<'a> {
                 left: if self.last_size.0 > 0 && self.last_size.0 < 48 {
                     "? · /help".into()
                 } else {
-                    "? for shortcuts".into()
+                    "? shortcuts · /help".into()
                 },
                 right,
                 warn: false,
@@ -971,7 +971,7 @@ impl<'a> Tui<'a> {
         ) + "…";
         let width = self.term.size().0;
         let mut writer = StreamWriter::new(width);
-        let bullet = self.session.theme.paint("1", "●");
+        let bullet = self.session.theme.stream_bullet();
         let start = Instant::now();
         let mut tick = 0usize;
         let mut spinner_shown = false;
@@ -1129,7 +1129,7 @@ mod tests {
             panic!("expected text");
         };
         assert!(out.starts_with("● network error — timed out"), "{out}");
-        assert!(!out.contains('┌') && !out.contains('│') && !out.contains('└'), "{out}");
+        assert!(!out.contains('┌') && !out.contains('└'), "{out}");
         assert!(s.last_run.is_none(), "errors are not expandable");
     }
 

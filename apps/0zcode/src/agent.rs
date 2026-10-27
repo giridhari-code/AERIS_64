@@ -471,6 +471,17 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
             tool_names: vec![],
         };
     }
+    if lower.starts_with("/sandbox")
+        || lower == "sandbox"
+        || lower.starts_with("/jail")
+        || lower == "jail"
+    {
+        return AgentResponse {
+            text: crate::sandbox::handle_command(msg),
+            refused: false,
+            tool_names: vec![],
+        };
+    }
     if lower.starts_with("/approval") || lower.starts_with("/approve") || lower == "approval" {
         return AgentResponse {
             text: crate::approval::handle_command(msg),
@@ -942,7 +953,7 @@ fn help_text() -> String {
         "{PRODUCT_NAME} — direct answers from tools, not guesses.\n\n\
 Commands\n\
   /help /tools /plugins /mcp /rules /memory /perms /approval\n\
-  /commands /cmd /bg /lsp /computer\n\
+  /commands /cmd /bg /lsp /computer /sandbox /ws\n\
   /status /model /version /history /clear /quit\n\n\
 Platform\n\
   /plugins     features & integrations\n\
@@ -952,7 +963,9 @@ Platform\n\
   /approval    human approval (y/a/n)\n\
   /bg          background tasks\n\
   /lsp         diagnostics\n\
-  /computer    computer-use status (gated)\n\n\
+  /computer    computer-use status (gated)\n\
+  /sandbox     local sandbox security status\n\
+  /ws          workspace list/read under jail\n\n\
 Examples\n\
   weather in Mumbai · time · 10 USD to INR · 25*4\n\n\
 Policy: no source-code write/edit/execute."

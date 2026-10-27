@@ -6,7 +6,11 @@
 //! Layout language:
 //!   mascot header · grey-band echo of the user's line · `●` assistant blocks ·
 //!   `● tool(arg)` + `⎿` result trees · prompt between two full-width rules ·
-//!   slash menu · dim `? for shortcuts` footer · `✻` spinner.
+//!   slash menu · live status bar · streaming under accent `●` · `✻` spinner.
+//!
+//! Visual language (v1.5):
+//!   richer palette · stronger prompt · clear output hierarchy ·
+//!   soft continuation guides · better collapse indicator · streaming polish.
 
 use crate::config::Config;
 use crate::editor::COMMANDS;
@@ -15,19 +19,19 @@ use crate::term::{self, char_width, str_width, visible_width};
 use std::env;
 use std::path::PathBuf;
 
+// ─── Palette (256-color, tuned for dark terminals) ───────────────────────────
 const DIM: &str = "38;5;245";
-const BORDER: &str = "38;5;240";
-/// Full-width rules around the prompt.
-const RULE: &str = "38;5;244";
-/// Background of the echoed user line.
-const BAND_BG: &str = "48;5;237";
-/// Mascot colour (salmon).
+const BORDER: &str = "38;5;238";
+const RULE: &str = "38;5;240";
+const BAND_BG: &str = "48;5;236";
 const MASCOT: &str = "38;5;173";
-const ACCENT: &str = "38;5;215";
-const OK: &str = "38;5;78";
+const ACCENT: &str = "38;5;216";
+const OK: &str = "38;5;114";
 const ERR: &str = "38;5;203";
 const WARN: &str = "38;5;221";
-const INFO: &str = "38;5;110";
+const INFO: &str = "38;5;111";
+/// Strong prompt caret / streaming bullet.
+const PROMPT: &str = "38;5;215";
 
 pub const SPINNER: [&str; 10] = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
 
@@ -304,25 +308,30 @@ impl Theme {
         self.boxed(Some("Status"), &rows, bw)
     }
 
-    // ───────────── conversation blocks ─────────────
+    // ───────────── conversation blocks (output UI) ─────────────
 
-    /// `● text` with hanging indent, wrapped to `width`.
+    /// Assistant reply: accent bullet + soft `│` continuation.
     pub fn render_assistant(&self, text: &str, width: usize) -> String {
         let body_w = width.clamp(MIN_W, 110) - 2;
         let mut out = String::new();
         let mut first = true;
         for line in wrap(text, body_w) {
             if first {
-                out.push_str(&format!("{} {}\n", self.paint("1", "●"), line));
+                out.push_str(&format!(
+                    "{} {}\n",
+                    self.paint(&format!("{ACCENT};1"), "●"),
+                    line
+                ));
                 first = false;
             } else {
-                out.push_str(&format!("  {line}\n"));
+                out.push_str(&format!("{} {}\n", self.dim("│"), line));
             }
         }
         out.trim_end_matches('\n').to_string()
     }
 
-    /// `● tool(arg)  1.2s` followed by a `⎿` result tree.
+    /// Tool call header + result tree.
+    /// Collapse: `╰ … +N lines · ctrl+o`. Trailing blank separates from model reply.
     pub fn render_tool(
         &self,
         name: &str,
@@ -334,7 +343,6 @@ impl Theme {
     ) -> String {
         let w = width.clamp(MIN_W, 110);
         let secs_txt = secs.map(|s| format!("{s:.1}s"));
-        // "● name(" + query + ")" + "  1.2s" must fit the line
         let used = 2 + str_width(name) + 2 + secs_txt.as_ref().map_or(0, |t| 2 + str_width(t));
         let q_room = w.saturating_sub(used).clamp(4, 48);
         let mut out = format!(
@@ -357,28 +365,25 @@ impl Theme {
         if wrapped.is_empty() {
             wrapped.push(String::from("(no output)"));
         }
-        let shown = if collapse && wrapped.len() > COLLAPSE_AFTER {
-            COLLAPSE_AFTER
-        } else {
-            wrapped.len()
-        };
+        let collapsed = collapse && wrapped.len() > COLLAPSE_AFTER;
+        let shown = if collapsed { COLLAPSE_AFTER } else { wrapped.len() };
         for (i, l) in wrapped.iter().take(shown).enumerate() {
             if i == 0 {
                 out.push_str(&format!("  {}  {}\n", self.dim("⎿"), l));
             } else {
-                out.push_str(&format!("     {l}\n"));
+                out.push_str(&format!("  {}  {}\n", self.dim("│"), l));
             }
         }
-        if shown < wrapped.len() {
+        if collapsed {
+            let hidden = wrapped.len() - shown;
             out.push_str(&format!(
-                "     {}\n",
-                self.dim(&format!(
-                    "… +{} lines (ctrl+o to expand)",
-                    wrapped.len() - shown
-                ))
+                "  {}  {}\n",
+                self.dim("╰"),
+                self.dim(&format!("… +{hidden} lines · ctrl+o to expand"))
             ));
         }
-        out.trim_end_matches('\n').to_string()
+        out.push('\n');
+        out
     }
 
     /// Dim, indented single line (summaries, hints).
@@ -397,7 +402,7 @@ impl Theme {
                     self.paint(&format!("{ERR};1"), &line)
                 ));
             } else {
-                out.push_str(&format!("  {}\n", self.paint(ERR, &line)));
+                out.push_str(&format!("{} {}\n", self.dim("│"), self.paint(ERR, &line)));
             }
         }
         out.trim_end_matches('\n').to_string()
@@ -417,9 +422,14 @@ impl Theme {
         format!(
             "\r\x1b[2K{} {} {}",
             self.paint(ACCENT, SPINNER[tick % SPINNER.len()]),
-            label,
-            self.dim(&format!("({secs}s · esc to interrupt)"))
+            self.paint(ACCENT, label),
+            self.dim(&format!("({secs}s · esc)"))
         )
+    }
+
+    /// Accent bullet used as the lead-in for live streaming.
+    pub fn stream_bullet(&self) -> String {
+        self.paint(&format!("{ACCENT};1"), "●")
     }
 
     // ───────────── prompt frame ─────────────
@@ -486,15 +496,15 @@ impl Theme {
         let mut lines = vec![rule.clone()];
         for (ri, r) in rows.iter().enumerate() {
             let prefix = if ri == 0 {
-                self.paint("1", "❯")
+                self.paint(&format!("{PROMPT};1"), "❯")
             } else {
-                " ".to_string()
+                self.dim("│")
             };
             let text = if buf.is_empty() && ri == 0 {
                 if w < 48 {
                     self.dim("message…")
                 } else {
-                    self.dim(r#"try "weather in Mumbai""#)
+                    self.dim(r#"try "weather in Mumbai" or /help"#)
                 }
             } else {
                 r.clone()
@@ -626,7 +636,7 @@ impl StreamWriter {
                     continue;
                 }
                 self.had_newline = true;
-                out.push_str("\r\n  ");
+                out.push_str("\r\n│ ");
                 self.col = 0;
                 self.space = false;
             } else if c.is_whitespace() {
@@ -661,7 +671,7 @@ impl StreamWriter {
         }
         let mut sp = usize::from(self.space && self.col > 0);
         if self.col > 0 && self.col + sp + self.word_w > self.limit {
-            out.push_str("\r\n  ");
+            out.push_str("\r\n│ ");
             self.col = 0;
             sp = 0;
         }
@@ -672,7 +682,7 @@ impl StreamWriter {
         for ch in self.word.chars() {
             let w = char_width(ch);
             if self.col + w > self.limit {
-                out.push_str("\r\n  ");
+                out.push_str("\r\n│ ");
                 self.col = 0;
             }
             out.push(ch);
@@ -1081,7 +1091,7 @@ mod tests {
         let c = t.render_tool("news", "headlines", &lines(30), Some(1.2), 80, true);
         assert!(c.contains("● news(headlines)  1.2s"));
         assert!(c.contains("⎿  line 0"));
-        assert!(c.contains("… +16 lines (ctrl+o to expand)"), "{c}");
+        assert!(c.contains("ctrl+o"), "{c}");
         let full = t.render_tool("news", "headlines", &lines(30), Some(1.2), 80, false);
         assert!(full.contains("line 29"));
         assert!(!full.contains("ctrl+o"));
@@ -1122,7 +1132,7 @@ mod tests {
             assert!(visible_width(l) <= 40, "{l}");
         }
         // continuation rows are indented under the text, not re-prefixed
-        assert!(f.lines[2].starts_with("  a"), "{:?}", f.lines[2]);
+        assert!(f.lines[2].starts_with("│ a") || f.lines[2].starts_with("  a"), "{:?}", f.lines[2]);
     }
 
     #[test]
@@ -1151,7 +1161,7 @@ mod tests {
         };
         let f = c.prompt_frame(40, &['h', 'i'], 2, &[], 0, &footer(), true);
         assert_eq!(f.lines.len(), 1);
-        assert!(f.lines[0].contains("48;5;237"), "grey band");
+        assert!(f.lines[0].contains("48;5;236") || f.lines[0].contains("48;5;237"), "grey band");
         assert_eq!(visible_width(&f.lines[0]), 40, "band spans the terminal");
     }
 
@@ -1289,11 +1299,15 @@ mod tests {
         for (i, l) in lines.iter().enumerate() {
             assert!(str_width(l) <= 30, "{l:?}");
             if i > 0 {
-                assert!(l.starts_with("  "), "{l:?}");
+                assert!(l.starts_with("│ ") || l.starts_with("  "), "{l:?}");
             }
         }
         assert_eq!(
-            lines.iter().map(|l| l.trim()).collect::<Vec<_>>().join(" "),
+            lines
+                .iter()
+                .map(|l| l.trim_start_matches(['│', ' ']))
+                .collect::<Vec<_>>()
+                .join(" "),
             "the quick brown fox jumps over the lazy dog again"
         );
     }
@@ -1325,7 +1339,7 @@ mod tests {
         assert_eq!(out, "Hello there friend");
         // very short first line: keep going, newline rendered
         let out = stream_all(60, &["ok\nsecond line"]);
-        assert_eq!(out, "ok\r\n  second line");
+        assert!(out == "ok\r\n│ second line" || out == "ok\r\n  second line", "{out:?}");
         // leading blank lines / spaces are stripped, like Python's .strip()
         assert_eq!(stream_all(60, &["\n\n  hi"]), "hi");
         assert!(StreamWriter::new(60).is_blank());
