@@ -33,7 +33,7 @@ training:
   ema_decay: 0.999
   device: cuda
   seed: 42
-  log_every: 20
+  log_every: 50
   eval_every: 200
   checkpoint_every: 500
   output_dir: runs/colab

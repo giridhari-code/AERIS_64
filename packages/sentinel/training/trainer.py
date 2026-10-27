@@ -33,6 +33,28 @@ from sentinel.training.distributed import is_distributed, is_main
 
 logger = logging.getLogger(__name__)
 
+# Keep train logs short — full metric dumps fill Colab/disk fast
+_LOG_KEYS = (
+    "ce", "err_energy", "err_mid", "err_coarse", "gate_mean", "mean_S", "k_depth",
+)
+
+
+def _fmt_metrics(m: dict) -> str:
+    """One compact line of key metrics (skip internal _* and bulky dumps)."""
+    if not m:
+        return "-"
+    parts = []
+    for k in _LOG_KEYS:
+        if k not in m:
+            continue
+        v = m[k]
+        if isinstance(v, float):
+            parts.append(f"{k}={v:.3f}" if abs(v) < 100 else f"{k}={v:.2e}")
+        else:
+            parts.append(f"{k}={v}")
+    return " ".join(parts) if parts else "-"
+
+
 
 def get_cosine_schedule_with_warmup(
     optimizer: torch.optim.Optimizer,
@@ -375,20 +397,51 @@ class Trainer:
             if self.is_main and do_log:
                 loss_acc = float(loss_acc_t.item())
                 dt = max(1e-9, time.time() - t0)
-                en = self._embed_norm()
-                logger.info(
-                    "step %d loss=%.4f lr=%.2e grad_norm=%.3f tok/s=%.0f (x%d ranks) embed_norm=%.3f metrics=%s",
-                    self.global_step,
-                    loss_acc,
-                    self.scheduler.get_last_lr()[0],
-                    float(grad_norm),
-                    tokens_seen * self.world / dt,
-                    self.world,
-                    en,
-                    {k: v for k, v in m.items() if not k.startswith("_")},
-                )
-                if embed0 > 0 and en < 0.3 * embed0:
-                    logger.warning("embedding norm fell to %.0f%% of its start: possible collapse from the error loss", 100 * en / embed0)
+                # embed_norm only every 5th log line (extra host sync)
+                en = self._embed_norm() if (self.global_step // log_every) % 5 == 0 else None
+                if en is not None:
+                    logger.info(
+                        "step %d loss=%.4f lr=%.2e gn=%.2f tok/s=%.0f emb=%.3f %s",
+                        self.global_step,
+                        loss_acc,
+                        self.scheduler.get_last_lr()[0],
+                        float(grad_norm),
+                        tokens_seen * self.world / dt,
+                        en,
+                        _fmt_metrics(m),
+                    )
+                else:
+                    logger.info(
+                        "step %d loss=%.4f lr=%.2e gn=%.2f tok/s=%.0f %s",
+                        self.global_step,
+                        loss_acc,
+                        self.scheduler.get_last_lr()[0],
+                        float(grad_norm),
+                        tokens_seen * self.world / dt,
+                        _fmt_metrics(m),
+                    )
+                # Append one compact JSONL row (easy to plot; tiny vs full dict logs)
+                try:
+                    import json
+                    row = {
+                        "step": self.global_step,
+                        "loss": round(loss_acc, 6),
+                        "lr": self.scheduler.get_last_lr()[0],
+                        "tok_s": round(tokens_seen * self.world / dt, 1),
+                    }
+                    for k in _LOG_KEYS:
+                        if k in m and isinstance(m[k], (int, float)):
+                            row[k] = round(float(m[k]), 6)
+                    log_path = self.output_dir / "train_metrics.jsonl"
+                    with open(log_path, "a", encoding="utf-8") as fh:
+                        fh.write(json.dumps(row, separators=(",", ":")) + "\n")
+                except OSError:
+                    pass
+                if en is not None and embed0 > 0 and en < 0.3 * embed0:
+                    logger.warning(
+                        "embedding norm fell to %.0f%% of start (error-loss collapse risk)",
+                        100 * en / embed0,
+                    )
 
             # checkpoint / eval run on rank 0 only (plain module: no collectives, other ranks wait in all-reduce)
             if self.is_main and self.val_loader is not None and self.global_step % tc.eval_every == 0:
