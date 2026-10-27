@@ -104,7 +104,8 @@ _CITIES = (
 
 
 def tools_enabled() -> bool:
-    return os.environ.get("NEUROFIELD_WEB_TOOLS", "1").strip().lower() not in {
+    # Default OFF — pure model chat. Opt-in: NEUROFIELD_WEB_TOOLS=1
+    return os.environ.get("NEUROFIELD_WEB_TOOLS", "0").strip().lower() not in {
         "0", "false", "no", "off",
     }
 

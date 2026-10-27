@@ -263,8 +263,8 @@ class ChatRequest(BaseModel):
     )
     remember: bool = Field(True, description="False: do not store this turn or update the user's slow memory.")
     use_meta_rag: bool = Field(
-        True,
-        description="Metacognition-controlled Adaptive RAG: retrieve only when confidence is low / arousal high.",
+        False,
+        description="Adaptive RAG (default off). Set true or NEUROFIELD_AUTO_RAG=1 for retrieval.",
     )
     force_rag: Optional[bool] = Field(
         None,
@@ -1078,7 +1078,8 @@ def create_app(
         # Live surprise from prior tokens feeds confidence when available.
         meta_rag_info: Optional[dict] = None
         rag_prompt = prompt
-        if req.use_meta_rag or req.force_rag is True:
+        _auto_rag_env = _env("AUTO_RAG", "0") in ("1", "true", "yes")
+        if req.force_rag is True or (req.force_rag is not False and (req.use_meta_rag or _auto_rag_env)):
             try:
                 from sentinel.rag.meta_rag import auto_rag
 
@@ -1275,41 +1276,42 @@ def create_app(
                         model=gmodel,
                         meta_rag=gmeta,
                     )
-                # Prefer SI_v1 plan→tool→verify (Grok-style agent loop)
+                # Tools / SI_v1 only when explicitly enabled (NEUROFIELD_WEB_TOOLS=1)
                 text = None
-                try:
-                    from sentinel.agent.si_v1 import run_si_v1, SI_v1Config, build_plan
-                    plan = build_plan(raw)
-                    # Only short-circuit when plan actually uses a tool (not compose-only)
-                    uses_tool = any(
-                        s.get("action") not in ("compose_answer", "verify_nonempty", "")
-                        for s in plan
-                    )
-                    if uses_tool:
-                        result = run_si_v1(raw, config=SI_v1Config(max_steps=6))
-                        if result.answer and result.stopped_reason not in (
-                            "empty_input",
-                            "no_tools",
-                        ):
-                            text = result.answer.strip()
-                except Exception as e:
-                    logger.warning("SI_v1 chat path failed, falling back to enrich: %s", e)
-                if not text:
-                    _enriched, tool_note = enrich_prompt_with_tools(raw)
-                    if tool_note and str(tool_note).strip():
-                        text = str(tool_note).strip()
-                if text:
-                    lat = (time.perf_counter() - t0) * 1000.0
-                    append_turn(sid, "user", raw)
-                    append_turn(sid, "assistant", text)
-                    _persist(sid, _owner(api_key), req, raw, text)
-                    return ChatResponse(
-                        text=text,
-                        session_id=sid,
-                        latency_ms=lat,
-                        model="tools+si_v1",
-                        meta_rag=None,
-                    )
+                from sentinel.tools.orchestrate import tools_enabled as _tools_on
+                if _tools_on():
+                    try:
+                        from sentinel.agent.si_v1 import run_si_v1, SI_v1Config, build_plan
+                        plan = build_plan(raw)
+                        uses_tool = any(
+                            s.get("action") not in ("compose_answer", "verify_nonempty", "")
+                            for s in plan
+                        )
+                        if uses_tool:
+                            result = run_si_v1(raw, config=SI_v1Config(max_steps=6))
+                            if result.answer and result.stopped_reason not in (
+                                "empty_input",
+                                "no_tools",
+                            ):
+                                text = result.answer.strip()
+                    except Exception as e:
+                        logger.warning("SI_v1 chat path failed, falling back to enrich: %s", e)
+                    if not text:
+                        _enriched, tool_note = enrich_prompt_with_tools(raw)
+                        if tool_note and str(tool_note).strip():
+                            text = str(tool_note).strip()
+                    if text:
+                        lat = (time.perf_counter() - t0) * 1000.0
+                        append_turn(sid, "user", raw)
+                        append_turn(sid, "assistant", text)
+                        _persist(sid, _owner(api_key), req, raw, text)
+                        return ChatResponse(
+                            text=text,
+                            session_id=sid,
+                            latency_ms=lat,
+                            model="tools+si_v1",
+                            meta_rag=None,
+                        )
 
             _need_model()
             prompt, input_ids, max_new, temperature, replay_len, slow_seed, meta_rag_info = _prepare_chat(
