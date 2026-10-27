@@ -15,16 +15,65 @@ pub struct ToolDesc {
 pub fn all_tools() -> &'static [ToolDesc] {
     &[
         ToolDesc {
-            name: "weather",
-            description: "Live weather for a place",
-            input_hint: "weather in Mumbai",
+            name: "read",
+            description: "Read a file (optional start line + count)",
+            input_hint: "read src/main.rs 1 80",
+            network: false,
+            offline_ok: true,
+        },
+        ToolDesc {
+            name: "list",
+            description: "List a folder in the workspace",
+            input_hint: "list src",
+            network: false,
+            offline_ok: true,
+        },
+        ToolDesc {
+            name: "glob",
+            description: "Find files by name pattern",
+            input_hint: "glob src/**/*.rs",
+            network: false,
+            offline_ok: true,
+        },
+        ToolDesc {
+            name: "grep",
+            description: "Search file contents",
+            input_hint: "grep TODO src",
+            network: false,
+            offline_ok: true,
+        },
+        ToolDesc {
+            name: "edit",
+            description: "Replace exact unique text in a file (asks approval)",
+            input_hint: "/code fix the typo in README.md",
+            network: false,
+            offline_ok: true,
+        },
+        ToolDesc {
+            name: "write",
+            description: "Create or overwrite a file (asks approval)",
+            input_hint: "/code add tests/smoke.rs",
+            network: false,
+            offline_ok: true,
+        },
+        ToolDesc {
+            name: "shell",
+            description: "Allowlisted cargo / git commands (asks approval)",
+            input_hint: "shell cargo test",
+            network: false,
+            offline_ok: true,
+        },
+        ToolDesc {
+            name: "web_fetch",
+            description: "Fetch a web page as text",
+            input_hint: "fetch https://example.com",
             network: true,
             offline_ok: false,
         },
         ToolDesc {
-            name: "time",
-            description: "UTC or city local time",
-            input_hint: "time in Tokyo",
+            name: "web_search",
+            description: "Web instant answers",
+            input_hint: "search rust std fs read_dir",
             network: true,
             offline_ok: false,
         },
@@ -34,62 +83,6 @@ pub fn all_tools() -> &'static [ToolDesc] {
             input_hint: "2+2",
             network: false,
             offline_ok: true,
-        },
-        ToolDesc {
-            name: "units",
-            description: "Length / mass / temperature convert",
-            input_hint: "10 km to mi",
-            network: false,
-            offline_ok: true,
-        },
-        ToolDesc {
-            name: "wikipedia",
-            description: "Short encyclopedia summary",
-            input_hint: "who is Ada Lovelace",
-            network: true,
-            offline_ok: false,
-        },
-        ToolDesc {
-            name: "web_search",
-            description: "Web instant answers",
-            input_hint: "search latest AI news",
-            network: true,
-            offline_ok: false,
-        },
-        ToolDesc {
-            name: "currency",
-            description: "FX conversion",
-            input_hint: "10 USD to INR",
-            network: true,
-            offline_ok: false,
-        },
-        ToolDesc {
-            name: "crypto",
-            description: "Crypto price USD/INR",
-            input_hint: "btc price",
-            network: true,
-            offline_ok: false,
-        },
-        ToolDesc {
-            name: "github",
-            description: "Public GitHub repo info",
-            input_hint: "github owner/repo",
-            network: true,
-            offline_ok: false,
-        },
-        ToolDesc {
-            name: "headlines",
-            description: "BBC RSS top headlines",
-            input_hint: "headlines",
-            network: true,
-            offline_ok: false,
-        },
-        ToolDesc {
-            name: "email_status",
-            description: "Today's email summary via your configured endpoint (not Gmail password login)",
-            input_hint: "today email / my email",
-            network: true,
-            offline_ok: false,
         },
         ToolDesc {
             name: "notes",
@@ -119,10 +112,9 @@ pub fn tools_json(_cfg: &Config) -> String {
     }
     out.push_str("\n  ],\n");
     out.push_str("  \"policy\": {\n");
-    out.push_str("    \"shell\": false,\n");
-    out.push_str("    \"code_generation\": false,\n");
-    out.push_str("    \"arbitrary_file_write\": false,\n");
-    out.push_str("    \"notes_sandbox_only\": true\n");
+    out.push_str("    \"shell\": \"allowlist + approval (ZEROZ_SHELL=1)\",\n");
+    out.push_str("    \"code_generation\": \"opt-in (ZEROZ_CODING=1)\",\n");
+    out.push_str("    \"file_write\": \"workspace only + approval (ZEROZ_WRITE=1)\"\n");
     out.push_str("  }\n}\n");
     out
 }
@@ -135,7 +127,7 @@ pub fn tools_markdown() -> String {
             t.name, t.description, t.input_hint, t.network, t.offline_ok
         ));
     }
-    out.push_str("\nDenied by policy: arbitrary shell, source-code gen/refactor, unrestricted file write.\n");
+    out.push_str("\nGated: shell (allowlist + approval), file write (workspace + approval), coding loop (ZEROZ_CODING=1).\n");
     out
 }
 
@@ -145,7 +137,7 @@ mod tests {
 
     #[test]
     fn registry_nonempty() {
-        assert!(all_tools().len() >= 10);
-        assert!(tools_json(&Config::default()).contains("email_status"));
+        assert!(all_tools().len() >= 8);
+        assert!(tools_json(&Config::default()).contains("\"glob\""));
     }
 }

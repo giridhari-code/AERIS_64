@@ -27,25 +27,18 @@ fn user_dir() -> PathBuf {
 fn builtins() -> Vec<Plugin> {
     vec![
         Plugin {
-            name: "weather".into(),
-            kind: "tool".into(),
-            enabled: true,
-            builtin: true,
-            detail: "weather / mausam lookups".into(),
-        },
-        Plugin {
             name: "search".into(),
             kind: "tool".into(),
             enabled: true,
             builtin: true,
-            detail: "web search + wikipedia".into(),
+            detail: "web search + page fetch".into(),
         },
         Plugin {
             name: "workspace".into(),
             kind: "integration".into(),
             enabled: true,
             builtin: true,
-            detail: "sandboxed list/read/grep/write".into(),
+            detail: "sandboxed list/read/glob/grep/edit/write/shell".into(),
         },
         Plugin {
             name: "mcp".into(),

@@ -6,6 +6,7 @@
 pub mod aeris_boot;
 pub mod backend;
 pub mod agent;
+pub mod agent_loop;
 pub mod approval;
 pub mod brief;
 pub mod buddy;

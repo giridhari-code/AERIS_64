@@ -268,7 +268,7 @@ impl Theme {
             rows.push(format!("{}  {}", self.paint(INFO, &format!("{k:<11}")), self.dim(d)));
         }
         rows.push(String::new());
-        rows.push(self.dim("Try: weather in Mumbai · 938+29 · 10 USD to INR · headlines"));
+        rows.push(self.dim("Try: /code <goal> · read x.rs · glob *.rs · grep TODO"));
         self.boxed(Some("Help"), &rows, bw)
     }
 
@@ -504,7 +504,7 @@ impl Theme {
                 if w < 48 {
                     self.dim("message…")
                 } else {
-                    self.dim(r#"try "weather in Mumbai" or /help"#)
+                    self.dim(r#"try "/code fix the failing test""#)
                 }
             } else {
                 r.clone()
@@ -1139,7 +1139,7 @@ mod tests {
     fn prompt_frame_empty_shows_placeholder_and_menu_replaces_footer() {
         let t = plain();
         let f = t.prompt_frame(60, &[], 0, &[], 0, &footer(), false);
-        assert!(f.lines[1].contains("weather in Mumbai"), "{:?}", f.lines);
+        assert!(f.lines[1].contains("/code fix the failing test"), "{:?}", f.lines);
         assert_eq!((f.cursor_row, f.cursor_col), (1, 2));
         let menu = [("/help", "commands"), ("/history", "turns")];
         let f = t.prompt_frame(60, &['/', 'h'], 2, &menu, 1, &footer(), false);

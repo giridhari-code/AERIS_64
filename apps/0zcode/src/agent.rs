@@ -71,6 +71,21 @@ pub fn handle_with(user: &str, cfg: &Config, chat: Option<&mut ChatCtx>) -> Agen
         };
     }
 
+    if let Some(goal) = crate::agent_loop::parse_goal(msg) {
+        return match crate::agent_loop::run(&goal, cfg) {
+            Ok(o) => AgentResponse {
+                text: o.render(),
+                refused: false,
+                tool_names: vec!["code"],
+            },
+            Err(e) => AgentResponse {
+                text: format!("code: {e}"),
+                refused: false,
+                tool_names: vec![],
+            },
+        };
+    }
+
     if policy::is_code_request(msg) {
         return AgentResponse {
             text: crate::grounding::seal(
@@ -494,31 +509,6 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
     let mut outputs: Vec<ToolOutput> = Vec::new();
     let mut names: Vec<&'static str> = Vec::new();
 
-    let wants_weather = lower.contains("weather")
-        || lower.contains("mausam")
-        || lower.contains("temperature")
-        || lower.contains("forecast");
-    let wants_time = has_word(&lower, "time")
-        || has_word(&lower, "tarikh")
-        || lower.contains("what time")
-        || lower.contains("time now")
-        || lower.contains("current time")
-        || lower.contains("date today")
-        || lower.contains("kitna baja")
-        || lower.contains("kya time");
-    let wants_fx = (lower.contains("usd")
-        || lower.contains("eur")
-        || lower.contains("inr")
-        || lower.contains("gbp")
-        || lower.contains("jpy"))
-        && (lower.contains("to") || lower.contains(" in ") || lower.contains("convert"));
-    let wants_wiki = lower.contains("wikipedia")
-        || lower.starts_with("who is ")
-        || lower.starts_with("who was ")
-        || lower.starts_with("what is ")
-        || lower.contains("tell me about ")
-        || lower.contains("ke bare mein")
-        || lower.contains("kaun hai");
     let wants_search = lower.contains("search")
         || lower.contains("look up")
         || lower.contains("latest news")
@@ -538,6 +528,7 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
     let wants_ws_grep = lower.starts_with("grep ")
         || lower.starts_with("search in files ")
         || lower.starts_with("find in code ");
+    let wants_ws_glob = lower.starts_with("glob ") || lower.starts_with("find files ");
     let wants_shell = lower.starts_with("shell ")
         || lower.starts_with("$ ")
         || lower.starts_with("run allowlisted ");
@@ -547,37 +538,6 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
         || looks_like_math(msg)
         || math_expr.is_some();
 
-    // Strict units — avoid matching "to finds" / random English
-    let wants_units = (lower.contains(" km ") || lower.contains(" km to") || lower.starts_with("km "))
-        || lower.contains(" to mi")
-        || lower.contains(" to km")
-        || lower.contains("c to f")
-        || lower.contains("f to c")
-        || lower.contains("°c")
-        || lower.contains("°f")
-        || lower.contains("celsius")
-        || lower.contains("fahrenheit")
-        || lower.starts_with("convert ")
-        || lower.starts_with("units ");
-    let wants_crypto = lower.contains("btc")
-        || lower.contains("bitcoin")
-        || lower.contains("eth price")
-        || lower.contains("ethereum")
-        || lower.contains("crypto")
-        || (lower.contains("price") && (lower.contains("btc") || lower.contains("eth") || lower.contains("sol")));
-    let wants_github = lower.contains("github.com/")
-        || lower.starts_with("github ")
-        || (lower.contains("github") && lower.contains('/'));
-    let wants_headlines = lower.contains("headlines")
-        || lower == "news"
-        || lower.starts_with("top news")
-        || lower.contains("bbc news");
-    let wants_email = lower.contains("email")
-        || lower.contains("e-mail")
-        || lower.contains("inbox")
-        || lower.contains("aaj ke mail")
-        || lower.contains("aaj ka email")
-        || lower.contains("my mail");
     let wants_notes = lower.starts_with("note ")
         || lower.starts_with("notes ")
         || lower.starts_with("note:")
@@ -587,9 +547,6 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
     if wants_calc {
         let calc_in = math_expr.as_deref().unwrap_or(msg);
         push_tool(&mut outputs, &mut names, tools::calculator(calc_in));
-    }
-    if wants_units {
-        push_tool(&mut outputs, &mut names, tools::units(msg));
     }
 
     if wants_ws_list {
@@ -612,6 +569,12 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
         let pat = rest.first().copied().unwrap_or("");
         let path = if rest.len() > 1 { rest[1..].join(" ") } else { ".".into() };
         push_tool(&mut outputs, &mut names, crate::workspace::grep(pat, &path));
+    }
+    if wants_ws_glob {
+        let rest: Vec<&str> = msg.split_whitespace().skip(if lower.starts_with("glob ") { 1 } else { 2 }).collect();
+        let pat = rest.first().copied().unwrap_or("");
+        let path = if rest.len() > 1 { rest[1..].join(" ") } else { ".".into() };
+        push_tool(&mut outputs, &mut names, crate::workspace::glob(pat, &path));
     }
     if wants_shell {
         let cmd_owned: String = if lower.starts_with("$ ") {
@@ -642,39 +605,8 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
         }
     };
 
-    if wants_fx {
-        net(&mut outputs, &mut names, tools::currency(msg, cfg));
-    }
-    if wants_time {
-        if let Some(place) = extract_place(msg) {
-            net(&mut outputs, &mut names, tools::time_in_place(&place, cfg));
-        } else {
-            net(&mut outputs, &mut names, tools::time_now(cfg));
-        }
-    }
-    if wants_crypto {
-        let sym = extract_crypto_sym(msg);
-        net(&mut outputs, &mut names, tools::crypto_price(&sym, cfg));
-    }
-    if wants_github {
-        net(&mut outputs, &mut names, tools::github_repo(msg, cfg));
-    }
-    if wants_headlines {
-        net(&mut outputs, &mut names, tools::headlines(cfg));
-    }
-    if wants_email {
-        net(&mut outputs, &mut names, tools::email_status(cfg));
-    }
     if wants_notes {
         push_tool(&mut outputs, &mut names, crate::notes::handle_notes(msg));
-    }
-    if wants_weather {
-        let place = extract_place(msg).unwrap_or_else(|| "Delhi".into());
-        net(&mut outputs, &mut names, tools::weather(&place, cfg));
-    }
-    if wants_wiki && !wants_search {
-        let topic = strip_wiki_topic(msg);
-        net(&mut outputs, &mut names, tools::wikipedia(&topic, cfg));
     }
     if wants_search {
         net(&mut outputs, &mut names, tools::web_search(msg, cfg));
@@ -697,7 +629,7 @@ Requires ZEROZ_AGENT=1 · max bots: ZEROZ_TEAM_MAX (default 4)",
     if outputs.is_empty() && msg.contains('?') && !llm_linked(cfg) {
         if cfg.offline {
             return AgentResponse {
-                text: "Offline mode: calculator + units + /commands only. Turn off ZEROZ_OFFLINE for search/weather.".into(),
+                text: "Offline mode: calculator + workspace tools + /commands only. Turn off ZEROZ_OFFLINE for web search.".into(),
                 refused: false,
                 tool_names: vec![],
             };
@@ -867,11 +799,6 @@ fn push_tool(
     }
 }
 
-fn has_word(hay: &str, word: &str) -> bool {
-    hay.split(|c: char| !c.is_alphanumeric())
-        .any(|w| w == word)
-}
-
 fn is_greeting(lower: &str) -> bool {
     let t = lower.trim().trim_end_matches(['!', '.', ',']);
     matches!(
@@ -885,9 +812,9 @@ fn is_greeting(lower: &str) -> bool {
 
 fn greeting_reply(lower: &str) -> String {
     if lower.contains("namaste") || lower.contains("namaskar") {
-        "Namaste — main 0zcode hoon. Weather, time, calc, search, notes, MCP tools. /help".into()
+        "Namaste — main 0zcode hoon. /code · read · grep · glob · /help".into()
     } else {
-        "Hi — 0zcode here. I answer with tools, not guesses.\nTry: time · weather in Mumbai · 938+29 · /help".into()
+        "Hi — 0zcode here. Coding agent: /code <goal> · read · grep · glob · /help".into()
     }
 }
 
@@ -926,16 +853,6 @@ fn extract_math_expr(msg: &str) -> Option<String> {
     None
 }
 
-fn extract_crypto_sym(msg: &str) -> String {
-    let l = msg.to_lowercase();
-    for s in ["bitcoin", "btc", "ethereum", "eth", "solana", "sol", "dogecoin", "doge"] {
-        if l.contains(s) {
-            return s.to_string();
-        }
-    }
-    "bitcoin".into()
-}
-
 fn looks_like_math(msg: &str) -> bool {
     let t = msg.trim();
     if t.is_empty() {
@@ -950,7 +867,7 @@ fn looks_like_math(msg: &str) -> bool {
 
 fn help_text() -> String {
     format!(
-        "{PRODUCT_NAME} — direct answers from tools, not guesses.\n\n\
+        "{PRODUCT_NAME} — coding agent: read, edit, search, run.\n\n\
 Commands\n\
   /help /tools /plugins /mcp /rules /memory /perms /approval\n\
   /commands /cmd /bg /lsp /computer /sandbox /ws\n\
@@ -967,62 +884,9 @@ Platform\n\
   /sandbox     local sandbox security status\n\
   /ws          workspace list/read under jail\n\n\
 Examples\n\
-  weather in Mumbai · time · 10 USD to INR · 25*4\n\n\
-Policy: no source-code write/edit/execute."
+  /code fix the failing test · read src/main.rs · grep TODO · glob *.rs · 25*4\n\n\
+Coding: export ZEROZ_CODING=1 ZEROZ_AGENT=1 (see /perms)."
     )
-}
-
-fn extract_place(msg: &str) -> Option<String> {
-    let lower = msg.to_lowercase();
-    if !lower.starts_with('/') {
-        crate::buddy::on_user_message();
-    }
-
-    for key in [" in ", " at ", " for "] {
-        if let Some(i) = lower.find(key) {
-            let rest = msg[i + key.len()..].trim().trim_matches('?');
-            if rest.is_empty() {
-                continue;
-            }
-            // stop at "and" / comma for multi-intent
-            let cut = rest
-                .split(|c| c == ',' || c == '?')
-                .next()
-                .unwrap_or(rest);
-            let cut = cut
-                .split_whitespace()
-                .take_while(|w| {
-                    let l = w.to_lowercase();
-                    l != "and" && l != "aur" && l != "time" && l != "date"
-                })
-                .take(3)
-                .collect::<Vec<_>>()
-                .join(" ");
-            if !cut.is_empty() {
-                return Some(cut);
-            }
-        }
-    }
-    None
-}
-
-fn strip_wiki_topic(msg: &str) -> String {
-    let mut t = msg.to_lowercase();
-    for p in [
-        "wikipedia",
-        "who is ",
-        "who was ",
-        "what is ",
-        "tell me about ",
-        "ke bare mein ",
-        "kaun hai ",
-    ] {
-        if let Some(s) = t.strip_prefix(p) {
-            t = s.to_string();
-        }
-        t = t.replace(p, "");
-    }
-    t.trim().trim_matches('?').to_string()
 }
 
 #[cfg(test)]
@@ -1047,24 +911,6 @@ mod tests {
         let r = handle("hi sir", &Config::default());
         assert!(r.text.to_lowercase().contains("hi") || r.text.contains("0zcode"));
         assert!(!r.refused);
-    }
-
-    #[test]
-    fn how_time_matches() {
-        let r = handle("how time", &Config::default());
-        assert!(r.tool_names.iter().any(|n| *n == "time") || r.text.contains("UTC") || r.text.contains("device"));
-    }
-
-    #[test]
-    fn google_sentence_not_units() {
-        let r = handle("go google to finds code to hello worlds", &Config::default());
-        assert!(!r.tool_names.iter().any(|n| *n == "units"));
-    }
-
-    #[test]
-    fn place_stops_at_and() {
-        let p = extract_place("weather in Delhi and what time");
-        assert_eq!(p.as_deref(), Some("Delhi"));
     }
 
     #[test]

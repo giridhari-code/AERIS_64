@@ -81,7 +81,17 @@ const CODE_MARKERS: &[&str] = &[
     "bug fix karo",
 ];
 
+/// Opt-in: `ZEROZ_CODING=1` opens the coding surface (needed for `/code`).
+pub fn coding_enabled() -> bool {
+    std::env::var("ZEROZ_CODING")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 pub fn is_code_request(text: &str) -> bool {
+    if coding_enabled() {
+        return false;
+    }
     let t = text.to_lowercase();
     CODE_MARKERS.iter().any(|m| t.contains(m))
 }

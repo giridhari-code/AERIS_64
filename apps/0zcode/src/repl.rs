@@ -40,24 +40,18 @@ pub fn run(cfg: &Config) -> ExitCode {
 /// Which tool a message most likely hits (progress label only — routing is in `agent`).
 pub fn tool_hint(msg: &str) -> &'static str {
     let l = msg.to_lowercase();
-    if l.contains("weather") || l.contains("mausam") {
-        "weather"
-    } else if l.contains("time") || l.contains("tarikh") {
-        "time"
-    } else if l.contains("wiki") || l.starts_with("who ") {
-        "wikipedia"
+    if l.starts_with("/code") || l.starts_with("code:") {
+        "code"
+    } else if l.starts_with("glob ") || l.starts_with("find files ") {
+        "glob"
+    } else if l.starts_with("grep ") {
+        "grep"
+    } else if l.starts_with("read ") || l.starts_with("cat ") {
+        "read"
+    } else if l.starts_with("shell ") || l.starts_with("$ ") {
+        "shell"
     } else if l.contains("search") || l.contains("news") {
         "search"
-    } else if l.contains("usd") || l.contains("inr") {
-        "currency"
-    } else if l.contains("github") {
-        "github"
-    } else if l.contains("btc") || l.contains("crypto") {
-        "crypto"
-    } else if l.contains("headline") || l == "news" {
-        "headlines"
-    } else if l.contains(" km") || l.contains(" to mi") || l.contains(" to f") {
-        "units"
     } else if l.chars().any(|c| "+-*/".contains(c)) {
         "calculator"
     } else {
@@ -1062,9 +1056,9 @@ mod tests {
 
     #[test]
     fn hints_route_labels() {
-        assert_eq!(tool_hint("weather in Delhi"), "weather");
+        assert_eq!(tool_hint("glob src/**/*.rs"), "glob");
         assert_eq!(tool_hint("938+29"), "calculator");
-        assert_eq!(tool_hint("10 usd to inr"), "currency");
+        assert_eq!(tool_hint("/code fix the test"), "code");
         assert_eq!(tool_hint("hello"), "tools");
     }
 

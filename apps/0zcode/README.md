@@ -1,6 +1,6 @@
 # 0zcode
 
-**Company-standard terminal agent** — Claude Code / OpenCode visual language · research & ops tools · **zero source code**.
+**Terminal coding agent** — Claude Code / OpenCode visual language · core tools: read · list · glob · grep · edit · write · shell · fetch · search (coding is opt-in).
 
 | | |
 |--|--|
@@ -8,7 +8,7 @@
 | Crate | `zeroz` |
 | Version | 1.3.1 |
 | UI | **std only** (raw mode via `stty`, no external crates) |
-| Policy | No code write / edit / execute |
+| Policy  | Coding opt-in (`ZEROZ_CODING=1`); write/shell ask approval |
 | LLM | AERIS-64 chat + live streaming via `ZEROZ_AERIS_URL` |
 
 ## Rust backend (core engine link)
@@ -62,7 +62,8 @@ On launch, **0zcode auto-starts AERIS-64** at `http://127.0.0.1:8000` when it is
 
 ```text
 0zcode                         # interactive TUI
-0zcode "Weather in Mumbai?"
+0zcode "read README.md"
+0zcode "glob src/**/*.rs"
 0zcode "write python code"     # policy refuse (exit 2)
 0zcode tools
 0zcode --version
@@ -116,7 +117,7 @@ Slash: `/help` `/tools` `/mcp` `/history` `/status` `/model` `/version`
 
 ### Network permission
 
-Weather, search, wiki, FX, github, crypto prompts are network tools. In TUI they run with spinner; Esc interrupts.
+Web search and page fetch are the only network tools. In TUI they run with spinner; Esc interrupts. (Weather, time, wiki, FX, crypto, headlines, email and unit tools were removed.)
 
 ### Config
 
@@ -150,7 +151,7 @@ http_timeout_secs = 12
 
 ### AERIS-64 link (real LLM)
 
-Anything no tool can answer — chat, open questions, Hinglish — goes to your AERIS-64 / SENTINEL server. Tools still win when one matches (`938+29`, `weather in Mumbai`), and coding requests are refused by policy *before* any model call.
+Anything no tool can answer — chat, open questions, Hinglish — goes to your AERIS-64 / SENTINEL server. Tools still win when one matches (`938+29`, `glob *.rs`), and coding requests are refused by policy *before* any model call unless `ZEROZ_CODING=1`.
 
 ```bash
 scripts/zeroz/run_aeris.sh        # starts the server, waits for the model, runs 0zcode, stops the server
@@ -167,6 +168,19 @@ ZEROZ_AERIS_URL=http://127.0.0.1:8000 0zcode
 * With the model linked, a `?` question that matches no tool goes to the model instead of a web search.
 * The model does not see tool results yet; it answers from its own weights and session history.
 * `ZEROZ_OFFLINE=1` disables the link.
+
+## `/code` — model-driven coding loop (opt-in)
+
+The model decides each step (like Claude Code): model → one `TOOL ...` line → result goes back → repeat until `DONE`.
+
+```
+export ZEROZ_CODING=1 ZEROZ_AGENT=1 ZEROZ_WRITE=1 ZEROZ_SHELL=1
+0zcode            # then:  /code fix the failing test in src/tools.rs
+```
+
+Tools: `list` `read <path> [start] [n]` `grep` `edit` `write` `mkdir` `shell` (allowlist). `edit`/`write` take a
+`<<<< … ==== … >>>>` block (safe for code with `|`). Writes and shell still ask Human Approval (`ZEROZ_APPROVAL`).
+`ZEROZ_AGENT_MAX_STEPS` (default 12), `ZEROZ_CODE_MAX_TOKENS` (default 1024). Without `ZEROZ_CODING=1` the coding policy stays closed.
 
 ## Test
 

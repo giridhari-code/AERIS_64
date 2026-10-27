@@ -130,7 +130,7 @@ pub fn run_kind(
 
 // Planner lives in `subagents::plan` — harness only executes TOOL steps.
 
-fn execute_action(action: &str) -> Result<ToolOutput> {
+pub fn execute_action(action: &str) -> Result<ToolOutput> {
     let a = action.trim();
     if a.starts_with("DONE") {
         return Ok(ToolOutput {
