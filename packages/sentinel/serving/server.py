@@ -8,6 +8,13 @@ Request lifecycle (DeepInfer-style phases, single-stream):
   5. FINALIZE — detokenize, cut markers, FINISHED → response
 
 No continuous batching / paged KV: one Sequence under one lock.
+
+Real-user serve (NEUROFIELD_ENV=production):
+  - API keys required (X-API-Key)
+  - No demo checkpoint fallback
+  - Rate limit + max in-flight generates
+  - Security headers; OpenAPI off by default
+  - Session state (incl. J-space) is per Sequence — never shared across users
 """
 
 from __future__ import annotations
@@ -24,9 +31,11 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from sentinel import __version__
 from sentinel.model_executor import (
@@ -35,10 +44,19 @@ from sentinel.model_executor import (
     load_model as exec_load_model,
     sample_from_logits as exec_sample_from_logits,
 )
+from sentinel.serving.auth import (
+    client_ip,
+    get_api_keys,
+    rate_limit_from_env,
+    require_api_key,
+)
+from sentinel.serving.production import load_profile, security_headers
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
+# Max concurrent generate attempts (still serial on _lock; limits waiters / memory)
+_inflight = threading.Semaphore(int(os.environ.get("NEUROFIELD_MAX_INFLIGHT", "4")))
 _runner: Optional[ModelRunner] = None
 _encode = None
 _decode = None
@@ -298,17 +316,19 @@ async def lifespan(app: FastAPI):
     yield
 
 
+
 def create_app(
     checkpoint: Optional[str] = None,
     config_path: Optional[str] = None,
     device: str = "cpu",
 ) -> FastAPI:
+    profile = load_profile()
     checkpoint = checkpoint or _env("CHECKPOINT")
     config_path = config_path or _env("CONFIG") or None
     device = _env("DEVICE", device) or "cpu"
     product = _env("PRODUCT", "SENTINEL") or "SENTINEL"
 
-    if not checkpoint:
+    if not checkpoint and profile.allow_demo_checkpoint:
         for candidate in (
             Path("checkpoints/examples/AERIS_main"),
             Path(__file__).resolve().parents[3] / "checkpoints" / "examples" / "AERIS_main",
@@ -317,26 +337,58 @@ def create_app(
                 checkpoint = str(candidate)
                 break
 
+    keys = get_api_keys()
+    issues = profile.issues(has_api_keys=bool(keys), checkpoint_set=bool(checkpoint))
+    if issues:
+        for msg in issues:
+            logger.error("production config: %s", msg)
+        if profile.production:
+            raise RuntimeError("production misconfigured: " + "; ".join(issues))
+
     app = FastAPI(
         title=f"{product} API",
-        description="Model-only SENTINEL — DeepInfer-style request lifecycle (single-stream)",
+        description="Model-only SENTINEL — real-user serve profile available",
         version=__version__,
         lifespan=lifespan,
+        docs_url="/docs" if profile.expose_docs else None,
+        redoc_url="/redoc" if profile.expose_docs else None,
+        openapi_url="/openapi.json" if profile.expose_docs else None,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+
+    cors_origins = _env("CORS_ORIGINS", "*" if not profile.production else "")
+    origins = [o.strip() for o in cors_origins.split(",") if o.strip()] if cors_origins else []
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["*"],
+        )
+
+    class _SecurityHeaders(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            resp = await call_next(request)
+            for k, v in security_headers().items():
+                resp.headers.setdefault(k, v)
+            return resp
+
+    app.add_middleware(_SecurityHeaders)
+
+    limiter = rate_limit_from_env()
 
     if checkpoint:
         try:
             load_model(checkpoint, config_path, device)
         except Exception as e:  # noqa: BLE001
             logger.exception("Failed to load checkpoint %s: %s", checkpoint, e)
+            if profile.production:
+                raise
     else:
-        logger.warning("No NEUROFIELD_CHECKPOINT")
+        logger.warning("No NEUROFIELD_CHECKPOINT — /readyz will be 503")
+
+    def _gate(request: Request, api_key: Optional[str]) -> None:
+        key = api_key or client_ip(request)
+        limiter.check(key)
 
     def _run_chat(
         user_text: str,
@@ -347,14 +399,20 @@ def create_app(
         seed: Optional[int],
         session_id: Optional[str],
     ) -> ChatResponse:
-        params = SamplingParams(
-            max_tokens=max_new,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            seed=seed,
-        )
+        if not _inflight.acquire(blocking=False):
+            raise HTTPException(
+                status_code=503,
+                detail="server busy — try again",
+                headers={"Retry-After": "1"},
+            )
         try:
+            params = SamplingParams(
+                max_tokens=max_new,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                seed=seed,
+            )
             seq = add_request(user_text, params)
             seq = engine_run(seq)
             return ChatResponse(
@@ -372,6 +430,8 @@ def create_app(
                 status_code=500,
                 detail=f"generate error: {type(e).__name__}: {e}",
             ) from e
+        finally:
+            _inflight.release()
 
     @app.get("/")
     def root():
@@ -379,42 +439,14 @@ def create_app(
             "product": product,
             "version": __version__,
             "mode": "model-only",
-            "docs": "docs/INFERENCE_ENGINE.md",
-            "lifecycle": [
-                "ADD",
-                "SCHEDULE",
-                "PREFILL",
-                "DECODE_SAMPLE_LOOP",
-                "FINALIZE",
-            ],
-            "architecture": {
-                "high_level": "FastAPI → serial engine_run → SENTINEL.forward(state)",
-                "main_pieces": [
-                    "Sequence",
-                    "SamplingParams",
-                    "engine_run",
-                    "SENTINEL executor",
-                    "sampler",
-                ],
-                "model_executor": "packages/sentinel/model_executor (runner+loader)",
-                "parallelism": {
-                    "inference": "single_device_serial",
-                    "training": "ddp_and_mesh_hooks",
-                },
-                "speculative_mtp_dspark": "not_implemented",
-                "sampling": {
-                    "temperature": True,
-                    "top_p": True,
-                    "top_k": True,
-                    "seed": True,
-                    "structured_output": "stop_markers_only",
-                },
-                "async_scheduling": "fastapi_async_routes_sync_generate_under_lock",
-                "production_ready": "research_single_user_only",
-            },
+            "env": "production" if profile.production else "development",
+            "auth": "required" if keys else "open",
+            "docs": "docs/SERVING_REAL_USERS.md",
+            "lifecycle": ["ADD", "SCHEDULE", "PREFILL", "DECODE_SAMPLE_LOOP", "FINALIZE"],
+            "isolation": "per-sequence state including rule-mode J-space",
             "chat": "POST /v1/chat",
             "openai_chat": "POST /v1/chat/completions",
-            "ready": _model is not None,
+            "ready": _runner is not None,
         }
 
     @app.get("/healthz")
@@ -424,20 +456,24 @@ def create_app(
 
     @app.get("/readyz")
     def readyz():
-        if _model is None:
+        if _runner is None:
             raise HTTPException(status_code=503, detail="model not loaded")
         return {
             "status": "ready",
             "device": str(_device),
             "model": _model_id,
             "checkpoint": _checkpoint_path,
-            "has_tokenizer": _encode is not None,
-            "mode": "model-only",
+            "env": "production" if profile.production else "development",
             "scheduler": "serial-lock",
+            "max_inflight": int(os.environ.get("NEUROFIELD_MAX_INFLIGHT", "4")),
         }
 
     @app.get("/v1/models")
-    def models():
+    def models(
+        request: Request,
+        api_key: Optional[str] = Depends(require_api_key),
+    ):
+        _gate(request, api_key)
         return {
             "object": "list",
             "data": [
@@ -445,13 +481,18 @@ def create_app(
                     "id": _model_id or "aeris",
                     "object": "model",
                     "owned_by": "sentinel",
-                    "ready": _model is not None,
+                    "ready": _runner is not None,
                 }
             ],
         }
 
     @app.post("/v1/chat", response_model=ChatResponse)
-    def chat(req: ChatRequest):
+    def chat(
+        req: ChatRequest,
+        request: Request,
+        api_key: Optional[str] = Depends(require_api_key),
+    ):
+        _gate(request, api_key)
         return _run_chat(
             req.prompt,
             req.max_new_tokens,
@@ -463,7 +504,12 @@ def create_app(
         )
 
     @app.post("/v1/chat/completions")
-    def chat_completions(req: OAChatRequest):
+    def chat_completions(
+        req: OAChatRequest,
+        request: Request,
+        api_key: Optional[str] = Depends(require_api_key),
+    ):
+        _gate(request, api_key)
         parts: List[str] = []
         for m in req.messages:
             role = (m.role or "user").lower()
@@ -504,22 +550,29 @@ def create_app(
         }
 
     @app.post("/v1/completions", response_model=CompletionResponse)
-    def completions(req: CompletionRequest):
+    def completions(
+        req: CompletionRequest,
+        request: Request,
+        api_key: Optional[str] = Depends(require_api_key),
+    ):
+        _gate(request, api_key)
         _need_model()
-        params = SamplingParams(
-            max_tokens=req.max_new_tokens,
-            temperature=req.temperature,
-            top_p=req.top_p,
-            top_k=req.top_k,
-            seed=req.seed,
-        )
-        seq = Sequence(
-            request_id=uuid.uuid4().hex[:12],
-            prompt_text="",
-            prompt_ids=_to_id_list(req.input_ids),
-            params=params,
-        )
+        if not _inflight.acquire(blocking=False):
+            raise HTTPException(status_code=503, detail="server busy — try again")
         try:
+            params = SamplingParams(
+                max_tokens=req.max_new_tokens,
+                temperature=req.temperature,
+                top_p=req.top_p,
+                top_k=req.top_k,
+                seed=req.seed,
+            )
+            seq = Sequence(
+                request_id=uuid.uuid4().hex[:12],
+                prompt_text="",
+                prompt_ids=_to_id_list(req.input_ids),
+                params=params,
+            )
             seq = engine_run(seq)
             return CompletionResponse(
                 output_ids=seq.output_ids,
@@ -528,5 +581,7 @@ def create_app(
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"generate error: {e}") from e
+        finally:
+            _inflight.release()
 
     return app
