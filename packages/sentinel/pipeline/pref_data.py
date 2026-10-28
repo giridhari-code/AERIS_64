@@ -113,8 +113,10 @@ class PreferenceDataset(Dataset):
         return {
             "chosen_x": pc["x"],
             "chosen_y": pc["y"],
+            "chosen_m": pc["m"],
             "rejected_x": pr["x"],
             "rejected_y": pr["y"],
+            "rejected_m": pr["m"],
         }
 
     def _pack(self, prompt: str, response: str) -> dict[str, torch.Tensor]:
@@ -123,11 +125,23 @@ class PreferenceDataset(Dataset):
         if len(ids) < 2:
             raise ValueError("encoded sequence too short; check tokenizer and data")
         t = torch.tensor(ids, dtype=torch.long)
-        return {"x": t[:-1], "y": t[1:]}
+        # response mask over the targets y = ids[1:]: 1 on response tokens, 0 on the prompt.
+        # (BPE merges at the prompt/response boundary can shift the start by one token.)
+        n_prompt = len(self.encode(f"{prompt}\n"))
+        m = torch.zeros(t.numel() - 1, dtype=torch.long)
+        m[min(max(n_prompt - 1, 0), m.numel()):] = 1
+        return {"x": t[:-1], "y": t[1:], "m": m}
 
 
 class SFTTextDataset(Dataset):
-    def __init__(self, path: str, tokenizer_encode: EncodeFn, max_len: int = 256):
+    def __init__(
+        self,
+        path: str,
+        tokenizer_encode: EncodeFn,
+        max_len: int = 256,
+        append_end: bool = True,
+        end_text: str = "<|end|>",
+    ):
         p = Path(path)
         if not p.is_file():
             raise FileNotFoundError(f"SFT file not found: {path}")
@@ -143,6 +157,9 @@ class SFTTextDataset(Dataset):
         self.rows = rows
         self.encode = tokenizer_encode
         self.max_len = max_len
+        # Every example must end with an end marker, otherwise the model never learns to stop.
+        self.end_text = end_text
+        self._end_ids = list(tokenizer_encode(end_text)) if append_end else []
         if not self.rows:
             raise ValueError(f"No SFT text in {path}")
 
@@ -150,19 +167,29 @@ class SFTTextDataset(Dataset):
         return len(self.rows)
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
-        ids = self.encode(self.rows[idx])[: self.max_len + 1]
+        row = self.rows[idx]
+        ids = list(self.encode(row))
+        if self._end_ids and not row.rstrip().endswith(self.end_text):
+            ids = ids + self._end_ids  # appended BEFORE truncation: truncated rows stay "unfinished"
+        ids = ids[: self.max_len + 1]
         if len(ids) < 2:
             raise ValueError("encoded sequence too short; check tokenizer and data")
         t = torch.tensor(ids, dtype=torch.long)
         return {"input_ids": t[:-1], "targets": t[1:]}
 
 
-def collate_pad(batch: list[dict[str, torch.Tensor]], keys: list[str]) -> dict[str, torch.Tensor]:
+def collate_pad(
+    batch: list[dict[str, torch.Tensor]],
+    keys: list[str],
+    pad_values: dict[str, int] | None = None,
+) -> dict[str, torch.Tensor]:
+    """Right-pad each key. Default pad is 0; pass e.g. {"targets": -100} so the LM loss ignores padding."""
     out: dict[str, torch.Tensor] = {}
     for k in keys:
         seqs = [b[k] for b in batch]
         max_t = max(s.size(0) for s in seqs)
-        padded = torch.zeros(len(seqs), max_t, dtype=torch.long)
+        fill = int((pad_values or {}).get(k, 0))
+        padded = torch.full((len(seqs), max_t), fill, dtype=torch.long)
         for i, s in enumerate(seqs):
             padded[i, : s.size(0)] = s
         out[k] = padded
@@ -171,16 +198,19 @@ def collate_pad(batch: list[dict[str, torch.Tensor]], keys: list[str]) -> dict[s
 
 def preference_loader(path, encode, batch_size, max_len, num_workers=0):
     ds = PreferenceDataset(path, encode, max_len=max_len)
-    keys = ["chosen_x", "chosen_y", "rejected_x", "rejected_y"]
+    keys = ["chosen_x", "chosen_y", "chosen_m", "rejected_x", "rejected_y", "rejected_m"]
     return DataLoader(
         ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
         collate_fn=lambda b: collate_pad(b, keys), drop_last=True,
     )
 
 
-def sft_loader(path, encode, batch_size, max_len, num_workers=0):
-    ds = SFTTextDataset(path, encode, max_len=max_len)
+def sft_loader(path, encode, batch_size, max_len, num_workers=0, append_end=True):
+    ds = SFTTextDataset(path, encode, max_len=max_len, append_end=append_end)
+    # targets padded with -100 (ignore_index of the model CE); preference loaders keep 0-padding
+    # because rlhf.rewards.sequence_logprob gathers on the targets and cannot take -100.
     return DataLoader(
         ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
-        collate_fn=lambda b: collate_pad(b, ["input_ids", "targets"]), drop_last=True,
+        collate_fn=lambda b: collate_pad(b, ["input_ids", "targets"], {"targets": -100}),
+        drop_last=True,
     )

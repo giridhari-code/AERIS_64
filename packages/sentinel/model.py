@@ -377,10 +377,11 @@ class SENTINEL(nn.Module):
             k_depth = max(1, int(k_depth))
         elif not ab.use_metacognition:
             k_depth = max(1, int(ab.fixed_k))
-        elif T == 1:
-            k_depth = k_from_meta  # decode / generate: adaptive effort
+        elif T == 1 and bool(getattr(self.cfg, "adaptive_decode_depth", False)):
+            k_depth = k_from_meta  # opt-in adaptive effort (train/decode depth mismatch + carry reset)
         else:
-            k_depth = max(1, int(self.cfg.k_max))  # train/prefill: full depth, parallel
+            # train / prefill / decode: same depth k_max, so per-pass memory carry is never dropped
+            k_depth = max(1, int(self.cfg.k_max))
 
         X = self.drop(self.embed(input_ids))  # (B, T, D)
         W = self.dendrite.window
@@ -422,6 +423,12 @@ class SENTINEL(nn.Module):
         M_new: list[Tensor] = []
         D_new: list[Tensor] = []
         R_new: list[Tensor] = []
+        # running surprise sum per pass (so the relative-surprise baseline is identical for one-call,
+        # chunked and token-by-token decoding); only valid when the pass carry itself is valid
+        _sc = state.get("S_cum")
+        Scum_prev = _sc if (carried and isinstance(_sc, list) and len(_sc) == k_depth) else [None] * k_depth
+        n_seen_prev = int(state.get("S_n") or 0) if Scum_prev[0] is not None else 0
+        Scum_new: list[Tensor] = []
 
         # slow-ring write cadence must match decoding: one snapshot per `segment_len` tokens (counted across calls)
         seg_cnt = int(state.get("seg_pos") or 0)
@@ -463,8 +470,12 @@ class SENTINEL(nn.Module):
                 activity = H.abs().mean(dim=-1)  # (B, T)
                 # δ from causal relative surprise (cumsum) — no future tokens in the baseline.
                 # Metacognition owns k (decode), want_replay, bar_S tracking separately.
-                t_idx = torch.arange(1, T + 1, device=S.device, dtype=S.dtype).view(1, T)
-                cmean = S.detach().cumsum(dim=-1) / t_idx
+                t_idx = torch.arange(1, T + 1, device=S.device, dtype=S.dtype).view(1, T) + float(n_seen_prev)
+                cs = S.detach().cumsum(dim=-1)
+                if Scum_prev[_j] is not None:
+                    cs = cs + Scum_prev[_j].to(device=cs.device, dtype=cs.dtype)
+                cmean = cs / t_idx
+                Scum_new.append(cs[:, -1:].detach())
                 rel = S / cmean.clamp(min=1e-4)
                 delta = torch.zeros_like(S)
                 delta = torch.where(rel > 1.5, torch.full_like(delta, 0.5), delta)
@@ -611,6 +622,8 @@ class SENTINEL(nn.Module):
                 O + self.mem_scale * self.P_f(R) + self.slow_scale * self.P_s(U)
             )
         )
+        if bool(getattr(self.cfg, "scale_tied_logits", False)):
+            logits = logits * (float(self.cfg.d_model) ** -0.5)
 
         loss = None
         # Host metrics only when collecting (log / audit) — avoid per-step GPU sync
@@ -760,6 +773,8 @@ class SENTINEL(nn.Module):
             "M_pass": M_new,
             "D_pass": D_new,
             "R_pass": R_new,
+            "S_cum": Scum_new,
+            "S_n": n_seen_prev + T,
             "slow_slots": slow_slots,
             "slow_filled": slow_filled,
             "slow_ptr": slow_ptr,

@@ -520,7 +520,7 @@ class Trainer:
                         input_ids,
                         targets=targets,
                         collect_stats=False,
-                        write_slow=False,
+                        write_slow=True,  # same forward as training (slow ring ON)
                     )
                 logits = out.logits.float()
                 ce_t = torch.nn.functional.cross_entropy(

@@ -53,6 +53,15 @@ class ModelConfig:
     pred_coarse_horizon: int = 16
     lambda_err_mid: float = 0.05
     lambda_err_coarse: float = 0.02
+    # False (default): decode (T=1) runs the same depth k_max as training/prefill.
+    # True: metacognition picks k per token. NOTE: training always uses k_max, and a change
+    # of k between calls discards every per-pass memory carry, so only enable this if you
+    # also train with variable depth.
+    adaptive_decode_depth: bool = False
+    # True: logits *= d_model**-0.5. With tie_embeddings the default N(0,1) embedding gives
+    # logit std ~sqrt(d_model) and initial CE ~130 instead of ~ln(vocab). Changes the function:
+    # enable for NEW training runs only (existing checkpoints were trained without it).
+    scale_tied_logits: bool = False
 
 
 @dataclass

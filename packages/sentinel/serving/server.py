@@ -30,6 +30,19 @@ _device = torch.device("cpu")
 _model_id = ""
 _amp_dtype: Optional[torch.dtype] = None
 _checkpoint_path = ""
+# Generation must stop when the model starts a new turn / ends its answer.
+_STOP_MARKERS = ("<|end|>", "<|user|>", "<|system|>")
+_stop_ids: set[int] = set()
+
+
+def _cut_at_markers(text: str) -> str:
+    """Drop everything from the first stop marker on (also covers tokenizers without special ids)."""
+    cut = len(text)
+    for m in _STOP_MARKERS + ("\nUser:",):
+        i = text.find(m)
+        if i != -1:
+            cut = min(cut, i)
+    return text[:cut].strip()
 
 
 def _env(key: str, default: str = "") -> str:
@@ -37,7 +50,7 @@ def _env(key: str, default: str = "") -> str:
 
 
 def load_model(checkpoint: str, config_path: Optional[str], device: str) -> None:
-    global _model, _encode, _decode, _device, _model_id, _amp_dtype, _checkpoint_path
+    global _model, _encode, _decode, _device, _model_id, _amp_dtype, _checkpoint_path, _stop_ids
     want = device or "cpu"
     _device = torch.device(want if (want == "cpu" or torch.cuda.is_available()) else "cpu")
     model, tok, _full_cfg, meta = load_model_from_checkpoint(
@@ -56,7 +69,16 @@ def load_model(checkpoint: str, config_path: Optional[str], device: str) -> None
             model.meta.track_global = False
         except Exception:
             pass
+    stop_ids: set[int] = set()
+    for marker in _STOP_MARKERS:  # only markers the tokenizer encodes as ONE id can be used as stop ids
+        try:
+            ids = _to_id_list(tok.encode(marker))
+        except Exception:  # noqa: BLE001
+            continue
+        if len(ids) == 1:
+            stop_ids.add(ids[0])
     with _lock:
+        _stop_ids = stop_ids
         _amp_dtype = amp[dtype_name]
         _encode, _decode = tok.encode, tok.decode
         _model = model
@@ -109,7 +131,7 @@ def _generate(input_ids: list[int], max_new: int, temperature: float) -> tuple[l
                     state=state,
                     targets=None,
                     collect_stats=False,
-                    write_slow=False,
+                    write_slow=True,  # training writes the slow ring; serving must too
                 )
             state = out.state
             logits = out.logits[0, -1].float()
@@ -118,6 +140,8 @@ def _generate(input_ids: list[int], max_new: int, temperature: float) -> tuple[l
             else:
                 probs = torch.softmax(logits / max(temperature, 1e-5), dim=-1)
                 nid = int(torch.multinomial(probs, 1).item())
+            if nid in _stop_ids:
+                return new_tokens, (time.perf_counter() - t0) * 1000.0
             new_tokens.append(nid)
             # Decode step-by-step
             for _ in range(max_new - 1):
@@ -128,7 +152,7 @@ def _generate(input_ids: list[int], max_new: int, temperature: float) -> tuple[l
                         state=state,
                         targets=None,
                         collect_stats=False,
-                        write_slow=False,
+                        write_slow=True,
                     )
                 state = out.state
                 logits = out.logits[0, -1].float()
@@ -137,6 +161,8 @@ def _generate(input_ids: list[int], max_new: int, temperature: float) -> tuple[l
                 else:
                     probs = torch.softmax(logits / max(temperature, 1e-5), dim=-1)
                     nid = int(torch.multinomial(probs, 1).item())
+                if nid in _stop_ids:
+                    break
                 new_tokens.append(nid)
     return new_tokens, (time.perf_counter() - t0) * 1000.0
 
@@ -267,7 +293,7 @@ def create_app(
             if len(ids) > 512:
                 ids = ids[-512:]
             new_ids, lat = _generate(ids, req.max_new_tokens, req.temperature)
-            text = (_decode(new_ids) or "").strip()
+            text = _cut_at_markers(_decode(new_ids) or "")
             sid = req.session_id or "default"
             return ChatResponse(text=text, session_id=sid, latency_ms=lat, model=_model_id)
         except HTTPException:
