@@ -148,6 +148,18 @@ class Trainer:
             tensor_parallel_size=int(getattr(tc, "tensor_parallel_size", 1) or 1),
             pipeline_parallel_size=int(getattr(tc, "pipeline_parallel_size", 1) or 1),
         )
+        if self.parallel.pp_size > 1:
+            logger.warning(
+                "pipeline_parallel_size>1: pipeline parallel is a stub (the model is not split); "
+                "these ranks just act as extra data-parallel replicas"
+            )
+        if self.parallel.tp_size > 1 and os.environ.get("SENTINEL_EXPERIMENTAL_TP") != "1":
+            raise NotImplementedError(
+                "tensor_parallel_size>1 is not usable yet: the head all_gather is not differentiable "
+                "(no CE gradient reaches the model), column-parallel layers miss the backward all-reduce, "
+                "tied embeddings get untied, DDP averages different TP shards, and checkpoints keep one "
+                "shard. Use tensor_parallel_size=1 (plain DDP), or set SENTINEL_EXPERIMENTAL_TP=1 to override."
+            )
         if self.parallel.tp_size > 1:
             apply_tensor_parallel(self.model, self.parallel)
             self.model.to(self.device)

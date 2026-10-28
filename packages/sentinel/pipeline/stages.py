@@ -449,19 +449,42 @@ def stage_rlhf_ppo(ctx: PipelineContext) -> None:
     ctx.save_model("rlhf_ppo")
 
 
+def _masked_forward_kl(s_logits: torch.Tensor, t_logits: torch.Tensor, valid: torch.Tensor) -> torch.Tensor:
+    """Token-mean KL(teacher || student) over `valid` (B, T) positions.
+
+    Same scale as the per-token CE (independent of sequence length); the old
+    kl_div(..., "batchmean") summed over every token and was ~T times larger than the CE.
+    """
+    s_logp = torch.log_softmax(s_logits.float(), dim=-1)
+    t_logp = torch.log_softmax(t_logits.float(), dim=-1)
+    kl_tok = (t_logp.exp() * (t_logp - s_logp)).sum(dim=-1)
+    v = valid.to(kl_tok.dtype)
+    return (kl_tok * v).sum() / v.sum().clamp(min=1.0)
+
+
 @register("opd")
 def stage_opd(ctx: PipelineContext) -> None:
-    """Online Preference Distillation: distill preferred policy into student via KL + CE.
+    """Online Preference Distillation: CE on chosen responses + KL(teacher || student).
 
-    Teacher = current ref (or frozen preference-tuned weights);
-    student = active model. Minimizes KL(student || teacher) on chosen responses
-    plus standard CE — online distillation for deployment-sized models.
+    teacher: "current" (default) = frozen snapshot of the model as it enters this stage, i.e. the
+    preference-tuned policy. "ref" = the DPO-time reference (the PRE-preference model), which pulls the
+    student back towards the unaligned model - only use it if that is really what you want.
     """
     sc = ctx.stage_cfg.get("opd", {})
     path = _require_path(ctx.prefs_path or ctx.sft_path or sc.get("data"), "opd", "--prefs or --sft-data")
-    if ctx.ref_model is None:
-        ctx.freeze_as_ref()
-    logger.info("=== STAGE: opd (online preference distillation) ===")
+    teacher_src = str(sc.get("teacher", "current"))
+    if teacher_src == "ref":
+        if ctx.ref_model is None:
+            ctx.freeze_as_ref()
+        teacher = ctx.ref_model
+    else:
+        import copy
+
+        teacher = copy.deepcopy(ctx.model)
+        teacher.eval()
+        for p in teacher.parameters():
+            p.requires_grad_(False)
+    logger.info("=== STAGE: opd (online preference distillation, teacher=%s) ===", teacher_src)
     steps = int(sc.get("max_steps", 400))
     lr = float(sc.get("lr", 5e-5))
     kl_w = float(sc.get("kl_weight", 0.5))
@@ -486,16 +509,15 @@ def stage_opd(ctx: PipelineContext) -> None:
             if use_pref:
                 x = batch["chosen_x"].to(ctx.device)
                 y = batch["chosen_y"].to(ctx.device)
+                valid = batch["chosen_m"].to(ctx.device).bool()  # response tokens only
             else:
                 x = batch["input_ids"].to(ctx.device)
                 y = batch["targets"].to(ctx.device)
-            out = ctx.model(x, targets=y)
+                valid = y != -100  # sft_loader pads targets with -100
+            out = ctx.model(x, targets=y.masked_fill(~valid, -100))
             with torch.no_grad():
-                t_out = ctx.ref_model(x, targets=y)
-                t_logp = torch.nn.functional.log_softmax(t_out.logits, dim=-1)
-            s_logp = torch.nn.functional.log_softmax(out.logits, dim=-1)
-            # KL(student || teacher) tokenwise
-            kl = torch.nn.functional.kl_div(s_logp, t_logp.exp(), reduction="batchmean")
+                t_logits = teacher(x, collect_stats=False).logits
+            kl = _masked_forward_kl(out.logits, t_logits, valid)
             loss = out.loss + kl_w * kl
             opt.zero_grad(set_to_none=True)
             loss.backward()
