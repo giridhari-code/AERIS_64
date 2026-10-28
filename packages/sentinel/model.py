@@ -29,6 +29,7 @@ from sentinel.modules import (
     HierarchicalPredictor,
     Predictor,
     Metacognition,
+    GlobalWorkspace,
 )
 
 
@@ -165,7 +166,13 @@ class SENTINEL(nn.Module):
             self.mem_scale.fill_(2.0)
             self.slow_scale.fill_(1.5)
 
+        # Learned global workspace (opt-in). "rule" = legacy slot bank, old state_dict keys unchanged.
+        _ws_learned_cfg = (
+            str(getattr(cfg, "workspace_mode", "rule") or "rule").lower() == "learned"
+            and int(cfg.jspace_dim) > 0
+        )
         self.meta = Metacognition(
+            external_workspace=_ws_learned_cfg,
             k_max=cfg.k_max,
             jspace_slots=int(cfg.jspace_slots),
             jspace_dim=int(cfg.jspace_dim),
@@ -181,6 +188,18 @@ class SENTINEL(nn.Module):
             c.deliberate_threshold = float(cfg.consciousness_deliberate_threshold)
         self._last_jspace_broadcast = None
         self._last_consciousness = None
+        if _ws_learned_cfg:
+            self.workspace = GlobalWorkspace(
+                cfg.d_model,
+                int(cfg.jspace_dim),
+                n_atoms=int(cfg.ws_atoms),
+                k_active=int(cfg.ws_k_active),
+                rank=int(cfg.ws_rank),
+            )
+        else:
+            self.workspace = None
+        self._ws_steer: Optional[Tensor] = None   # optional (n_atoms,) steering vector (experiments)
+        self._last_ws_code: Optional[Tensor] = None  # detached code of the last read (interpretability)
         self.drop = nn.Dropout(cfg.dropout)
         # BPTT truncate for fast-M scan (can be long). Slow ring writes MORE often
         # so the context path actually fills during typical train seq lengths.
@@ -264,6 +283,38 @@ class SENTINEL(nn.Module):
             "seg_pos": 0,  # tokens since the last slow-ring write (global, survives 1-token calls)
         }
 
+
+    # J-lens (verbalizability) loss: the workspace read at mid-depth must be able to "say" the
+    # next token and tokens a few steps ahead (paper: patterns that make a word more likely
+    # to be said at some point in the future). Subsampled positions keep the head cost small.
+    _LENS_OFFSETS = (0, 1, 3)
+    _LENS_STRIDE = 4
+
+    def _lens_loss(self, H: Tensor, targets: Tensor) -> Tensor:
+        B, T, _ = H.shape
+        z = self.workspace.lens_state(H)  # norm(J h)
+        off0 = int(torch.randint(0, self._LENS_STRIDE, (1,)).item())  # CPU generator, no GPU sync
+        total = z.new_zeros(())
+        used = 0
+        for o in self._LENS_OFFSETS:
+            if T - o <= off0:
+                continue
+            zi = z[:, off0 : T - o : self._LENS_STRIDE]
+            ti = targets[:, off0 + o : T : self._LENS_STRIDE]
+            n = min(zi.size(1), ti.size(1))
+            if n <= 0:
+                continue
+            zi, ti = zi[:, :n], ti[:, :n]
+            valid = (ti != -100).sum().clamp(min=1)
+            ce = F.cross_entropy(
+                self.head(zi).reshape(-1, self.cfg.vocab_size).float(),
+                ti.reshape(-1),
+                ignore_index=-100,
+                reduction="sum",
+            )
+            total = total + ce / valid
+            used += 1
+        return total / max(1, used)
 
     def forward(
         self,
@@ -438,8 +489,15 @@ class SENTINEL(nn.Module):
             write_slow and ab.use_slow_memory and ab.use_fast_memory and not frozen
         )
 
-        # Workspace projection once per forward (reused across all field loops)
-        _js = getattr(self, "_last_jspace_broadcast", None)
+        # Learned workspace: read -> compete -> broadcast INSIDE every loop (per token, causal).
+        # Legacy workspace: one broadcast from the previous call, projected once per forward.
+        _ws_learned = self.workspace is not None
+        _use_ws = _ws_learned and bool(getattr(ab, "use_workspace", True))
+        _ws_code: Optional[Tensor] = None
+        _lam_lens = float(getattr(self.cfg, "lambda_lens", 0.0) or 0.0)
+        _lens_on = _use_ws and self.training and targets is not None and _lam_lens > 0.0
+        lens_loss = X.new_zeros(())
+        _js = None if _ws_learned else getattr(self, "_last_jspace_broadcast", None)
         if _js is not None and torch.is_tensor(_js) and getattr(self.field, "W_js", None) is not None:
             if _js.ndim == 1:
                 _js_bt = _js.unsqueeze(0).expand(B * T, -1)
@@ -454,6 +512,15 @@ class SENTINEL(nn.Module):
             _js_proj = None
 
         for _j in range(k_depth):
+            if _use_ws:
+                _ws_b, _ws_code = self.workspace(H.reshape(B * T, -1), steer=self._ws_steer)
+                _js_proj_j = self.field.project_js(_ws_b, B * T)
+                js_r_j = _ws_b
+                if _lens_on and _j == (k_depth - 1) // 2:
+                    lens_loss = self._lens_loss(H, targets)
+            else:
+                _js_proj_j = _js_proj
+                js_r_j = None if _ws_learned else getattr(self, "_last_jspace_broadcast", None)
             Hin_new.append(H[:, -1].detach())
             X_hat = self.predictor(H.reshape(B * T, -1)).view(B, T, -1)
             # prediction made at the PREVIOUS position: inside the call it is X_hat[:, t-1]; for the first
@@ -505,8 +572,7 @@ class SENTINEL(nn.Module):
             D = D_win + self.dendrite.gamma * E
 
             # Token-parallel router (positions independent given H)
-            js_r = getattr(self, "_last_jspace_broadcast", None)
-            o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r)
+            o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r_j)
             O = o_flat.view(B, T, -1)
             pi = pi_flat.view(B, T, -1)
             if collect:
@@ -554,12 +620,17 @@ class SENTINEL(nn.Module):
                 js=None,
                 loop_idx=_j,
                 total_k=k_depth,
-                js_proj=_js_proj,
+                js_proj=_js_proj_j,
             ).view(B, T, -1)
 
         # Final router on refined H — this O feeds logits; keep its π for
         # entropy regularisation / metacognition (was using last depth-pass π).
-        js_r = getattr(self, "_last_jspace_broadcast", None)
+        if _use_ws:
+            js_r, _ws_code = self.workspace(H.reshape(B * T, -1), steer=self._ws_steer)
+        else:
+            js_r = None if _ws_learned else getattr(self, "_last_jspace_broadcast", None)
+        if _ws_code is not None:
+            self._last_ws_code = _ws_code.detach()
         o_flat, pi_flat, _w = self.router(H.reshape(B * T, -1), workspace=js_r)
         O = o_flat.view(B, T, -1)
         pi = pi_flat.view(B, T, -1)
@@ -633,6 +704,8 @@ class SENTINEL(nn.Module):
             "want_replay": 1.0 if want_replay else 0.0,
             "segment_len": float(self._segment_len),
         }
+        if collect and _use_ws and _ws_code is not None:
+            metrics.update(GlobalWorkspace.stats(_ws_code))
         if collect:
             if gates_audit:
                 _gate_mean = float(
@@ -714,6 +787,7 @@ class SENTINEL(nn.Module):
                 + lambda_bal * (bal_loss / max(1, T * k_depth))
                 + lambda_gate * gate_reg
                 + lambda_ent * ent_reg
+                + _lam_lens * lens_loss
             )
             # Host sync only when logging (collect_stats) — speeds up train step
             if collect:
@@ -725,6 +799,7 @@ class SENTINEL(nn.Module):
                         "err_coarse": float(err_coarse.detach().item()) if torch.is_tensor(err_coarse) else 0.0,
                         "gate_reg": float(gate_reg.detach().item()),
                         "ent_reg": float(ent_reg.detach().item()) if torch.is_tensor(ent_reg) else 0.0,
+                        "lens_loss": float(lens_loss.detach().item()) if _lens_on else 0.0,
                         "lambda_err": float(lambda_err),
                         "lambda_err_mid": float(lam_m),
                         "lambda_err_coarse": float(lam_c),

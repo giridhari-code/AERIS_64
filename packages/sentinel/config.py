@@ -34,6 +34,14 @@ class ModelConfig:
     jspace_decay: float = 0.85
     jspace_write_threshold: float = 0.35
     jspace_sparsity: float = 0.25
+    # --- Learned Global Workspace (modules/workspace.py) ---
+    # "rule"    legacy rule-based slot bank (default: old checkpoints load unchanged)
+    # "learned" learned, causal, per-token, per-sequence workspace (needs jspace_dim > 0)
+    workspace_mode: str = "rule"
+    ws_atoms: int = 128        # size of the lens-vector dictionary
+    ws_k_active: int = 8       # capacity: atoms that ignite per position (paper: ~20-25 max)
+    ws_rank: int = 16          # J = I + B A, rank of the learned lens correction
+    lambda_lens: float = 0.0   # optional J-lens (verbalizability) aux loss; 0 = off
     # --- Looped NeuralField ---
     field_reinject_input: bool = True
     field_loop_residual_scale: bool = True
@@ -132,6 +140,9 @@ class AblationConfig:
     use_slow_memory: bool = True
     use_neuromodulator: bool = True
     use_metacognition: bool = True
+    # Learned global workspace broadcast (only matters when workspace_mode == "learned").
+    # False = delete the J-space (paper-style ablation: fluent but loses multi-step reasoning).
+    use_workspace: bool = True
     # When use_neuromodulator is False, gate is fixed to this scalar in (0, 1].
     fixed_gate: float = 0.5
     # When use_metacognition is False, field steps are fixed to this integer ≥ 1.

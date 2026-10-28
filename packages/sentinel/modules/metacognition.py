@@ -120,6 +120,10 @@ class Metacognition:
         jspace_decay: float = 0.85,      # slot decay per token (forgetting)
         jspace_write_threshold: float = 0.35,  # min arousal/conflict to write new
         jspace_sparsity: float = 0.25,   # soft top-k fraction kept active
+        # True = a learned workspace (modules/workspace.py) owns the broadcast. The rule-based
+        # slot bank is then skipped (no module-level state, no host syncs) and, in eval, the
+        # consciousness baseline is not carried between calls -> same input => same logits.
+        external_workspace: bool = False,
     ):
         self.k_max = max(1, int(k_max))
         self._last_process_mode = "system1"  # hysteresis for dual-process
@@ -148,6 +152,7 @@ class Metacognition:
         self.jspace_decay = float(jspace_decay)
         self.jspace_write_threshold = float(jspace_write_threshold)
         self.jspace_sparsity = float(jspace_sparsity)
+        self.external_workspace = bool(external_workspace)
 
         # Slot bank: (n_slots, d_ws) concept vectors (session-persistent when track_global)
         self._js_slots: Optional[Tensor] = None          # (n_slots, d)
@@ -256,16 +261,19 @@ class Metacognition:
                 gate_bias = gate_bias - 0.25
 
         # ---- J-space update (Global Workspace) ----
-        js_state = self._update_jspace(
-            rel_S=rel_S,
-            conflict=conflict,
-            arousal=arousal,
-            conf=conf,
-            process_mode=process_mode,
-            h=h,
-            device=device,
-            B=B,
-        )
+        if self.external_workspace:
+            js_state = self._neutral_jspace(device, B)
+        else:
+            js_state = self._update_jspace(
+                rel_S=rel_S,
+                conflict=conflict,
+                arousal=arousal,
+                conf=conf,
+                process_mode=process_mode,
+                h=h,
+                device=device,
+                B=B,
+            )
 
         # When workspace is busy / high capacity, bias toward deeper processing
         if js_state.capacity_used > 0.55 and process_mode == "system1":
@@ -299,6 +307,9 @@ class Metacognition:
                 "jspace_n_active": float(js_state.n_active),
             }
 
+        if self.external_workspace and not use_global:
+            # eval/serve: no running drive baseline between calls or users
+            self.consciousness._bar_drive = None
         c_state = self.consciousness.step(
             jspace_capacity=js_state.capacity_used,
             jspace_n_active=js_state.n_active,
@@ -436,6 +447,15 @@ class Metacognition:
             n_active=n_active,
             reportable=reportable,
         )
+
+    def _neutral_jspace(self, device: torch.device, B: int) -> JSpaceState:
+        """Empty workspace state (learned workspace active): no state kept, no host syncs."""
+        z = torch.zeros(self.jspace_dim, device=device)
+        o = torch.zeros(self.jspace_slots, device=device)
+        if B > 1:
+            z = z.unsqueeze(0).expand(B, -1)
+            o = o.unsqueeze(0).expand(B, -1)
+        return JSpaceState(broadcast=z, occupancy=o, capacity_used=0.0, n_active=0, reportable=False)
 
     def read_jspace(self) -> Optional[JSpaceState]:
         """Return current workspace state (for logging / verbal report)."""
