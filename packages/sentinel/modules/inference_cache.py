@@ -99,7 +99,8 @@ class InferenceCache:
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         input_ids = input_ids.to(self.device)
-        out = model(input_ids, state=self.state)
+        # collect_stats=False: metrics are unused here and cost many host syncs
+        out = model(input_ids, state=self.state, collect_stats=False)
         self.state = out.state or self.state
         self.prefilled = True
         self.prompt_len = int(input_ids.size(1))
@@ -129,7 +130,7 @@ class InferenceCache:
         if self.slot_keys_valid and self.slot_keys is not None and isinstance(self.state, dict):
             self.state["slow_slot_keys"] = self.slot_keys
 
-        out = model(token_id, state=self.state)
+        out = model(token_id, state=self.state, collect_stats=False)
         self.state = out.state or self.state
         self.decode_steps += 1
         self.tokens_generated += 1
@@ -155,6 +156,7 @@ class InferenceCache:
             input_ids = input_ids.unsqueeze(0)
         logits = self.prefill(model, input_ids)
         generated = [input_ids]
+        finished = torch.zeros(input_ids.size(0), dtype=torch.bool, device=input_ids.device)
 
         for _ in range(max_new_tokens):
             step_logits = logits[:, -1, :]  # (B, V)
@@ -168,8 +170,12 @@ class InferenceCache:
                 probs = torch.softmax(logits_t, dim=-1)
                 next_id = torch.multinomial(probs, num_samples=1).squeeze(-1)
             next_id = next_id.view(-1, 1)
+            if eos_id is not None:
+                # rows that already emitted EOS keep emitting EOS (no garbage after the end of an answer)
+                next_id = torch.where(finished.view(-1, 1), torch.full_like(next_id, eos_id), next_id)
+                finished = finished | (next_id.view(-1) == eos_id)
             generated.append(next_id)
-            if eos_id is not None and bool((next_id.view(-1) == eos_id).all()):
+            if eos_id is not None and bool(finished.all()):
                 break
             logits = self.decode_step(model, next_id, heal_every=heal_every)
 

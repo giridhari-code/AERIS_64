@@ -45,8 +45,9 @@ def heal_matrix(M: Tensor, max_norm: float = DEFAULT_MAX_MEMORY_NORM, min_energy
     """Sanitize a fast-memory matrix: finite + soft norm clamp (fast-path if clean)."""
     if M is None:
         return M
-    if not torch.isfinite(M).all():
-        M = _finite(M)
+    # Branch-free: `if not isfinite(M).all()` forced a GPU->host sync on every call
+    # (k_max times per decoded token). _finite is a no-op on clean tensors.
+    M = _finite(M)
     if max_norm > 0:
         n = M.norm(dim=(-2, -1), keepdim=True).clamp(min=1e-8)
         M = M * (max_norm / n).clamp(max=1.0)
@@ -61,12 +62,9 @@ def heal_slots(
     """Sanitize slow-memory ring: finite, clamp norms, zero dead/corrupt slots."""
     if slots is None:
         return slots, filled
-    need_finite = not torch.isfinite(slots).all()
-    if need_finite:
-        slots = _finite(slots)
-    filled = filled.clamp(min=0.0)
-    if not torch.isfinite(filled).all():
-        filled = _finite(filled).clamp(min=0.0)
+    # Branch-free (no host sync); results identical to the old guarded version.
+    slots = _finite(slots)
+    filled = _finite(filled.clamp(min=0.0)).clamp(min=0.0)
     energy = slots.norm(dim=(-2, -1))  # (B, S)
     bad = ~torch.isfinite(energy) | (energy < 1e-10)
     filled = filled.masked_fill(bad, 0.0)

@@ -860,6 +860,8 @@ class SENTINEL(nn.Module):
             "bar_S": bar_S_state.detach() if torch.is_tensor(bar_S_state) else bar_S_state,
             "want_replay": want_replay,
         }
+        if will_write_slow and snaps:
+            new_state.pop("slow_slot_keys", None)  # ring changed this call -> cached keys are stale
         return ModelOutput(
             logits=logits, loss=loss, metrics=metrics, audit=audit, state=new_state
         )
@@ -936,8 +938,26 @@ class SENTINEL(nn.Module):
         if error is not None and torch.is_tensor(error):
             error = torch.where(torch.isfinite(error), error, torch.zeros_like(error))
 
+        # The decode carry that forward() actually READS is the per-pass state (M_pass / Hin / D_pass /
+        # R_pass / S_cum), not h/r/error/M above. Heal it too, otherwise a NaN in the carry survives.
+        def _fin_list(xs):
+            if not isinstance(xs, (list, tuple)):
+                return xs
+            return [torch.where(torch.isfinite(x), x, torch.zeros_like(x)) if torch.is_tensor(x) else x for x in xs]
+
+        M_pass = state.get("M_pass")
+        if isinstance(M_pass, (list, tuple)):
+            M_pass = [
+                heal_matrix(m, max_norm=float(self.safety.max_memory_norm)) if torch.is_tensor(m) else m
+                for m in M_pass
+            ]
         out = {
             **state,
+            "M_pass": M_pass,
+            "Hin": _fin_list(state.get("Hin")),
+            "D_pass": _fin_list(state.get("D_pass")),
+            "R_pass": _fin_list(state.get("R_pass")),
+            "S_cum": _fin_list(state.get("S_cum")),
             "M": M if M is not None else state.get("M"),
             "slow_slots": slots if slots is not None else state.get("slow_slots"),
             "slow_filled": filled if filled is not None else state.get("slow_filled"),
@@ -945,6 +965,8 @@ class SENTINEL(nn.Module):
             "r": r if r is not None else state.get("r"),
             "error": error if error is not None else state.get("error"),
         }
+        # slots may have been clamped / zeroed above -> cached content-address keys are stale
+        out.pop("slow_slot_keys", None)
         out["_memory_health"] = memory_health_report(M, slots, filled)
         return out
 
