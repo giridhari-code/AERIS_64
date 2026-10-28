@@ -9,6 +9,7 @@ from typing import Any, Optional, Sequence
 import torch
 import yaml
 
+from sentinel.checkpoint.io import _torch_load
 from sentinel.config import SENTINELConfig, load_config
 from sentinel.model import SENTINEL
 from sentinel.pipeline.context import PipelineContext
@@ -34,6 +35,18 @@ DEFAULT_ORDER = [
     "opd",
 ]
 
+
+
+def _load_state_logged(model: torch.nn.Module, state: dict, src: Path) -> None:
+    """strict=False load that no longer fails silently."""
+    res = model.load_state_dict(state, strict=False)
+    missing, unexpected = list(res.missing_keys), list(res.unexpected_keys)
+    if missing:
+        logger.warning("%s: %d weights missing (kept init): %s", src, len(missing), missing[:5])
+    if unexpected:
+        logger.warning("%s: %d unexpected keys ignored: %s", src, len(unexpected), unexpected[:5])
+    if len(missing) >= len(model.state_dict()):
+        raise RuntimeError(f"{src}: no weights matched this model; wrong checkpoint?")
 
 
 def _load_weights_into_model(model: torch.nn.Module, path: str | Path) -> None:
@@ -64,11 +77,11 @@ def _load_weights_into_model(model: torch.nn.Module, path: str | Path) -> None:
         except ImportError as e:
             raise ImportError("pip install safetensors") from e
         state = load_file(str(path))
-        model.load_state_dict(state, strict=False)
+        _load_state_logged(model, state, path)
         return
 
     if path.suffix in {".pt", ".pth"}:
-        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+        ckpt = _torch_load(path, map_location="cpu")  # restricted unpickler (NEUROFIELD_ALLOW_PICKLE=1 to override)
         if isinstance(ckpt, dict):
             if any(isinstance(v, torch.Tensor) for v in ckpt.values()):
                 # flat or model-keyed state dict
@@ -85,7 +98,7 @@ def _load_weights_into_model(model: torch.nn.Module, path: str | Path) -> None:
                 state = ckpt
         else:
             raise ValueError(f"Unrecognized checkpoint format: {path}")
-        model.load_state_dict(state, strict=False)
+        _load_state_logged(model, state, path)
         return
 
     raise ValueError(

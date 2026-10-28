@@ -257,7 +257,7 @@ class Trainer:
         out = save_checkpoint(
             self.output_dir / name,
             self.model,
-            config=self.cfg.model.__dict__.copy(),
+            config=self.cfg.checkpoint_dict(),
             meta={
                 "model_id": self.output_dir.name,
                 "step": self.global_step,

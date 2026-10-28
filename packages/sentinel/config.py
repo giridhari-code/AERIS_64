@@ -157,6 +157,30 @@ class SENTINELConfig:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    def checkpoint_dict(self) -> dict[str, Any]:
+        """config.json payload: flat ModelConfig fields (what old loaders read) plus the safety / ablation
+        sections, which used to be dropped, so serving and eval rebuild the model as it was trained."""
+        d = dict(asdict(self.model))
+        d["safety"] = asdict(self.safety)
+        d["ablation"] = asdict(self.ablation)
+        return d
+
+    @staticmethod
+    def split_checkpoint_dict(raw: dict[str, Any]) -> tuple["SafetyConfig", "AblationConfig"]:
+        """Inverse of checkpoint_dict for the two extra sections (defaults for old checkpoints)."""
+
+        def _pick(dc_cls: type, section: Any) -> dict[str, Any]:
+            if not isinstance(section, dict):
+                return {}
+            fields = getattr(dc_cls, "__dataclass_fields__", {})
+            return {k: v for k, v in section.items() if k in fields}
+
+        raw = raw if isinstance(raw, dict) else {}
+        return (
+            SafetyConfig(**_pick(SafetyConfig, raw.get("safety"))),
+            AblationConfig(**_pick(AblationConfig, raw.get("ablation"))),
+        )
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SENTINELConfig":
         """Build config from nested dict; ignore unknown keys (forward-compatible YAML)."""

@@ -54,7 +54,7 @@ class PipelineContext:
         save_checkpoint(
             out,
             self.model,
-            config=self.cfg.model.__dict__.copy(),
+            config=self.cfg.checkpoint_dict(),
             meta={"stage": name, "pipeline": True},
         )
         # torch checkpoints for resume (multiple aliases so --resume is forgiving)
