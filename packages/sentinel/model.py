@@ -273,6 +273,8 @@ class SENTINEL(nn.Module):
             "bar_S": None,  # per-session running surprise (isolation)
             "last_S": None,  # (B,) last mean surprise — metacognition input
             "last_router_ent": None,  # prior-step conflict for metacognition
+            "jspace": None,  # rule-mode Metacognition slot bank (session-local)
+            "jspace_broadcast": None,  # last broadcast vector for this session
             "want_replay": False,
             # Context window ring in slow memory
             "slow_slots": torch.zeros(
@@ -405,9 +407,21 @@ class SENTINEL(nn.Module):
                 mem_norm=mem_norm,
                 n_tokens=T,
                 h=h_for_meta,
+                session_jspace=state.get("jspace"),
             )
-            # Keep workspace for field / router injection this step
-            self._last_jspace_broadcast = getattr(decision, "jspace_broadcast", None)
+            # Session-local J-space: persist on state, not on the shared module/model.
+            # (Rule-mode slots used to live only on Metacognition → cross-user logit leak.)
+            if not getattr(self.meta, "_use_global", False):
+                state["jspace"] = self.meta.export_jspace_state()
+                br = getattr(decision, "jspace_broadcast", None)
+                state["jspace_broadcast"] = (
+                    br.detach() if isinstance(br, torch.Tensor) else br
+                )
+                self._last_jspace_broadcast = br  # same-forward only convenience
+                # Drop module buffers — next call must re-import from state (no idle leak).
+                self.meta.import_jspace_state(None)
+            else:
+                self._last_jspace_broadcast = getattr(decision, "jspace_broadcast", None)
             self._last_consciousness = getattr(decision, "consciousness", None)
             # Consciousness ignition → slightly stronger memory encoding
             if self._last_consciousness is not None and self._last_consciousness.ignition:
@@ -497,7 +511,14 @@ class SENTINEL(nn.Module):
         _lam_lens = float(getattr(self.cfg, "lambda_lens", 0.0) or 0.0)
         _lens_on = _use_ws and self.training and targets is not None and _lam_lens > 0.0
         lens_loss = X.new_zeros(())
-        _js = None if _ws_learned else getattr(self, "_last_jspace_broadcast", None)
+        if _ws_learned:
+            _js = None
+        else:
+            _js = None
+            if isinstance(state, dict) and state.get("jspace_broadcast") is not None:
+                _js = state.get("jspace_broadcast")
+            if _js is None:
+                _js = getattr(self, "_last_jspace_broadcast", None)
         if _js is not None and torch.is_tensor(_js) and getattr(self.field, "W_js", None) is not None:
             if _js.ndim == 1:
                 _js_bt = _js.unsqueeze(0).expand(B * T, -1)

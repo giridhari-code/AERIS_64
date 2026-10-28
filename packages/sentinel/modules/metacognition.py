@@ -184,6 +184,7 @@ class Metacognition:
         mem_norm: Optional[Tensor] = None,
         n_tokens: int = 1,
         h: Optional[Tensor] = None,          # optional field state for richer workspace write
+        session_jspace: Optional[dict] = None,  # rule-mode slot bank from Sequence.state
     ) -> ControlDecision:
         """
         Full monitor→control step + J-space update.
@@ -195,6 +196,8 @@ class Metacognition:
             mem_norm: optional fast-memory norm (load shedding)
             n_tokens: how many tokens this call covers (train parallel)
             h: optional current neural-field state (B, d) or (d,) to seed workspace
+            session_jspace: when not using global baselines, restore rule-mode slots
+                from this pack (and caller should export_jspace_state() back to session)
         """
         # ---- original surprise / conflict / confidence logic (unchanged core) ----
         if S.ndim == 0:
@@ -261,6 +264,10 @@ class Metacognition:
                 gate_bias = gate_bias - 0.25
 
         # ---- J-space update (Global Workspace) ----
+        # Rule-mode slots live on the module for the duration of this call only when
+        # _use_global is False: restore from session pack first so users cannot leak.
+        if not use_global and not self.external_workspace:
+            self.import_jspace_state(session_jspace, device=device)
         if self.external_workspace:
             js_state = self._neutral_jspace(device, B)
         else:
@@ -502,14 +509,61 @@ class Metacognition:
         if self._js_broadcast is not None:
             self._js_broadcast.zero_()
 
+    def export_jspace_state(self) -> Optional[dict]:
+        """Snapshot rule-mode slot bank for session state (prevents cross-user leak)."""
+        if self._js_slots is None:
+            return None
+        return {
+            "js_slots": self._js_slots.detach().clone(),
+            "js_occupancy": self._js_occupancy.detach().clone() if self._js_occupancy is not None else None,
+            "js_broadcast": self._js_broadcast.detach().clone() if self._js_broadcast is not None else None,
+            "last_process_mode": str(getattr(self, "_last_process_mode", "system1") or "system1"),
+        }
+
+    def import_jspace_state(self, pack: Optional[dict], device: Optional[torch.device] = None) -> None:
+        """Restore slot bank from session state, or wipe for a new session."""
+        if not pack:
+            self._js_slots = None
+            self._js_occupancy = None
+            self._js_broadcast = None
+            self._last_process_mode = "system1"
+            return
+        slots = pack.get("js_slots")
+        if slots is None:
+            self._js_slots = None
+            self._js_occupancy = None
+            self._js_broadcast = None
+            self._last_process_mode = str(pack.get("last_process_mode") or "system1")
+            return
+        if not isinstance(slots, torch.Tensor):
+            slots = torch.as_tensor(slots)
+        if device is not None:
+            slots = slots.to(device=device)
+        self._js_slots = slots
+        occ = pack.get("js_occupancy")
+        if occ is None:
+            self._js_occupancy = torch.zeros(self._js_slots.size(0), device=self._js_slots.device)
+        else:
+            if not isinstance(occ, torch.Tensor):
+                occ = torch.as_tensor(occ, device=self._js_slots.device)
+            self._js_occupancy = occ.to(device=self._js_slots.device)
+        br = pack.get("js_broadcast")
+        if br is None:
+            self._js_broadcast = torch.zeros(self._js_slots.size(1), device=self._js_slots.device)
+        else:
+            if not isinstance(br, torch.Tensor):
+                br = torch.as_tensor(br, device=self._js_slots.device)
+            self._js_broadcast = br.to(device=self._js_slots.device)
+        self._last_process_mode = str(pack.get("last_process_mode") or "system1")
+
     # ------------------------------------------------------------------ control
     @property
     def _use_global(self) -> bool:
         """Module-level running baselines are a TRAINING convenience only.
 
-        In eval()/inference they would make the output depend on earlier calls (and on other
-        users' sessions), so they are ignored there: same input => same logits, and nothing
-        leaks between sessions even if the caller forgot ``track_global = False``.
+        In eval()/inference they are ignored for bar_S / replay counters.
+        Rule-mode J-space slots still need session_jspace import/export (see model.forward)
+        — module buffers alone would leak across users.
         """
         return self.track_global and getattr(self, "training", True)
 
