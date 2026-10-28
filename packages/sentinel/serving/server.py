@@ -1,19 +1,25 @@
 """SENTINEL inference API — model-only.
 
-Fixes vs early lean server:
-  - top_p / top_k / seed sampling
-  - OpenAI-compatible POST /v1/chat/completions
-  - stop markers + text cut
-  - clearer ready/root metadata
+Request lifecycle (DeepInfer-style phases, single-stream):
+  1. ADD      — normalize prompt + SamplingParams → Sequence (WAITING)
+  2. SCHEDULE — acquire engine lock, mark RUNNING (serial scheduler)
+  3. PREFILL  — forward(full prompt, state=None)
+  4. DECODE   — loop: SAMPLE → APPEND → forward(token) until stop/max
+  5. FINALIZE — detokenize, cut markers, FINISHED → response
+
+No continuous batching / paged KV: one Sequence under one lock.
 """
 
 from __future__ import annotations
 
+import enum
 import logging
 import os
 import threading
 import time
+import uuid
 from contextlib import asynccontextmanager, nullcontext
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -38,6 +44,46 @@ _amp_dtype: Optional[torch.dtype] = None
 _checkpoint_path = ""
 _STOP_MARKERS = ("<|end|>", "<|user|>", "<|system|>")
 _stop_ids: set[int] = set()
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle types (DeepInfer-inspired Sequence / SamplingParams)
+# ---------------------------------------------------------------------------
+class SequenceStatus(enum.Enum):
+    WAITING = "waiting"
+    RUNNING = "running"
+    FINISHED = "finished"
+    ERROR = "error"
+
+
+@dataclass
+class SamplingParams:
+    max_tokens: int = 64
+    temperature: float = 0.7
+    top_p: float = 0.9
+    top_k: int = 40
+    seed: Optional[int] = None
+
+
+@dataclass
+class Sequence:
+    """One generation job — analogous to DeepInfer Sequence (single-stream)."""
+
+    request_id: str
+    prompt_text: str
+    prompt_ids: List[int]
+    params: SamplingParams
+    status: SequenceStatus = SequenceStatus.WAITING
+    output_ids: List[int] = field(default_factory=list)
+    output_text: str = ""
+    state: Any = None  # SENTINEL recurrent state (not paged KV)
+    latency_ms: float = 0.0
+    finish_reason: str = ""  # stop | length | error
+    error: Optional[str] = None
+    t0: float = field(default_factory=time.perf_counter)
+
+    def append_token(self, tid: int) -> None:
+        self.output_ids.append(int(tid))
 
 
 def _cut_at_markers(text: str) -> str:
@@ -114,32 +160,25 @@ def _need_model() -> None:
 
 def _sample_from_logits(
     logits: torch.Tensor,
-    *,
-    temperature: float,
-    top_p: float,
-    top_k: int,
+    params: SamplingParams,
     generator: Optional[torch.Generator],
 ) -> int:
-    """logits: (V,) float32 on device."""
+    temperature = float(params.temperature)
     if temperature <= 1e-6:
         return int(torch.argmax(logits).item())
-    logits = logits / max(float(temperature), 1e-5)
-    # top-k
-    k = int(top_k)
+    logits = logits / max(temperature, 1e-5)
+    k = int(params.top_k)
     if k > 0 and k < logits.numel():
         vals, idx = torch.topk(logits, k)
         masked = torch.full_like(logits, float("-inf"))
         masked[idx] = vals
         logits = masked
-    # top-p (nucleus)
-    p = float(top_p)
+    p = float(params.top_p)
     if 0.0 < p < 1.0:
         sorted_logits, sorted_idx = torch.sort(logits, descending=True)
         probs = torch.softmax(sorted_logits, dim=-1)
         cumsum = torch.cumsum(probs, dim=-1)
-        # keep smallest prefix with cumprob >= p
         mask = cumsum > p
-        # always keep first token
         mask[..., 0] = False
         sorted_logits = sorted_logits.masked_fill(mask, float("-inf"))
         logits = torch.full_like(logits, float("-inf"))
@@ -150,80 +189,126 @@ def _sample_from_logits(
     return int(torch.multinomial(probs, 1).item())
 
 
-def _generate(
-    input_ids: list[int],
-    max_new: int,
-    temperature: float,
-    *,
-    top_p: float = 0.9,
-    top_k: int = 40,
-    seed: Optional[int] = None,
-) -> tuple[list[int], float]:
-    assert _model is not None
-    t0 = time.perf_counter()
-    ids = _to_id_list(input_ids)
-    max_new = max(1, min(int(max_new), 256))
-    new_tokens: List[int] = []
-    gen: Optional[torch.Generator] = None
-    with _lock:
-        model = _model
-        device = _device
-        amp = _amp_dtype
-        if seed is not None:
-            gen = torch.Generator(device=device if device.type == "cuda" else "cpu")
-            gen.manual_seed(int(seed))
-        state = None
-        x = torch.tensor([ids], dtype=torch.long, device=device)
-        use_amp = amp is not None and device.type == "cuda"
-        cm = torch.autocast(device_type=device.type, dtype=amp) if use_amp else nullcontext()
-        with torch.inference_mode():
-            with cm:
-                out = model(
-                    x,
-                    state=state,
-                    targets=None,
-                    collect_stats=False,
-                    write_slow=True,
-                )
-            state = out.state
-            logits = out.logits[0, -1].float()
-            nid = _sample_from_logits(
-                logits, temperature=temperature, top_p=top_p, top_k=top_k, generator=gen
-            )
-            if nid in _stop_ids:
-                return new_tokens, (time.perf_counter() - t0) * 1000.0
-            new_tokens.append(nid)
-            for _ in range(max_new - 1):
-                x = torch.tensor([[nid]], dtype=torch.long, device=device)
-                with cm:
-                    out = model(
-                        x,
-                        state=state,
-                        targets=None,
-                        collect_stats=False,
-                        write_slow=True,
-                    )
-                state = out.state
-                logits = out.logits[0, -1].float()
-                nid = _sample_from_logits(
-                    logits, temperature=temperature, top_p=top_p, top_k=top_k, generator=gen
-                )
-                if nid in _stop_ids:
-                    break
-                new_tokens.append(nid)
-    return new_tokens, (time.perf_counter() - t0) * 1000.0
-
-
 def _build_prompt(user_text: str) -> str:
     t = (user_text or "").strip()
-    # Already role-formatted
-    if t.startswith("User:") or t.startswith("<|user|>"):
+    if t.startswith("User:") or t.startswith("<|user|>") or t.startswith("System:"):
         if "Assistant:" not in t and "<|assistant|>" not in t:
             return t + "\nAssistant:"
         return t
     return f"User: {t}\nAssistant:"
 
 
+# ---------------------------------------------------------------------------
+# Engine step: DeepInfer-like lifecycle on one Sequence
+# ---------------------------------------------------------------------------
+def _forward_tokens(token_ids: List[int], state: Any) -> tuple[torch.Tensor, Any]:
+    """Execute model → (logits last position V, new_state)."""
+    assert _model is not None
+    device = _device
+    amp = _amp_dtype
+    x = torch.tensor([token_ids], dtype=torch.long, device=device)
+    use_amp = amp is not None and device.type == "cuda"
+    cm = torch.autocast(device_type=device.type, dtype=amp) if use_amp else nullcontext()
+    with torch.inference_mode():
+        with cm:
+            out = _model(
+                x,
+                state=state,
+                targets=None,
+                collect_stats=False,
+                write_slow=True,
+            )
+    return out.logits[0, -1].float(), out.state
+
+
+def engine_run(seq: Sequence) -> Sequence:
+    """
+    Full lifecycle for one sequence (serial scheduler).
+
+    ADD is done by caller; this function:
+      SCHEDULE → PREFILL → (SAMPLE → APPEND → DECODE)* → FINALIZE
+    """
+    assert _model is not None and _decode is not None
+    seq.status = SequenceStatus.RUNNING
+    gen: Optional[torch.Generator] = None
+    max_new = max(1, min(int(seq.params.max_tokens), 256))
+
+    try:
+        with _lock:
+            # --- SCHEDULE (serial): we hold the only worker slot ---
+            if seq.params.seed is not None:
+                gen = torch.Generator(
+                    device=_device if _device.type == "cuda" else "cpu"
+                )
+                gen.manual_seed(int(seq.params.seed))
+
+            # --- PREFILL ---
+            logits, state = _forward_tokens(seq.prompt_ids, state=None)
+            seq.state = state
+            tid = _sample_from_logits(logits, seq.params, gen)
+            if tid in _stop_ids:
+                seq.finish_reason = "stop"
+            else:
+                seq.append_token(tid)
+
+            # --- DECODE loop: SAMPLE already done for first; continue ---
+            while (
+                seq.finish_reason != "stop"
+                and len(seq.output_ids) < max_new
+            ):
+                logits, state = _forward_tokens([seq.output_ids[-1]], seq.state)
+                seq.state = state
+                tid = _sample_from_logits(logits, seq.params, gen)
+                if tid in _stop_ids:
+                    seq.finish_reason = "stop"
+                    break
+                seq.append_token(tid)
+
+            if not seq.finish_reason:
+                seq.finish_reason = "length" if len(seq.output_ids) >= max_new else "stop"
+
+        # --- FINALIZE (outside lock: detokenize) ---
+        raw = (_decode(seq.output_ids) or "").strip()
+        seq.output_text = _cut_at_markers(raw)
+        seq.status = SequenceStatus.FINISHED
+        seq.latency_ms = (time.perf_counter() - seq.t0) * 1000.0
+        logger.debug(
+            "lifecycle done id=%s reason=%s tokens=%d latency_ms=%.1f",
+            seq.request_id,
+            seq.finish_reason,
+            len(seq.output_ids),
+            seq.latency_ms,
+        )
+        return seq
+    except Exception as e:  # noqa: BLE001
+        seq.status = SequenceStatus.ERROR
+        seq.error = f"{type(e).__name__}: {e}"
+        seq.finish_reason = "error"
+        seq.latency_ms = (time.perf_counter() - seq.t0) * 1000.0
+        logger.exception("lifecycle error id=%s", seq.request_id)
+        raise
+
+
+def add_request(prompt_text: str, params: SamplingParams) -> Sequence:
+    """Phase ADD: tokenize + WAITING sequence."""
+    _need_model()
+    assert _encode is not None
+    formatted = _build_prompt(prompt_text)
+    ids = _to_id_list(_encode(formatted))
+    if len(ids) > 512:
+        ids = ids[-512:]
+    return Sequence(
+        request_id=uuid.uuid4().hex[:12],
+        prompt_text=formatted,
+        prompt_ids=ids,
+        params=params,
+        status=SequenceStatus.WAITING,
+    )
+
+
+# ---------------------------------------------------------------------------
+# HTTP API
+# ---------------------------------------------------------------------------
 class ChatRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=4000)
     max_new_tokens: int = Field(64, ge=1, le=256)
@@ -239,6 +324,8 @@ class ChatResponse(BaseModel):
     session_id: str
     latency_ms: float
     model: str
+    request_id: str = ""
+    finish_reason: str = ""
 
 
 class CompletionRequest(BaseModel):
@@ -253,6 +340,7 @@ class CompletionRequest(BaseModel):
 class CompletionResponse(BaseModel):
     output_ids: list[int]
     latency_ms: float
+    finish_reason: str = ""
 
 
 class OAMessage(BaseModel):
@@ -295,7 +383,7 @@ def create_app(
 
     app = FastAPI(
         title=f"{product} API",
-        description="Model-only SENTINEL serve (top_p/top_k + OpenAI chat.completions)",
+        description="Model-only SENTINEL — DeepInfer-style request lifecycle (single-stream)",
         version=__version__,
         lifespan=lifespan,
     )
@@ -314,7 +402,7 @@ def create_app(
     else:
         logger.warning("No NEUROFIELD_CHECKPOINT")
 
-    def _chat_core(
+    def _run_chat(
         user_text: str,
         max_new: int,
         temperature: float,
@@ -323,32 +411,27 @@ def create_app(
         seed: Optional[int],
         session_id: Optional[str],
     ) -> ChatResponse:
-        _need_model()
-        assert _encode is not None and _decode is not None
+        params = SamplingParams(
+            max_tokens=max_new,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            seed=seed,
+        )
         try:
-            text_in = _build_prompt(user_text)
-            ids = _to_id_list(_encode(text_in))
-            if len(ids) > 512:
-                ids = ids[-512:]
-            new_ids, lat = _generate(
-                ids,
-                max_new,
-                temperature,
-                top_p=top_p,
-                top_k=top_k,
-                seed=seed,
-            )
-            text = _cut_at_markers((_decode(new_ids) or "").strip())
+            seq = add_request(user_text, params)
+            seq = engine_run(seq)
             return ChatResponse(
-                text=text,
+                text=seq.output_text,
                 session_id=session_id or "default",
-                latency_ms=lat,
+                latency_ms=seq.latency_ms,
                 model=_model_id,
+                request_id=seq.request_id,
+                finish_reason=seq.finish_reason,
             )
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("chat generate failed")
             raise HTTPException(
                 status_code=500,
                 detail=f"generate error: {type(e).__name__}: {e}",
@@ -360,10 +443,16 @@ def create_app(
             "product": product,
             "version": __version__,
             "mode": "model-only",
+            "lifecycle": [
+                "ADD",
+                "SCHEDULE",
+                "PREFILL",
+                "DECODE_SAMPLE_LOOP",
+                "FINALIZE",
+            ],
             "chat": "POST /v1/chat",
             "openai_chat": "POST /v1/chat/completions",
             "ready": _model is not None,
-            "note": "Gibberish output ⇒ need more pretrain/SFT data; engine is OK if ready=true",
         }
 
     @app.get("/healthz")
@@ -382,6 +471,7 @@ def create_app(
             "checkpoint": _checkpoint_path,
             "has_tokenizer": _encode is not None,
             "mode": "model-only",
+            "scheduler": "serial-lock",
         }
 
     @app.get("/v1/models")
@@ -400,7 +490,7 @@ def create_app(
 
     @app.post("/v1/chat", response_model=ChatResponse)
     def chat(req: ChatRequest):
-        return _chat_core(
+        return _run_chat(
             req.prompt,
             req.max_new_tokens,
             req.temperature,
@@ -412,7 +502,6 @@ def create_app(
 
     @app.post("/v1/chat/completions")
     def chat_completions(req: OAChatRequest):
-        # OpenAI-style: stitch messages into one prompt
         parts: List[str] = []
         for m in req.messages:
             role = (m.role or "user").lower()
@@ -427,28 +516,21 @@ def create_app(
                 parts.append(f"User: {content}")
         if not parts:
             raise HTTPException(status_code=400, detail="empty messages")
-        # Ensure model continues as assistant
         prompt = "\n".join(parts)
         if not prompt.strip().endswith("Assistant:"):
             prompt = prompt + "\nAssistant:"
-        result = _chat_core(
-            prompt,
-            req.max_tokens,
-            req.temperature,
-            req.top_p,
-            40,
-            req.seed,
-            None,
+        result = _run_chat(
+            prompt, req.max_tokens, req.temperature, req.top_p, 40, req.seed, None
         )
         return {
-            "id": f"chatcmpl-{int(time.time())}",
+            "id": f"chatcmpl-{result.request_id}",
             "object": "chat.completion",
             "model": result.model or req.model or "aeris",
             "choices": [
                 {
                     "index": 0,
                     "message": {"role": "assistant", "content": result.text},
-                    "finish_reason": "stop",
+                    "finish_reason": result.finish_reason or "stop",
                 }
             ],
             "usage": {
@@ -462,18 +544,27 @@ def create_app(
     @app.post("/v1/completions", response_model=CompletionResponse)
     def completions(req: CompletionRequest):
         _need_model()
+        params = SamplingParams(
+            max_tokens=req.max_new_tokens,
+            temperature=req.temperature,
+            top_p=req.top_p,
+            top_k=req.top_k,
+            seed=req.seed,
+        )
+        seq = Sequence(
+            request_id=uuid.uuid4().hex[:12],
+            prompt_text="",
+            prompt_ids=_to_id_list(req.input_ids),
+            params=params,
+        )
         try:
-            new_ids, lat = _generate(
-                req.input_ids,
-                req.max_new_tokens,
-                req.temperature,
-                top_p=req.top_p,
-                top_k=req.top_k,
-                seed=req.seed,
+            seq = engine_run(seq)
+            return CompletionResponse(
+                output_ids=seq.output_ids,
+                latency_ms=seq.latency_ms,
+                finish_reason=seq.finish_reason,
             )
-            return CompletionResponse(output_ids=new_ids, latency_ms=lat)
         except Exception as e:  # noqa: BLE001
-            logger.exception("completions failed")
             raise HTTPException(status_code=500, detail=f"generate error: {e}") from e
 
     return app
