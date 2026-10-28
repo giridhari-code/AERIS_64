@@ -388,7 +388,15 @@ class SENTINEL(nn.Module):
             elif last_S.numel() != B:
                 last_S = last_S.mean().expand(B)
 
-        if ab.use_metacognition:
+        _skip_meta = bool(
+            ab.use_metacognition
+            and getattr(self.cfg, "skip_meta_in_eval", False)
+            and not self.training
+            and not bool(getattr(self.cfg, "adaptive_decode_depth", False))
+            and self.workspace is not None
+            and bool(getattr(ab, "use_workspace", True))
+        )
+        if ab.use_metacognition and not _skip_meta:
             ent_prev = state.get("last_router_ent")
             mem_n = state.get("M")
             mem_norm = mem_n.detach().norm(dim=(-2, -1)) if isinstance(mem_n, Tensor) else None
@@ -421,6 +429,8 @@ class SENTINEL(nn.Module):
             bar_S_state = decision.bar_S
             want_replay = bool(decision.want_replay)
             k_from_meta = max(1, min(int(self.cfg.k_max), int(decision.k)))
+        elif _skip_meta:
+            k_from_meta = max(1, int(self.cfg.k_max))  # unused (decode depth is k_max); no host sync
         else:
             k_from_meta = max(1, int(ab.fixed_k))
 

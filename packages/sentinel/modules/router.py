@@ -111,14 +111,16 @@ class SkillRouter(nn.Module):
             outs = torch.stack([op(h) for op in self.skills], dim=1)
             o = torch.einsum("bs,bsd->bd", w_ste, outs)
         else:
-            uniq = topk_idx.reshape(-1).unique()
-            if uniq.numel() <= max(4, self.top_k * 2):
+            # One host sync (tolist) instead of unique() + tolist(): unique() has a data-dependent
+            # output size (its own sync) and launches a radix sort. Same ascending order -> same result.
+            used = sorted(set(topk_idx.reshape(-1).tolist()))
+            if len(used) <= max(4, self.top_k * 2):
                 o = h.new_zeros(h.size(0), h.size(-1))
-                for s in uniq.tolist():
+                for s in used:
                     o = o + w_ste[:, s].unsqueeze(-1) * self.skills[s](h)
             else:
                 outs = h.new_zeros(h.size(0), self.n_skills, h.size(-1))
-                for s in uniq.tolist():
+                for s in used:
                     outs[:, s] = self.skills[s](h)
                 o = torch.einsum("bs,bsd->bd", w_ste, outs)
         return o, pi, w

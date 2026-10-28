@@ -66,6 +66,11 @@ class ModelConfig:
     # of k between calls discards every per-pass memory carry, so only enable this if you
     # also train with variable depth.
     adaptive_decode_depth: bool = False
+    # True: in eval (no grad path) with a learned workspace and fixed decode depth, skip the host-side
+    # Metacognition.step(). In that configuration its outputs (gate bias, k, replay flag, bar_S) are
+    # never used by forward() (gate bias is train-only, k only if adaptive_decode_depth), so logits are
+    # unchanged; it only stops updating state["bar_S"] / state["want_replay"]. Saves ~20% decode time.
+    skip_meta_in_eval: bool = False
     # True: logits *= d_model**-0.5. With tie_embeddings the default N(0,1) embedding gives
     # logit std ~sqrt(d_model) and initial CE ~130 instead of ~ln(vocab). Changes the function:
     # enable for NEW training runs only (existing checkpoints were trained without it).
