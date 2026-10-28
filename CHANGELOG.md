@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — learned Global Workspace (J-space)
+
+- **New `modules/workspace.py` (`GlobalWorkspace`)**, opt-in via `model.workspace_mode: learned`
+  (default stays `rule`, bit-identical to before, same `state_dict` keys). Follows Gurnee et al. 2026:
+  `lens(h) = softmax(W_U · norm(J h))`, `J = I + B A` (B zero-init ⇒ plain logit lens at init),
+  J-space = sparse non-negative code over a learned lens-vector dictionary (`ws_k_active` ≤ ~25),
+  broadcast into `NeuralField.W_js` and `SkillRouter.ws_bias`.
+- **Read → compete → broadcast inside every field loop, per token, causal, trained end-to-end** (the old
+  broadcast was detached, one vector per chunk, taken from the previous call's state).
+- **Fixes cross-session leakage**: with the rule-based bank the same input gave different logits on a
+  second run / after another session (max|Δlogit| ≈ 38 in `tests`-style probe). Learned mode: Δ = 0.
+  Also removes the per-forward `.item()` host syncs of the slot bank and the eval-time carry-over of the
+  consciousness baseline (`Metacognition(external_workspace=True)`).
+- `AblationConfig.use_workspace` (delete the J-space), `model._ws_steer` (inject/steer atoms),
+  `GlobalWorkspace.read_tokens / atom_words` (reportability), optional `lambda_lens` J-lens aux loss
+  (default 0, experimental), `scripts/research/workspace_probe.py`, `configs/workspace.yaml`,
+  `docs/WORKSPACE.md`, `tests/test_workspace.py` (10 tests).
+
 ## Unreleased — 0zcode: real interactive TUI
 
 - **0zcode now runs a real terminal UI** (std only, no external crates):

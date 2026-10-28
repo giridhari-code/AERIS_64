@@ -1,0 +1,72 @@
+# AERIS-109M + LEARNED GLOBAL WORKSPACE (see docs/WORKSPACE.md). Same as default.yaml except the
+# keys marked [ws]. Trains from scratch (adds ~174k params, 0.16%); do not resume a default.yaml run.
+# Override paths via CLI: --train-data / --data-dir / --output-dir
+
+model:
+  d_model: 1024
+  d_k: 256
+  d_v: 256
+  n_skills: 17
+  top_k: 4
+  k_max: 5
+  dendrite_window: 3
+  vocab_size: 32000
+  max_seq_len: 2048
+  tie_embeddings: true
+  dropout: 0.05
+  workspace_mode: learned   # [ws] "rule" = legacy slot bank
+  ws_atoms: 128             # [ws] lens-vector dictionary size
+  ws_k_active: 8            # [ws] atoms that ignite per position (paper: <= ~25)
+  ws_rank: 16               # [ws] J = I + B A
+  lambda_lens: 0.0          # [ws] experimental J-lens aux loss; try 0.02 in a separate A/B run
+  scale_tied_logits: true   # [ws-run] NEW runs only: logits *= d_model**-0.5, else initial CE ~130 (tied N(0,1) embedding).
+                            #           For a fair A/B put the SAME line in the baseline config too.
+
+training:
+  batch_size: 4
+  grad_accum_steps: 4
+  seq_len: 512
+  lr: 3.0e-4
+  weight_decay: 0.01
+  warmup_steps: 1000
+  max_steps: 50000
+  grad_clip: 1.0
+  lambda_err: 0.1
+  lambda_err_warmup_steps: 2000
+  lambda_bal: 0.01
+  replay_every: 75
+  replay_eta: 0.02
+  truncate_write_window: 32
+  memory_lr_scale: 0.5
+  ema_decay: 0.999
+  device: cuda
+  seed: 42
+  log_every: 50
+  eval_every: 500
+  checkpoint_every: 2000
+  output_dir: runs/aeris_109m_ws
+  precision: bf16
+
+data:
+  train_path: null
+  val_path: null
+  tokenizer: hf
+  hf_tokenizer_name: null
+
+safety:
+  enable_audit: true
+  max_write_norm: 10.0
+  max_memory_norm: 50.0
+  gate_cap: 1.0
+  gate_floor: 0.05
+  gate_target: 0.35
+  lambda_gate: 0.01
+  lambda_ent: 0.005
+  anomaly_z_threshold: 4.0
+  freeze_on_anomaly: false
+  per_session_state: true
+  truncate_write_window: 32
+
+logging:
+  level: INFO
+  wandb: false

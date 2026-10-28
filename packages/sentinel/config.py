@@ -34,6 +34,14 @@ class ModelConfig:
     jspace_decay: float = 0.85
     jspace_write_threshold: float = 0.35
     jspace_sparsity: float = 0.25
+    # --- Learned Global Workspace (modules/workspace.py) ---
+    # "rule"    legacy rule-based slot bank (default: old checkpoints load unchanged)
+    # "learned" learned, causal, per-token, per-sequence workspace (needs jspace_dim > 0)
+    workspace_mode: str = "rule"
+    ws_atoms: int = 128        # size of the lens-vector dictionary
+    ws_k_active: int = 8       # capacity: atoms that ignite per position (paper: ~20-25 max)
+    ws_rank: int = 16          # J = I + B A, rank of the learned lens correction
+    lambda_lens: float = 0.0   # optional J-lens (verbalizability) aux loss; 0 = off
     # --- Looped NeuralField ---
     field_reinject_input: bool = True
     field_loop_residual_scale: bool = True
@@ -53,6 +61,15 @@ class ModelConfig:
     pred_coarse_horizon: int = 16
     lambda_err_mid: float = 0.05
     lambda_err_coarse: float = 0.02
+    # False (default): decode (T=1) runs the same depth k_max as training/prefill.
+    # True: metacognition picks k per token. NOTE: training always uses k_max, and a change
+    # of k between calls discards every per-pass memory carry, so only enable this if you
+    # also train with variable depth.
+    adaptive_decode_depth: bool = False
+    # True: logits *= d_model**-0.5. With tie_embeddings the default N(0,1) embedding gives
+    # logit std ~sqrt(d_model) and initial CE ~130 instead of ~ln(vocab). Changes the function:
+    # enable for NEW training runs only (existing checkpoints were trained without it).
+    scale_tied_logits: bool = False
 
 
 @dataclass
@@ -123,6 +140,9 @@ class AblationConfig:
     use_slow_memory: bool = True
     use_neuromodulator: bool = True
     use_metacognition: bool = True
+    # Learned global workspace broadcast (only matters when workspace_mode == "learned").
+    # False = delete the J-space (paper-style ablation: fluent but loses multi-step reasoning).
+    use_workspace: bool = True
     # When use_neuromodulator is False, gate is fixed to this scalar in (0, 1].
     fixed_gate: float = 0.5
     # When use_metacognition is False, field steps are fixed to this integer ≥ 1.
@@ -147,6 +167,30 @@ class SENTINELConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def checkpoint_dict(self) -> dict[str, Any]:
+        """config.json payload: flat ModelConfig fields (what old loaders read) plus the safety / ablation
+        sections, which used to be dropped, so serving and eval rebuild the model as it was trained."""
+        d = dict(asdict(self.model))
+        d["safety"] = asdict(self.safety)
+        d["ablation"] = asdict(self.ablation)
+        return d
+
+    @staticmethod
+    def split_checkpoint_dict(raw: dict[str, Any]) -> tuple["SafetyConfig", "AblationConfig"]:
+        """Inverse of checkpoint_dict for the two extra sections (defaults for old checkpoints)."""
+
+        def _pick(dc_cls: type, section: Any) -> dict[str, Any]:
+            if not isinstance(section, dict):
+                return {}
+            fields = getattr(dc_cls, "__dataclass_fields__", {})
+            return {k: v for k, v in section.items() if k in fields}
+
+        raw = raw if isinstance(raw, dict) else {}
+        return (
+            SafetyConfig(**_pick(SafetyConfig, raw.get("safety"))),
+            AblationConfig(**_pick(AblationConfig, raw.get("ablation"))),
+        )
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SENTINELConfig":

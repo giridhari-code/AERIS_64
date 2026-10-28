@@ -50,9 +50,18 @@ def apply_lora(
     rank: int = 8,
     alpha: float = 16.0,
     dropout: float = 0.0,
-    target_modules: Iterable[str] = ("router", "head", "P_f", "P_s", "W_"),
+    target_modules: Iterable[str] = ("router", "P_f", "P_s", "W_"),
+    freeze_rest: bool = True,
 ) -> list[str]:
-    """Replace matching Linear modules with LoRALinear. Returns adapted param names."""
+    """Replace matching Linear modules with LoRALinear. Returns adapted param names.
+
+    "head" is NOT a default target: with tie_embeddings the head weight IS the embedding weight, so a
+    merged head delta would silently change the input embeddings too.
+    freeze_rest=True freezes every non-LoRA parameter (real parameter-efficient training: no full
+    backward / grads for the base). merge_lora_ restores the original requires_grad flags.
+    """
+    # remember the flags BEFORE LoRALinear freezes its base layers
+    model._lora_prev_requires_grad = {n: p.requires_grad for n, p in model.named_parameters()}
     adapted: list[str] = []
     for name, module in list(model.named_modules()):
         if not _should_adapt(name, module, target_modules):
@@ -66,6 +75,10 @@ def apply_lora(
         wrapped = LoRALinear(module, rank=rank, alpha=alpha, dropout=dropout)
         setattr(parent, attr, wrapped)
         adapted.append(name)
+    if freeze_rest and adapted:
+        for n, p in model.named_parameters():
+            if not (n.endswith("lora_A") or n.endswith("lora_B")):
+                p.requires_grad_(False)
     return adapted
 
 
@@ -95,4 +108,9 @@ def merge_lora_(model: nn.Module) -> int:
             attr = parent_path[1]
         setattr(parent, attr, module.base)
         n += 1
+    if n:
+        # undo the freezing done by apply_lora / LoRALinear so later stages train these layers again
+        prev = getattr(model, "_lora_prev_requires_grad", None) or {}
+        for name, p in model.named_parameters():
+            p.requires_grad_(prev.get(name, True))
     return n

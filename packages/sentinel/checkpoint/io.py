@@ -133,9 +133,17 @@ def save_checkpoint(
         meta_out["weights"] = "model.safetensors"
         meta_out.setdefault("framework", "pytorch")
         (td_path / "meta.json").write_text(json.dumps(meta_out, indent=2), encoding="utf-8")
-        if root.exists():
-            shutil.rmtree(root)
-        shutil.copytree(td_path, root)
+        # Per-file atomic replace. The old rmtree(root)+copytree deleted EVERYTHING in the folder - e.g. the
+        # trainer's checkpoint_best.pt / optimizer state in a pipeline stage dir - and lost the checkpoint
+        # entirely if the process died between the two calls.
+        produced = {p.name for p in td_path.iterdir()}
+        for p in td_path.iterdir():
+            tmp = root / (p.name + ".tmp")
+            shutil.copyfile(p, tmp)
+            os.replace(tmp, root / p.name)
+        for stale in ("config.json", "vocab.json"):  # optional files this save did not produce
+            if stale not in produced and (root / stale).is_file():
+                (root / stale).unlink()
     return root
 
 

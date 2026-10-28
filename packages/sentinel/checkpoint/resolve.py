@@ -46,7 +46,10 @@ def resolve_model_config(
         declared = dict(full.model.__dict__)
     else:
         full = SENTINELConfig()
-        raw = ckpt.get("config") or {}
+        raw = outer = ckpt.get("config") or {}
+        if isinstance(outer, dict):
+            # safety / ablation as trained (defaults for old checkpoints that never saved them)
+            full.safety, full.ablation = SENTINELConfig.split_checkpoint_dict(outer)
         if isinstance(raw, dict) and isinstance(raw.get("model"), dict):
             raw = raw["model"]
         fields = set(ModelConfig.__dataclass_fields__)
@@ -62,7 +65,12 @@ def resolve_model_config(
         declared[k] = v
     model_cfg = ModelConfig(**{k: declared[k] for k in ModelConfig.__dataclass_fields__ if k in declared})
     merged = SENTINELConfig(
-        model=model_cfg, training=full.training, data=full.data, safety=full.safety, logging=full.logging
+        model=model_cfg,
+        training=full.training,
+        data=full.data,
+        safety=full.safety,
+        ablation=full.ablation,
+        logging=full.logging,
     )
     return model_cfg, full.safety, merged
 
@@ -88,7 +96,7 @@ def load_model_from_checkpoint(
             f"Tokenizer vocab ({tok.vocab_size}) > model vocab ({model_cfg.vocab_size}): "
             "wrong tokenizer for this checkpoint."
         )
-    model = SENTINEL(model_cfg, safety_cfg)
+    model = SENTINEL(model_cfg, safety_cfg, ablation=full_cfg.ablation)
     res = model.load_state_dict(ckpt["model"], strict=False)
     missing = list(getattr(res, "missing_keys", []))
     unexpected = list(getattr(res, "unexpected_keys", []))

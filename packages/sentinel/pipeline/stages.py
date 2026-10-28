@@ -15,7 +15,13 @@ from sentinel.pipeline.pref_data import build_encode_fn, preference_loader, sft_
 from sentinel.pipeline.registry import register
 from sentinel.rlhf.dpo import dpo_loss
 from sentinel.rlhf.ppo import ppo_policy_loss
-from sentinel.rlhf.rewards import pairwise_reward_loss, sequence_logprob
+from sentinel.rlhf.rewards import (
+    log_odds,
+    pairwise_reward_loss,
+    reduce_logprobs,
+    sequence_logprob,
+    token_logprobs,
+)
 from sentinel.training.trainer import Trainer
 
 logger = logging.getLogger(__name__)
@@ -117,7 +123,7 @@ def stage_sft(ctx: PipelineContext) -> None:
     lr = float(sc.get("lr", 1e-4))
     max_len = int(sc.get("max_len", ctx.cfg.training.seq_len))
     bs = int(sc.get("batch_size", min(4, ctx.cfg.training.batch_size)))
-    loader = sft_loader(path, _encode_fn(ctx), bs, max_len)
+    loader = sft_loader(path, _encode_fn(ctx), bs, max_len, append_end=bool(sc.get("append_end", True)))
     opt = AdamW((p for p in ctx.model.parameters() if p.requires_grad), lr=lr)
     ctx.model.train()
     step = 0
@@ -176,6 +182,8 @@ def stage_preference_bt(ctx: PipelineContext) -> None:
                 batch["chosen_y"].to(ctx.device),
                 batch["rejected_x"].to(ctx.device),
                 batch["rejected_y"].to(ctx.device),
+                chosen_m=batch["chosen_m"].to(ctx.device),
+                rejected_m=batch["rejected_m"].to(ctx.device),
             )
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -216,6 +224,8 @@ def stage_dpo(ctx: PipelineContext) -> None:
                 batch["rejected_x"].to(ctx.device),
                 batch["rejected_y"].to(ctx.device),
                 beta=beta,
+                chosen_m=batch["chosen_m"].to(ctx.device),
+                rejected_m=batch["rejected_m"].to(ctx.device),
             )
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -234,7 +244,7 @@ def stage_orpo(ctx: PipelineContext) -> None:
     logger.info("=== STAGE: orpo ===")
     steps = int(sc.get("max_steps", 500))
     lr = float(sc.get("lr", 5e-5))
-    beta = float(sc.get("beta", 0.1))
+    lam_or = float(sc.get("lambda_or", sc.get("beta", 0.1)))  # weight of the odds-ratio term
     loader = preference_loader(
         path, _encode_fn(ctx), int(sc.get("batch_size", 2)), int(sc.get("max_len", 128))
     )
@@ -245,21 +255,22 @@ def stage_orpo(ctx: PipelineContext) -> None:
         for batch in loader:
             if step >= steps:
                 break
-            # SFT on chosen + odds-ratio penalty on rejected
-            out_c = ctx.model(
-                batch["chosen_x"].to(ctx.device),
-                targets=batch["chosen_y"].to(ctx.device),
-            )
-            log_c = sequence_logprob(
-                ctx.model, batch["chosen_x"].to(ctx.device), batch["chosen_y"].to(ctx.device)
-            )
-            log_r = sequence_logprob(
-                ctx.model, batch["rejected_x"].to(ctx.device), batch["rejected_y"].to(ctx.device)
-            )
-            # ORPO: -log σ(β * log odds)
-            odds = log_c - log_r
-            or_loss = -torch.nn.functional.logsigmoid(beta * odds).mean()
-            loss = out_c.loss + or_loss
+            cx = batch["chosen_x"].to(ctx.device)
+            cy = batch["chosen_y"].to(ctx.device)
+            cm = batch["chosen_m"].to(ctx.device)
+            rx = batch["rejected_x"].to(ctx.device)
+            ry = batch["rejected_y"].to(ctx.device)
+            rm = batch["rejected_m"].to(ctx.device)
+            lp_c = token_logprobs(ctx.model, cx, cy)  # one forward per side (was 3 in total)
+            lp_r = token_logprobs(ctx.model, rx, ry)
+            # SFT NLL on the chosen RESPONSE only (no prompt, no padding)
+            cm_f = cm.to(lp_c.dtype)
+            sft_loss = -(lp_c * cm_f).sum() / cm_f.sum().clamp(min=1.0)
+            # ORPO: L = L_sft + λ * -log σ( log odds(y_w|x) - log odds(y_l|x) ), odds from mean token prob
+            log_c = reduce_logprobs(lp_c, cm, "mean")
+            log_r = reduce_logprobs(lp_r, rm, "mean")
+            or_loss = -torch.nn.functional.logsigmoid(log_odds(log_c) - log_odds(log_r)).mean()
+            loss = sft_loss + lam_or * or_loss
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
@@ -308,6 +319,8 @@ def stage_lora_pref(ctx: PipelineContext) -> None:
                 batch["rejected_x"].to(ctx.device),
                 batch["rejected_y"].to(ctx.device),
                 beta=beta,
+                chosen_m=batch["chosen_m"].to(ctx.device),
+                rejected_m=batch["rejected_m"].to(ctx.device),
             )
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -335,6 +348,7 @@ def stage_grpo(ctx: PipelineContext) -> None:
     steps = int(sc.get("max_steps", 400))
     lr = float(sc.get("lr", 5e-5))
     clip = float(sc.get("clip_eps", 0.2))
+    kl_coef = float(sc.get("kl_coef", 0.0))
     loader = preference_loader(
         path, _encode_fn(ctx), int(sc.get("batch_size", 2)), int(sc.get("max_len", 128))
     )
@@ -349,19 +363,28 @@ def stage_grpo(ctx: PipelineContext) -> None:
             cy = batch["chosen_y"].to(ctx.device)
             rx = batch["rejected_x"].to(ctx.device)
             ry = batch["rejected_y"].to(ctx.device)
-            with torch.no_grad():
-                old_c = sequence_logprob(ctx.ref_model, cx, cy)
-                old_r = sequence_logprob(ctx.ref_model, rx, ry)
-            new_c = sequence_logprob(ctx.model, cx, cy)
-            new_r = sequence_logprob(ctx.model, rx, ry)
-            # group of 2: relative advantage
-            scores = torch.stack([new_c.detach(), new_r.detach()], dim=-1)
-            mean = scores.mean(dim=-1, keepdim=True)
-            std = scores.std(dim=-1, keepdim=True).clamp(min=1e-4)
-            adv_c = ((new_c.detach() - mean.squeeze(-1)) / std.squeeze(-1))
-            adv_r = ((new_r.detach() - mean.squeeze(-1)) / std.squeeze(-1))
-            loss_c = ppo_policy_loss(new_c, old_c, adv_c, clip_eps=clip)
-            loss_r = ppo_policy_loss(new_r, old_r, adv_r, clip_eps=clip)
+            cm = batch["chosen_m"].to(ctx.device)
+            rm = batch["rejected_m"].to(ctx.device)
+            new_c = sequence_logprob(ctx.model, cx, cy, cm, "mean", eval_mode=True)
+            new_r = sequence_logprob(ctx.model, rx, ry, rm, "mean", eval_mode=True)
+            # Offline group of 2 with LABEL rewards (chosen=1, rejected=0). The old code normalised the
+            # policy's own scores, i.e. it rewarded whichever sample the policy already preferred.
+            rewards = torch.stack([torch.ones_like(new_c), torch.zeros_like(new_r)], dim=-1)
+            adv = (rewards - rewards.mean(dim=-1, keepdim=True)) / rewards.std(
+                dim=-1, keepdim=True
+            ).clamp(min=1e-4)
+            ref_c = ref_r = None
+            if kl_coef > 0.0:
+                with torch.no_grad():
+                    ref_c = sequence_logprob(ctx.ref_model, cx, cy, cm, "mean")
+                    ref_r = sequence_logprob(ctx.ref_model, rx, ry, rm, "mean")
+            # one update per batch => "old" policy == current policy (ratio 1, clip inactive)
+            loss_c = ppo_policy_loss(
+                new_c, new_c.detach(), adv[..., 0], clip_eps=clip, kl_coef=kl_coef, logprob_ref=ref_c
+            )
+            loss_r = ppo_policy_loss(
+                new_r, new_r.detach(), adv[..., 1], clip_eps=clip, kl_coef=kl_coef, logprob_ref=ref_r
+            )
             loss = (loss_c + loss_r).mean()
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -398,17 +421,25 @@ def stage_rlhf_ppo(ctx: PipelineContext) -> None:
             cy = batch["chosen_y"].to(ctx.device)
             rx = batch["rejected_x"].to(ctx.device)
             ry = batch["rejected_y"].to(ctx.device)
+            cm = batch["chosen_m"].to(ctx.device)
+            rm = batch["rejected_m"].to(ctx.device)
             with torch.no_grad():
-                old = sequence_logprob(ctx.ref_model, cx, cy)
-                ref = sequence_logprob(ctx.ref_model, cx, cy)
-                # reward: BT-style margin
-                r_c = sequence_logprob(ctx.model, cx, cy)
-                r_r = sequence_logprob(ctx.model, rx, ry)
-                reward = (r_c - r_r).detach()
-            new = sequence_logprob(ctx.model, cx, cy)
-            adv = reward  # simple advantage
-            loss = ppo_policy_loss(new, old, adv, clip_eps=clip, kl_coef=kl_coef, logprob_ref=ref)
-            loss = loss.mean()
+                ref_c = sequence_logprob(ctx.ref_model, cx, cy, cm, "mean")
+                ref_r = sequence_logprob(ctx.ref_model, rx, ry, rm, "mean")
+            new_c = sequence_logprob(ctx.model, cx, cy, cm, "mean", eval_mode=True)
+            new_r = sequence_logprob(ctx.model, rx, ry, rm, "mean", eval_mode=True)
+            # LABEL reward: +1 chosen, -1 rejected. The old reward was the policy's own margin
+            # (r_c - r_r), which flips the sign of the update exactly on the pairs the policy gets wrong.
+            # Still offline (no sampling); "old" policy == current policy since there is one update per batch.
+            loss_c = ppo_policy_loss(
+                new_c, new_c.detach(), torch.ones_like(new_c),
+                clip_eps=clip, kl_coef=kl_coef, logprob_ref=ref_c,
+            )
+            loss_r = ppo_policy_loss(
+                new_r, new_r.detach(), -torch.ones_like(new_r),
+                clip_eps=clip, kl_coef=kl_coef, logprob_ref=ref_r,
+            )
+            loss = (loss_c + loss_r).mean()
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
@@ -418,19 +449,42 @@ def stage_rlhf_ppo(ctx: PipelineContext) -> None:
     ctx.save_model("rlhf_ppo")
 
 
+def _masked_forward_kl(s_logits: torch.Tensor, t_logits: torch.Tensor, valid: torch.Tensor) -> torch.Tensor:
+    """Token-mean KL(teacher || student) over `valid` (B, T) positions.
+
+    Same scale as the per-token CE (independent of sequence length); the old
+    kl_div(..., "batchmean") summed over every token and was ~T times larger than the CE.
+    """
+    s_logp = torch.log_softmax(s_logits.float(), dim=-1)
+    t_logp = torch.log_softmax(t_logits.float(), dim=-1)
+    kl_tok = (t_logp.exp() * (t_logp - s_logp)).sum(dim=-1)
+    v = valid.to(kl_tok.dtype)
+    return (kl_tok * v).sum() / v.sum().clamp(min=1.0)
+
+
 @register("opd")
 def stage_opd(ctx: PipelineContext) -> None:
-    """Online Preference Distillation: distill preferred policy into student via KL + CE.
+    """Online Preference Distillation: CE on chosen responses + KL(teacher || student).
 
-    Teacher = current ref (or frozen preference-tuned weights);
-    student = active model. Minimizes KL(student || teacher) on chosen responses
-    plus standard CE — online distillation for deployment-sized models.
+    teacher: "current" (default) = frozen snapshot of the model as it enters this stage, i.e. the
+    preference-tuned policy. "ref" = the DPO-time reference (the PRE-preference model), which pulls the
+    student back towards the unaligned model - only use it if that is really what you want.
     """
     sc = ctx.stage_cfg.get("opd", {})
     path = _require_path(ctx.prefs_path or ctx.sft_path or sc.get("data"), "opd", "--prefs or --sft-data")
-    if ctx.ref_model is None:
-        ctx.freeze_as_ref()
-    logger.info("=== STAGE: opd (online preference distillation) ===")
+    teacher_src = str(sc.get("teacher", "current"))
+    if teacher_src == "ref":
+        if ctx.ref_model is None:
+            ctx.freeze_as_ref()
+        teacher = ctx.ref_model
+    else:
+        import copy
+
+        teacher = copy.deepcopy(ctx.model)
+        teacher.eval()
+        for p in teacher.parameters():
+            p.requires_grad_(False)
+    logger.info("=== STAGE: opd (online preference distillation, teacher=%s) ===", teacher_src)
     steps = int(sc.get("max_steps", 400))
     lr = float(sc.get("lr", 5e-5))
     kl_w = float(sc.get("kl_weight", 0.5))
@@ -455,16 +509,15 @@ def stage_opd(ctx: PipelineContext) -> None:
             if use_pref:
                 x = batch["chosen_x"].to(ctx.device)
                 y = batch["chosen_y"].to(ctx.device)
+                valid = batch["chosen_m"].to(ctx.device).bool()  # response tokens only
             else:
                 x = batch["input_ids"].to(ctx.device)
                 y = batch["targets"].to(ctx.device)
-            out = ctx.model(x, targets=y)
+                valid = y != -100  # sft_loader pads targets with -100
+            out = ctx.model(x, targets=y.masked_fill(~valid, -100))
             with torch.no_grad():
-                t_out = ctx.ref_model(x, targets=y)
-                t_logp = torch.nn.functional.log_softmax(t_out.logits, dim=-1)
-            s_logp = torch.nn.functional.log_softmax(out.logits, dim=-1)
-            # KL(student || teacher) tokenwise
-            kl = torch.nn.functional.kl_div(s_logp, t_logp.exp(), reduction="batchmean")
+                t_logits = teacher(x, collect_stats=False).logits
+            kl = _masked_forward_kl(out.logits, t_logits, valid)
             loss = out.loss + kl_w * kl
             opt.zero_grad(set_to_none=True)
             loss.backward()
