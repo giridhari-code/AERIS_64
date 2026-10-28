@@ -262,3 +262,18 @@ OpenAI-style: `POST /v1/chat/completions` with `messages`.
 ---
 
 *See also: `docs/TRAINING_PIPELINE.md` for pretrain → SFT → preference.*
+
+---
+
+## 11. Model executor package (`packages/sentinel/model_executor/`)
+
+DeepInfer `deepinfer/model_executor/` inspired layout (PyTorch-only):
+
+| Module | Role |
+|--------|------|
+| `model_loader.py` | Checkpoint → `LoadedModel` (weights, tokenizer, device, amp) |
+| `model_runner.py` | `prefill` / `decode` / `step` over `SENTINEL.forward` |
+| `sampling.py` | `SamplingParams` + `sample_from_logits` |
+| `output.py` | `ModelStepOutput` (logits, state) |
+
+Serve lifecycle calls `ModelRunner` instead of inlined `model(...)`.

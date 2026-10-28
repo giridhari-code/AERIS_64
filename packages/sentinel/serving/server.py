@@ -29,18 +29,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from sentinel import __version__
-from sentinel.checkpoint.resolve import load_model_from_checkpoint
-from sentinel.model import SENTINEL
+from sentinel.model_executor import (
+    ModelRunner,
+    SamplingParams as ExecSamplingParams,
+    load_model as exec_load_model,
+    sample_from_logits as exec_sample_from_logits,
+)
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_model: Optional[SENTINEL] = None
+_runner: Optional[ModelRunner] = None
 _encode = None
 _decode = None
 _device = torch.device("cpu")
 _model_id = ""
-_amp_dtype: Optional[torch.dtype] = None
 _checkpoint_path = ""
 _STOP_MARKERS = ("<|end|>", "<|user|>", "<|system|>")
 _stop_ids: set[int] = set()
@@ -56,13 +59,7 @@ class SequenceStatus(enum.Enum):
     ERROR = "error"
 
 
-@dataclass
-class SamplingParams:
-    max_tokens: int = 64
-    temperature: float = 0.7
-    top_p: float = 0.9
-    top_k: int = 40
-    seed: Optional[int] = None
+SamplingParams = ExecSamplingParams  # model_executor
 
 
 @dataclass
@@ -116,77 +113,35 @@ def _to_id_list(ids: Any) -> List[int]:
 
 
 def load_model(checkpoint: str, config_path: Optional[str], device: str) -> None:
-    global _model, _encode, _decode, _device, _model_id, _amp_dtype, _checkpoint_path, _stop_ids
-    want = device or "cpu"
-    _device = torch.device(want if (want == "cpu" or torch.cuda.is_available()) else "cpu")
-    model, tok, _full_cfg, meta = load_model_from_checkpoint(
-        checkpoint,
-        config_path,
-        device=str(_device),
-        strict=_env("STRICT_LOAD", "1") == "1",
-    )
-    model.eval()
-    dtype_name = _env("DTYPE", "float32")
-    amp = {"float32": None, "bfloat16": torch.bfloat16, "float16": torch.float16}
-    if dtype_name not in amp:
-        raise ValueError(f"Unknown NEUROFIELD_DTYPE={dtype_name}")
-    if hasattr(model, "meta") and model.meta is not None:
-        try:
-            model.meta.track_global = False
-        except Exception:
-            pass
+    global _runner, _encode, _decode, _device, _model_id, _checkpoint_path, _stop_ids
+    loaded = exec_load_model(checkpoint, config_path, device=device)
     stop_ids: set[int] = set()
     for marker in _STOP_MARKERS:
         try:
-            ids = _to_id_list(tok.encode(marker))
+            ids = _to_id_list(loaded.encode(marker))
         except Exception:  # noqa: BLE001
             continue
         if len(ids) == 1:
             stop_ids.add(ids[0])
     with _lock:
         _stop_ids = stop_ids
-        _amp_dtype = amp[dtype_name]
-        _encode, _decode = tok.encode, tok.decode
-        _model = model
-        _model_id = str(meta.get("model_id") or meta.get("name") or Path(checkpoint).stem or "model")
-        _checkpoint_path = checkpoint
-    logger.info("Loaded model %s from %s on %s", _model_id, checkpoint, _device)
+        _runner = ModelRunner(loaded.model, loaded.device, loaded.amp_dtype)
+        _encode, _decode = loaded.encode, loaded.decode
+        _device = loaded.device
+        _model_id = loaded.model_id
+        _checkpoint_path = loaded.checkpoint
+    logger.info("serve runner ready model=%s device=%s", _model_id, _device)
+
 
 
 def _need_model() -> None:
-    if _model is None or _encode is None or _decode is None:
+    if _runner is None or _encode is None or _decode is None:
         raise HTTPException(status_code=503, detail="model not loaded — set NEUROFIELD_CHECKPOINT")
 
 
-def _sample_from_logits(
-    logits: torch.Tensor,
-    params: SamplingParams,
-    generator: Optional[torch.Generator],
-) -> int:
-    temperature = float(params.temperature)
-    if temperature <= 1e-6:
-        return int(torch.argmax(logits).item())
-    logits = logits / max(temperature, 1e-5)
-    k = int(params.top_k)
-    if k > 0 and k < logits.numel():
-        vals, idx = torch.topk(logits, k)
-        masked = torch.full_like(logits, float("-inf"))
-        masked[idx] = vals
-        logits = masked
-    p = float(params.top_p)
-    if 0.0 < p < 1.0:
-        sorted_logits, sorted_idx = torch.sort(logits, descending=True)
-        probs = torch.softmax(sorted_logits, dim=-1)
-        cumsum = torch.cumsum(probs, dim=-1)
-        mask = cumsum > p
-        mask[..., 0] = False
-        sorted_logits = sorted_logits.masked_fill(mask, float("-inf"))
-        logits = torch.full_like(logits, float("-inf"))
-        logits.scatter_(0, sorted_idx, sorted_logits)
-    probs = torch.softmax(logits, dim=-1)
-    if generator is not None:
-        return int(torch.multinomial(probs, 1, generator=generator).item())
-    return int(torch.multinomial(probs, 1).item())
+def _sample_from_logits(logits, params, generator):
+    return exec_sample_from_logits(logits, params, generator)
+
 
 
 def _build_prompt(user_text: str) -> str:
@@ -202,23 +157,15 @@ def _build_prompt(user_text: str) -> str:
 # Engine step: DeepInfer-like lifecycle on one Sequence
 # ---------------------------------------------------------------------------
 def _forward_tokens(token_ids: List[int], state: Any) -> tuple[torch.Tensor, Any]:
-    """Execute model → (logits last position V, new_state)."""
-    assert _model is not None
-    device = _device
-    amp = _amp_dtype
-    x = torch.tensor([token_ids], dtype=torch.long, device=device)
-    use_amp = amp is not None and device.type == "cuda"
-    cm = torch.autocast(device_type=device.type, dtype=amp) if use_amp else nullcontext()
-    with torch.inference_mode():
-        with cm:
-            out = _model(
-                x,
-                state=state,
-                targets=None,
-                collect_stats=False,
-                write_slow=True,
-            )
-    return out.logits[0, -1].float(), out.state
+    """Execute via ModelRunner → (logits V, new_state)."""
+    assert _runner is not None
+    if state is None:
+        step = _runner.prefill(token_ids)
+    elif len(token_ids) == 1:
+        step = _runner.decode(token_ids[0], state)
+    else:
+        step = _runner.step(token_ids, state=state)
+    return step.logits, step.state
 
 
 def engine_run(seq: Sequence) -> Sequence:
@@ -228,7 +175,7 @@ def engine_run(seq: Sequence) -> Sequence:
     ADD is done by caller; this function:
       SCHEDULE → PREFILL → (SAMPLE → APPEND → DECODE)* → FINALIZE
     """
-    assert _model is not None and _decode is not None
+    assert _runner is not None and _decode is not None
     seq.status = SequenceStatus.RUNNING
     gen: Optional[torch.Generator] = None
     max_new = max(1, min(int(seq.params.max_tokens), 256))
@@ -460,7 +407,7 @@ def create_app(
                     "SENTINEL executor",
                     "sampler",
                 ],
-                "model_executor": "packages/sentinel/model.py + modules/*",
+                "model_executor": "packages/sentinel/model_executor (runner+loader)",
                 "parallelism": {
                     "inference": "single_device_serial",
                     "training": "ddp_and_mesh_hooks",
