@@ -177,42 +177,31 @@ def engine_run(seq: Sequence) -> Sequence:
     """
     assert _runner is not None and _decode is not None
     seq.status = SequenceStatus.RUNNING
-    gen: Optional[torch.Generator] = None
     max_new = max(1, min(int(seq.params.max_tokens), 256))
 
     try:
         with _lock:
-            # --- SCHEDULE (serial): we hold the only worker slot ---
+            # --- SCHEDULE (serial): one worker slot ---
+            gen: Optional[torch.Generator] = None
             if seq.params.seed is not None:
                 gen = torch.Generator(
                     device=_device if _device.type == "cuda" else "cpu"
                 )
                 gen.manual_seed(int(seq.params.seed))
 
-            # --- PREFILL ---
-            logits, state = _forward_tokens(seq.prompt_ids, state=None)
+            def _sample(logits: torch.Tensor) -> int:
+                return _sample_from_logits(logits, seq.params, gen)
+
+            # --- PREFILL + DECODE in tight runner.generate ---
+            out_ids, state, reason = _runner.generate(
+                seq.prompt_ids,
+                max_new,
+                sample_fn=_sample,
+                stop_ids=_stop_ids,
+            )
             seq.state = state
-            tid = _sample_from_logits(logits, seq.params, gen)
-            if tid in _stop_ids:
-                seq.finish_reason = "stop"
-            else:
-                seq.append_token(tid)
-
-            # --- DECODE loop: SAMPLE already done for first; continue ---
-            while (
-                seq.finish_reason != "stop"
-                and len(seq.output_ids) < max_new
-            ):
-                logits, state = _forward_tokens([seq.output_ids[-1]], seq.state)
-                seq.state = state
-                tid = _sample_from_logits(logits, seq.params, gen)
-                if tid in _stop_ids:
-                    seq.finish_reason = "stop"
-                    break
-                seq.append_token(tid)
-
-            if not seq.finish_reason:
-                seq.finish_reason = "length" if len(seq.output_ids) >= max_new else "stop"
+            seq.output_ids = list(out_ids)
+            seq.finish_reason = reason
 
         # --- FINALIZE (outside lock: detokenize) ---
         raw = (_decode(seq.output_ids) or "").strip()

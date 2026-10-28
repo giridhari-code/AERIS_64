@@ -1,4 +1,4 @@
-"""Sampling utilities (DeepInfer SamplingParams-shaped)."""
+"""Sampling utilities (optimized paths for greedy / top_p=1)."""
 
 from __future__ import annotations
 
@@ -22,19 +22,24 @@ def sample_from_logits(
     params: SamplingParams,
     generator: Optional[torch.Generator] = None,
 ) -> int:
-    """logits: (V,) float tensor on any device."""
+    """logits: (V,) on CPU or CUDA."""
     temperature = float(params.temperature)
+    # Fast greedy
     if temperature <= 1e-6:
         return int(torch.argmax(logits).item())
+
     logits = logits / max(temperature, 1e-5)
     k = int(params.top_k)
-    if k > 0 and k < logits.numel():
+    v = logits.numel()
+    if 0 < k < v:
         vals, idx = torch.topk(logits, k)
         masked = torch.full_like(logits, float("-inf"))
         masked[idx] = vals
         logits = masked
+
     p = float(params.top_p)
     if 0.0 < p < 1.0:
+        # Only sort when nucleus is active
         sorted_logits, sorted_idx = torch.sort(logits, descending=True)
         probs = torch.softmax(sorted_logits, dim=-1)
         cumsum = torch.cumsum(probs, dim=-1)
@@ -43,6 +48,7 @@ def sample_from_logits(
         sorted_logits = sorted_logits.masked_fill(mask, float("-inf"))
         logits = torch.full_like(logits, float("-inf"))
         logits.scatter_(0, sorted_idx, sorted_logits)
+
     probs = torch.softmax(logits, dim=-1)
     if generator is not None:
         return int(torch.multinomial(probs, 1, generator=generator).item())
