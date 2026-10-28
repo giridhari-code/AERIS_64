@@ -9,7 +9,7 @@
 | Version | 1.3.1 |
 | UI | **std only** (raw mode via `stty`, no external crates) |
 | Policy  | Coding opt-in (`ZEROZ_CODING=1`); write/shell ask approval |
-| LLM | AERIS-64 chat + live streaming via `ZEROZ_AERIS_URL` |
+| LLM | AERIS-64 model-only chat via `ZEROZ_AERIS_URL` (stream falls back if core has no SSE) |
 
 ## Rust backend (core engine link)
 
@@ -32,7 +32,7 @@ export ZEROZ_AERIS_URL=http://127.0.0.1:8100
 cargo run --release
 ```
 
-Endpoints on the Rust backend: `/`, `/healthz`, `/readyz`, and full proxy of `/v1/*` (chat, stream, models, tools, rag, buddy, …) to the core.
+Endpoints on the Rust backend: `/`, `/healthz`, `/readyz`, and proxy of `/v1/*` to the **model-only** core (`/v1/chat`, `/v1/models`, …). Coding tools run **inside 0zcode**, not on the Python API.
 
 ---
 

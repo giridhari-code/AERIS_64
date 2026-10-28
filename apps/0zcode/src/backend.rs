@@ -7,7 +7,7 @@
 //!        │
 //!        ▼  :8100 (this process, pure Rust std)
 //!  0zcode-backend
-//!        │  proxy /v1/chat, /v1/chat/stream, /v1/models, tools, …
+//!        │  proxy /v1/chat, /v1/models (model-only core; tools stay local)
 //!        ▼  :8000
 //!  SENTINEL core (Python / packages/sentinel/serving)
 //! ```
@@ -124,8 +124,8 @@ Endpoints (this process):
   GET  /readyz           probes core /readyz
   GET  /v1/models        proxy → core
   POST /v1/chat          proxy → core
-  POST /v1/chat/stream   proxy → core (SSE)
-  *    /v1/*             proxy → core (tools, rag, buddy, …)
+  POST /v1/chat/stream   proxy → core (SSE if core supports; else 404)
+  *    /v1/*             proxy → core (model-only: chat, models, completions)
 
 Point 0zcode TUI at this backend:
   export ZEROZ_AERIS_URL=http://127.0.0.1:8100

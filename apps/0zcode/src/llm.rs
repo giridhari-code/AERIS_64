@@ -5,12 +5,11 @@
 //! | call            | endpoint              | body → reply                                   |
 //! |-----------------|-----------------------|------------------------------------------------|
 //! | [`chat`]        | `POST /v1/chat`       | `{prompt,session_id,…}` → `{"text": …}`        |
-//! | [`stream`]      | `POST /v1/chat/stream`| SSE: `{"token":…}` … `{"event":"done","text"}` |
+//! | [`stream`]      | `POST /v1/chat/stream`| SSE if present; else auto-fallback to `/v1/chat` |
 //! | [`ping`]        | `GET  /v1/models`     | `{"data":[{"id":…,"ready":…}]}`                |
 //!
-//! The base URL may carry any path (`…:8000/chat`, `…/v1/chat`); only host and
-//! port are used. A per-process `session_id` gives the model its conversation
-//! memory server-side (`/clear` starts a new one).
+//! Core is **model-only** (tools/RAG/buddy are local to 0zcode, not the Python API).
+//! Production servers may require `ZEROZ_AERIS_KEY` → `X-API-Key`.
 
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -357,7 +356,7 @@ fn status_error(status: u16, body: &str, base: &str) -> Error {
 fn chat_body(cfg: &Config, session: &str, prompt: &str, stream: bool) -> String {
     let p: String = prompt.trim().chars().take(MAX_PROMPT_CHARS).collect();
     format!(
-        r#"{{"prompt":{},"session_id":{},"max_new_tokens":{},"stream":{}}}"#,
+        r#"{{"prompt":{},"session_id":{},"max_new_tokens":{},"temperature":0.7,"top_p":0.9,"stream":{}}}"#,
         json_string(&p),
         json_string(session),
         cfg.aeris_max_tokens,
@@ -423,7 +422,7 @@ pub fn diagnose(cfg: &Config) -> String {
     }
 }
 
-/// One-shot reply via `POST /v1/chat` (polished text, tool-first + Megha gate server-side).
+/// One-shot reply via `POST /v1/chat` (model-only SENTINEL).
 pub fn chat(cfg: &Config, session: &str, prompt: &str, cancel: &AtomicBool) -> Result<String> {
     let ep = link(cfg)?;
     let body = chat_body(cfg, session, prompt, false);
@@ -452,6 +451,15 @@ pub fn stream(
     let body = chat_body(cfg, session, prompt, true);
     let mut c = Conn::open(cfg, &ep, "POST", "/v1/chat/stream", Some(&body))?;
     let status = c.read_status(cancel, cfg.aeris_timeout)?;
+    // Model-only SENTINEL has no SSE route — fall back to POST /v1/chat.
+    if status == 404 || status == 405 || status == 410 || status == 501 {
+        let _ = c.read_all(cancel, cfg.aeris_timeout);
+        let text = chat(cfg, session, prompt, cancel)?;
+        if !text.is_empty() {
+            on_token(&text);
+        }
+        return Ok(text);
+    }
     if !(200..300).contains(&status) {
         let resp = c.read_all(cancel, cfg.aeris_timeout)?;
         return Err(status_error(status, &resp, &ep.base()));
